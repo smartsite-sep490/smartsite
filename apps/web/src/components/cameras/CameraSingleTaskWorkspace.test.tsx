@@ -517,6 +517,11 @@ describe('Camera Setup progressive single-task workspace & sticky Apply bar', ()
 
     // 2) While source activation (apply) is pending, sticky Apply saved configuration button is blocked
     await user.click(activateBtn);
+    await user.click(
+      await screen.findByRole('button', {
+        name: /Confirm source replacement|Xác nhận đổi nguồn/,
+      }),
+    );
     await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
     expect(applyBarBtn.disabled).toBe(true);
     fireEvent.click(applyBarBtn);
@@ -805,6 +810,11 @@ describe('Camera Setup progressive single-task workspace & sticky Apply bar', ()
     });
     deferNextHostsFetch = true;
     await user.click(activateBtn);
+    await user.click(
+      await screen.findByRole('button', {
+        name: /Confirm source replacement|Xác nhận đổi nguồn/,
+      }),
+    );
     await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
 
     // Prior resume success banner cleared immediately, but Apply stays disabled until refreshed caps arrive
@@ -835,6 +845,11 @@ describe('Camera Setup progressive single-task workspace & sticky Apply bar', ()
       name: /Save and activate|Lưu và kích hoạt/,
     });
     await user.click(activateBtn2);
+    await user.click(
+      await screen.findByRole('button', {
+        name: /Confirm source replacement|Xác nhận đổi nguồn/,
+      }),
+    );
     await waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
     await waitFor(() => {
       expect(applyBarBtn.disabled).toBe(false);

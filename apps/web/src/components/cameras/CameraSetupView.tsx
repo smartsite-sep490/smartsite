@@ -283,14 +283,16 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     site && focusSelection?.siteId === site.id && focusSelection.requestedId === requestedCameraId
       ? focusSelection.cameraId
       : null;
+  const siteRows = site ? rows.filter((row) => row.siteId === site.id) : rows;
   const matchedRequestedCamera = requestedCameraId
-    ? (rows.find((row) => row.id === requestedCameraId) ?? null)
+    ? (siteRows.find((row) => row.id === requestedCameraId) ?? null)
     : null;
   const catalogSelectedCamera =
-    (focusedCameraId ? rows.find((row) => row.id === focusedCameraId) : undefined) ??
+    (focusedCameraId ? siteRows.find((row) => row.id === focusedCameraId) : undefined) ??
     matchedRequestedCamera ??
-    rows.find((row) => row.type === 'ZONE') ??
-    rows[0] ??
+    siteRows.find((row) => row.type === 'ZONE' && row.status === 'ACTIVE') ??
+    siteRows.find((row) => row.type === 'ZONE') ??
+    siteRows[0] ??
     null;
   const isSelectedZoneCamera = catalogSelectedCamera?.type === 'ZONE';
   const deepLinkActionScope =

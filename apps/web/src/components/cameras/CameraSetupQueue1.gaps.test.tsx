@@ -114,7 +114,7 @@ describe('Camera Setup Queue 1 approved missing UI regressions', () => {
     const emptyBox = await screen.findByTestId('camera-setup-empty-catalog');
     const zoneStepBtn = within(emptyBox).getByRole('button', { name: 'Step 1 · Set up Zone PPE' });
     const regStepBtn = within(emptyBox).getByRole('button', {
-      name: 'Step 2 · Register provisioned camera',
+      name: 'Step 2 · Register camera',
     });
     fireEvent.click(zoneStepBtn);
     expect(open).toHaveBeenCalledWith('zones', undefined, zoneStepBtn);

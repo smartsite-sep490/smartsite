@@ -25,9 +25,9 @@ const en = {
   'cameraSetup.stage1Title': 'Stage 1 · Per-Zone & Region PPE Policy',
   'cameraSetup.stage1Body':
     'Zones define site areas; each camera default and region policy resolves effective PPE (Use camera default, Custom, or Disabled). Locked Zones allow rename only.',
-  'cameraSetup.stage2Title': 'Stage 2 · Link Provisioned Source ID',
+  'cameraSetup.stage2Title': 'Stage 2 · Register & Connect Camera',
   'cameraSetup.stage2Body':
-    'Links a human camera name and code to a technical Source ID already configured on the edge worker. Do not paste RTSP URLs or passwords; saving does not connect a stream or start a worker.',
+    'Save camera name, code, and connection ID, then use Connect camera to test a real video source. Do not paste RTSP URLs or passwords into registration; saving alone does not connect a stream.',
   'cameraSetup.stage3Title': 'Stage 3 · Verify Reference Image',
   'cameraSetup.stage3Body':
     'Open Edit observation regions and click Get configuration image to confirm the edge source serves a 5-minute reference frame before drawing regions.',
@@ -55,15 +55,15 @@ const en = {
   'cameraSetup.revisionDistinctionReadOnlyDisclosure':
     'Catalog status (Enabled/Disabled) and vN reflect saved configuration only, not worker application or live video. Check the selected camera status summary for worker receipts and reference-frame validity.',
   'cameraSetup.sourceIdDisclosure':
-    'Source ID is a fixed technical source key matched to an edge-provisioned camera stream (viewed in Manage; not an editable RTSP URL or credential). Registration does not verify source status or start the edge worker.',
+    'Camera connection ID is a fixed identifier saved for this camera (viewed in Manage; not an editable RTSP URL or credential). Saving it does not verify live video or mark the camera connected.',
   'cameraSetup.sourceIdReadOnlyDisclosure':
-    'Source ID is a technical edge-provisioned source key managed by the assigned Site Manager (not an editable URL or credential); registration does not verify source status or connection.',
+    'Camera connection ID is managed by the assigned Site Manager (not an editable URL or credential); saving it does not verify source status or connection.',
   'cameraSetup.metadataDisclosureLabel': 'Configuration & revision details',
   'cameraSetup.selectedHeading': 'Selected camera',
   'cameraSetup.selectedActiveNext':
-    'Next: open Edit observation regions → Get configuration image to verify the source frame and draw boundaries, then set Camera PPE policy. Enabled in configuration does not mean connected or worker-applied — check worker status below (Source ID must match a running edge-provisioned source).',
+    'Next: connect a video source in Connect camera, open Edit observation regions → Get configuration image to draw boundaries, then set Camera PPE policy. Enabled in configuration does not mean connected or applied — check configuration status below.',
   'cameraSetup.selectedInactiveNext':
-    'Disabled in configuration — the edge worker will not apply this camera until enabled. Open Manage to enable it, then verify a configuration image in Regions.',
+    'Disabled in configuration — this camera will not run monitoring until enabled. Open Manage to enable it, then verify its source and reference image in Regions.',
   'cameraSetup.editSelectedRegions': 'Edit observation regions ({{code}})',
   'cameraSetup.configureSelectedPpe': 'Configure PPE policy ({{code}})',
   'cameraSetup.editSelectedManage': 'Edit camera settings ({{code}})',
@@ -86,9 +86,9 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.stage1Title': 'Bước 1 · Chính sách PPE theo khu vực & vùng',
   'cameraSetup.stage1Body':
     'Khu vực xác định các vùng công trường; mặc định camera và chính sách từng vùng quyết định PPE hiệu lực (Dùng mặc định camera, Tùy chỉnh hoặc Tắt). Khu vực đã khóa chỉ đổi tên.',
-  'cameraSetup.stage2Title': 'Bước 2 · Gắn Mã nguồn đã cấp trên edge',
+  'cameraSetup.stage2Title': 'Bước 2 · Đăng ký & Kết nối camera',
   'cameraSetup.stage2Body':
-    'Gắn tên hiển thị và mã camera với Mã nguồn (Source ID) kỹ thuật đã cấu hình sẵn trên edge worker. Không dán URL RTSP hay mật khẩu; thao tác lưu không tự kết nối luồng hay khởi chạy worker.',
+    'Lưu tên, mã và mã kết nối camera, sau đó mở Kết nối camera để kiểm tra nguồn hình thực tế. Không dán địa chỉ RTSP hay mật khẩu khi đăng ký; thao tác lưu chưa tự mở luồng hình.',
   'cameraSetup.stage3Title': 'Bước 3 · Kiểm tra ảnh tham chiếu',
   'cameraSetup.stage3Body':
     'Mở Sửa vùng quan sát và nhấn Lấy ảnh cấu hình để xác nhận nguồn edge trả về khung hình tham chiếu (5 phút) trước khi vẽ vùng.',
@@ -116,15 +116,15 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.revisionDistinctionReadOnlyDisclosure':
     'Trạng thái danh mục (Đang bật/Đang tắt) và vN chỉ phản ánh cấu hình đã lưu, không đồng nghĩa worker đã áp dụng hay có video trực tiếp. Xem tóm tắt trạng thái ở camera đang chọn để kiểm tra biên nhận worker và độ hợp lệ của khung tham chiếu.',
   'cameraSetup.sourceIdDisclosure':
-    'Mã nguồn (Source ID) là khóa kỹ thuật cố định khớp với nguồn camera đã cấp sẵn trên edge worker (xem trong Quản lý; không phải URL RTSP hay thông tin đăng nhập có thể sửa). Đăng ký không xác nhận kết nối nguồn hay khởi chạy edge worker.',
+    'Mã kết nối camera là mã định danh cố định đã lưu cho camera này (xem trong Quản lý; không phải URL RTSP hay thông tin đăng nhập). Lưu mã này không xác nhận nguồn hình đang chạy hay đã kết nối.',
   'cameraSetup.sourceIdReadOnlyDisclosure':
-    'Mã nguồn (Source ID) là khóa kỹ thuật trên edge worker do Quản lý công trường được phân công quản lý (không phải URL hay thông tin xác thực); đăng ký không xác nhận trạng thái nguồn hay kết nối.',
+    'Mã kết nối camera do Quản lý công trường được phân công quản lý (không phải URL hay thông tin xác thực); thao tác lưu không xác nhận trạng thái nguồn hay kết nối.',
   'cameraSetup.metadataDisclosureLabel': 'Chi tiết cấu hình & phiên bản',
   'cameraSetup.selectedHeading': 'Camera đang chọn',
   'cameraSetup.selectedActiveNext':
-    'Tiếp theo: mở Sửa vùng quan sát → Lấy ảnh cấu hình để kiểm tra khung hình nguồn và vẽ ranh giới, sau đó đặt Chính sách PPE. Đang bật trong cấu hình không đồng nghĩa đã kết nối hay worker đã áp dụng — hãy xem trạng thái worker bên dưới (Mã nguồn phải khớp nguồn đang chạy trên edge worker).',
+    'Tiếp theo: nối nguồn hình tại Kết nối camera, mở Sửa vùng quan sát → Lấy ảnh cấu hình để vẽ ranh giới, sau đó đặt Chính sách PPE. Đang bật trong cấu hình không đồng nghĩa đã kết nối hay đã áp dụng — hãy xem trạng thái áp dụng bên dưới.',
   'cameraSetup.selectedInactiveNext':
-    'Đang tắt trong cấu hình — edge worker sẽ không áp dụng camera này cho đến khi bật lại. Mở Quản lý để bật, rồi kiểm tra ảnh cấu hình tại Vùng quan sát.',
+    'Đang tắt trong cấu hình — camera này sẽ chưa chạy giám sát cho đến khi bật lại. Mở Quản lý để bật, rồi kiểm tra kết nối nguồn và ảnh cấu hình tại Vùng quan sát.',
   'cameraSetup.editSelectedRegions': 'Sửa vùng quan sát ({{code}})',
   'cameraSetup.configureSelectedPpe': 'Cấu hình chính sách PPE ({{code}})',
   'cameraSetup.editSelectedManage': 'Sửa cài đặt camera ({{code}})',

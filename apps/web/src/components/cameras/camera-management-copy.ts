@@ -9,7 +9,7 @@ const en = {
   'cameraSetup.discardPrompt': 'Discard unsaved camera changes?',
   'cameraSetup.field.code': 'Camera code',
   'cameraSetup.field.name': 'Camera name',
-  'cameraSetup.field.externalId': 'Source ID',
+  'cameraSetup.field.externalId': 'Camera connection ID',
   'cameraSetup.register.validation.name':
     'Camera name must contain 1–255 characters without control characters.',
   'cameraSetup.manage.dialogDescription':
@@ -63,7 +63,7 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.discardPrompt': 'Hủy các thay đổi camera chưa lưu?',
   'cameraSetup.field.code': 'Mã camera',
   'cameraSetup.field.name': 'Tên camera',
-  'cameraSetup.field.externalId': 'Mã nguồn (Source ID)',
+  'cameraSetup.field.externalId': 'Mã kết nối camera',
   'cameraSetup.register.validation.name':
     'Tên camera phải có từ 1–255 ký tự và không chứa ký tự điều khiển.',
   'cameraSetup.manage.dialogDescription':
