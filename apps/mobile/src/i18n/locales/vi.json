@@ -1039,6 +1039,7 @@
     "required": "Vui lòng nhập {{label}}."
   },
   "uploads": {
+    "fileUnavailable": "Không đọc được ảnh hoặc tệp trên thiết bị. Vui lòng chọn lại.",
     "cameraPermission": "Cần quyền camera để chụp ảnh. Bạn có thể cấp quyền trong cài đặt thiết bị.",
     "photoTooLarge": "Ảnh vượt 5 MB. Vui lòng chụp lại.",
     "evidencePhotoTooLarge": "Ảnh vượt 1 MB. Vui lòng chụp lại với khung hình gọn hơn.",

@@ -14,6 +14,18 @@ let workspace: ReturnType<typeof useWorkspace>;
 let root: ReactTestRenderer;
 let cache: QueryClient;
 
+async function waitForFaceStatus(status: string) {
+  await vi.waitFor(async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const labels = root.root
+      .findAll((node) => String(node.type) === 'Pressable')
+      .map((node) => node.props.accessibilityLabel);
+    expect(labels).toContain(`${t('profileFace.title')}: ${t(`profileFace.${status}`)}`);
+  });
+}
+
 async function mountFaceStatus() {
   const client = new SmartSiteManagementClient('https://api.example.test');
   vi.spyOn(client, 'listWorkers').mockResolvedValue({
@@ -60,10 +72,7 @@ async function mountFaceStatus() {
       </QueryClientProvider>,
     );
   });
-  for (let i = 0; i < 3; i++)
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
+  await waitForFaceStatus('ACTIVE');
 }
 beforeEach(() => {
   vi.spyOn(SmartSiteManagementClient.prototype, 'myWorkerFaceStatus').mockResolvedValue({
@@ -96,18 +105,14 @@ it.each(['vi', 'en'] as const)(
       await act(async () => {
         await cache.invalidateQueries({ queryKey: ['mobile', 'face-status', 'own-face-status'] });
       });
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      });
+      await waitForFaceStatus(value);
       expect(JSON.stringify(root.toJSON())).toContain(t(`profileFace.${value}`));
     }
     status.mockRejectedValue(new Error('synthetic unavailable'));
     await act(async () => {
       await cache.invalidateQueries({ queryKey: ['mobile', 'face-status', 'own-face-status'] });
     });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
+    await waitForFaceStatus('unavailable');
     expect(JSON.stringify(root.toJSON())).toContain(t('profileFace.unavailable'));
     expect(JSON.stringify(root.toJSON())).not.toContain(t('profileFace.DELETED'));
     const retry = root.root.findAll(
@@ -119,9 +124,7 @@ it.each(['vi', 'en'] as const)(
     await act(async () => {
       retry.props.onPress();
     });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    });
+    await waitForFaceStatus('ACTIVE');
     expect(JSON.stringify(root.toJSON())).toContain(t('profileFace.ACTIVE'));
   },
 );
@@ -202,6 +205,8 @@ it.each(['worker', 'contractor'] as const)(
 
 it('shows own face status without face enrollment controls or management API requests', async () => {
   const client = new SmartSiteManagementClient('https://api.example.test');
+  const ownFace = Promise.withResolvers<{ status: 'NOT_ENROLLED' }>();
+  vi.mocked(client.myWorkerFaceStatus).mockReturnValue(ownFace.promise);
   vi.spyOn(client, 'listWorkers').mockResolvedValue({
     items: [
       {
@@ -271,10 +276,7 @@ it('shows own face status without face enrollment controls or management API req
   });
   for (
     let attempt = 0;
-    !(
-      JSON.stringify(root.toJSON()).includes('W000001') &&
-      JSON.stringify(root.toJSON()).includes(t('profileFace.NOT_ENROLLED'))
-    ) && attempt < 80;
+    !JSON.stringify(root.toJSON()).includes('W000001') && attempt < 80;
     attempt++
   )
     await act(async () => {
@@ -283,6 +285,10 @@ it('shows own face status without face enrollment controls or management API req
   const jsonStr = JSON.stringify(root.toJSON());
   expect(jsonStr).toContain('W000001');
   expect(jsonStr).toContain('Synthetic Site');
+  expect(jsonStr).toContain(t('profileFace.loading'));
+  expect(jsonStr).not.toContain(t('profileFace.NOT_ENROLLED'));
+  ownFace.resolve({ status: 'NOT_ENROLLED' });
+  await waitForFaceStatus('NOT_ENROLLED');
   const pressables = root.root.findAll((n) => String(n.type) === 'Pressable');
   const labels = pressables.map((n) => n.props.accessibilityLabel);
   expect(labels).toContain('Đổi mật khẩu và đăng nhập lại');
