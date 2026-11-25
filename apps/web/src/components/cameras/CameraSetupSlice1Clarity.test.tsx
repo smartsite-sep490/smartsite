@@ -148,22 +148,23 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
       </QueryClientProvider>,
     );
 
-    // 1) Host capability fetch failure -> distinct alert prerequisite banner with Retry button BEFORE source radio cards
+    // 1) Host capability fetch failure -> distinct alert prerequisite banner with Retry button and hidden unusable source controls
     const errorPrereq = await screen.findByTestId('camera-source-host-prerequisite');
     expect(errorPrereq.getAttribute('role')).toBe('alert');
     expect(errorPrereq.textContent).toMatch(/Could not check AI hosts/i);
-    const firstRadio = screen.getByRole('radio', { name: /USB \/ host webcam/i });
-    expect(
-      Boolean(errorPrereq.compareDocumentPosition(firstRadio) & Node.DOCUMENT_POSITION_FOLLOWING),
-    ).toBe(true);
+    expect(screen.queryByRole('radio', { name: /USB \/ host webcam/i })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /^(AI host|Máy AI)$/ })).toBeNull();
 
-    // Clicking Retry refetches -> 2) Empty hosts list -> distinct no-host prerequisite banner
+    // Clicking Retry refetches -> 2) Empty hosts list -> distinct no-host prerequisite gate hiding unusable controls
     await user.click(within(errorPrereq).getByRole('button', { name: /Retry|Thử lại/i }));
     await waitFor(() => {
       const noHostBanner = screen.getByTestId('camera-source-host-prerequisite');
       expect(noHostBanner.getAttribute('role')).toBe('status');
-      expect(noHostBanner.textContent).toMatch(/No AI host connected/i);
+      expect(noHostBanner.textContent).toMatch(/No AI machine is assigned to this Site/i);
+      expect(noHostBanner.textContent).toMatch(/Contact the AI operator/i);
     });
+    expect(screen.queryByRole('radio', { name: /USB \/ host webcam/i })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /^(AI host|Máy AI)$/ })).toBeNull();
 
     // Refresh -> 3) All assigned hosts offline -> distinct offline-hosts prerequisite naming the host
     await user.click(screen.getByRole('button', { name: /Refresh hosts/i }));
@@ -172,6 +173,7 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
       expect(offlineBanner.textContent).toMatch(/Site A Edge Box/);
       expect(offlineBanner.textContent).toMatch(/offline/i);
     });
+    expect(screen.queryByRole('radio', { name: /USB \/ host webcam/i })).toBeNull();
 
     // Refresh -> 4) Online test-only host with 0 webcams and 0 videos -> upfront test-only note + explicit empty device/video hints
     await user.click(screen.getByRole('button', { name: /Refresh hosts/i }));
@@ -321,7 +323,7 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
       policy: { mode: 'EXPLICIT', requiredPpe: ['GLOVES', 'HARD_HAT'] },
     });
 
-    // Vietnamese parity on policy scope, readiness guidance, and collapsed unsupported families (no jargon)
+    // Vietnamese parity on policy scope, readiness guidance, save receipt, and collapsed unsupported families (no worker/ACK/contract jargon)
     await i18n.changeLanguage('vi');
     await waitFor(() => {
       expect(screen.getByTestId('ppe-readiness-guidance').textContent).toMatch(/Mũ, áo: cơ bản/);
@@ -331,6 +333,9 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
         /Khẩu trang.*Dây đai an toàn toàn thân.*Móc dây an toàn/,
       );
       expect(viUnsupported.textContent).not.toMatch(/hợp đồng|cứu sinh|ranh giới/i);
+      const panelText = screen.getByTestId('camera-ppe-policy-panel').textContent ?? '';
+      expect(panelText).toMatch(/Đã lưu phiên bản 5\. Xem riêng trạng thái áp dụng trên máy AI\./);
+      expect(panelText).not.toMatch(/\bworker\b|\bACK\b/i);
     });
   });
 
@@ -478,7 +483,7 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
       /Camera is disabled/i,
     );
     expect((await screen.findByTestId('camera-source-host-prerequisite')).textContent).toMatch(
-      /No AI host connected/i,
+      /No AI machine is assigned to this Site/i,
     );
 
     // Refresh to online host -> probe works for connection prep, but live Save & activate / Apply saved config stay blocked

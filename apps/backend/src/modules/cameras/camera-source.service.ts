@@ -126,6 +126,15 @@ export class CameraSourceService {
     }
   }
 
+  private async monitoringCamera(siteId: string, cameraId: string) {
+    const camera = await this.cameras.get(siteId, cameraId);
+    if (camera.siteId !== siteId) missing();
+    // Reject before any host operation; the generation issuer also rechecks under lock.
+    if ('type' in camera && camera.type === 'GATE')
+      conflict('Gate Cameras cannot run monitoring workers');
+    return camera;
+  }
+
   private async call(
     origin: string,
     path: string,
@@ -177,8 +186,7 @@ export class CameraSourceService {
     const siteId = uuid(siteValue),
       cameraId = uuid(cameraValue);
     await this.authorize(token, siteId, false);
-    const camera = await this.cameras.get(siteId, cameraId);
-    if (camera.siteId !== siteId) missing();
+    const camera = await this.monitoringCamera(siteId, cameraId);
     const hosts = await Promise.all(
       this.hosts(siteId).map(async (host) => {
         try {
@@ -220,7 +228,7 @@ export class CameraSourceService {
     const siteId = uuid(siteValue),
       cameraId = uuid(cameraValue);
     await this.authorize(token, siteId, true);
-    const camera = await this.cameras.get(siteId, cameraId);
+    const camera = await this.monitoringCamera(siteId, cameraId);
     if (camera.siteId !== siteId) missing();
     const host = this.hosts(siteId).find((h) => h.id === hostId);
     if (!host) missing();
@@ -397,14 +405,10 @@ export class CameraSourceService {
     await authorize();
     const command = sourceConfigurationResumeSchema.safeParse(input);
     if (!command.success) invalid('Invalid camera configuration resume');
-    const camera = await this.cameras.get(siteId, cameraId),
+    const camera = await this.monitoringCamera(siteId, cameraId),
       host = this.hosts(siteId).find((h) => h.id === hostId);
     const allowed = this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true }) ?? [];
     if (!host || camera.siteId !== siteId || !allowed.includes(cameraId)) missing();
-    // Use the Camera-owned DTO rather than coupling the resume query to a later
-    // camera-type migration. Typed releases also recheck this in the issuer lock.
-    if ('type' in camera && camera.type === 'GATE')
-      conflict('Gate Cameras cannot run monitoring workers');
     if (
       this.config.get('SMARTSITE_AI_SOURCE_APPLY_ENABLED', { infer: true }) !== true ||
       !this.database
@@ -599,7 +603,7 @@ export class CameraSourceService {
     await this.authorize(token, siteId, true);
     const parsed = sourceActivationCommandSchema.safeParse(input);
     if (!parsed.success) invalid('Invalid source activation');
-    const camera = await this.cameras.get(siteId, cameraId);
+    const camera = await this.monitoringCamera(siteId, cameraId);
     const host = this.hosts(siteId).find((h) => h.id === hostId);
     const allowed = this.config.get('AI_CONFIGURATION_CAMERA_IDS', { infer: true }) ?? [];
     if (!host || camera.siteId !== siteId || !allowed.includes(cameraId)) missing();

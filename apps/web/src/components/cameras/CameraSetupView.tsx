@@ -143,11 +143,15 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     });
     if (activeDialog?.kind === 'regions') {
       const nextCam = rows.find((row) => row.id === cameraId);
-      if (nextCam?.status === 'INACTIVE') {
+      if (nextCam?.status === 'INACTIVE' || nextCam?.type === 'GATE') {
         invalidateRegionSetupCaches(site.id);
         close();
         syncCameraSelection(cameraId, true);
-      } else if (nextCam?.status === 'ACTIVE' && cameraId !== activeDialog.cameraId) {
+      } else if (
+        nextCam?.status === 'ACTIVE' &&
+        nextCam.type === 'ZONE' &&
+        cameraId !== activeDialog.cameraId
+      ) {
         open('regions', cameraId);
       } else {
         syncCameraSelection(cameraId, switchingCamera);
@@ -173,6 +177,13 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
 
   const guardedOpen: CameraSetupOpenHandler = (openKind, cameraId, trigger) => {
     if (!site) return;
+    if (
+      (openKind === 'regions' || openKind === 'manage') &&
+      cameraId &&
+      rows.some((row) => row.id === cameraId && row.type === 'GATE')
+    ) {
+      return;
+    }
     if (isInlineRegionsOpen) {
       if (effectiveRegionDraft.saving) return;
       if (openKind === 'regions' && cameraId === activeDialog?.cameraId) {
@@ -278,8 +289,10 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   const catalogSelectedCamera =
     (focusedCameraId ? rows.find((row) => row.id === focusedCameraId) : undefined) ??
     matchedRequestedCamera ??
+    rows.find((row) => row.type === 'ZONE') ??
     rows[0] ??
     null;
+  const isSelectedZoneCamera = catalogSelectedCamera?.type === 'ZONE';
   const deepLinkActionScope =
     site && matchedRequestedCamera && requestedAction
       ? `${site.id}:${matchedRequestedCamera.id}:${requestedAction}:${requestedRegionId ?? ''}`
@@ -298,7 +311,11 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     ) {
       return;
     }
-    if (requestedAction === 'regions' && matchedRequestedCamera.status === 'ACTIVE') {
+    if (
+      requestedAction === 'regions' &&
+      matchedRequestedCamera.type === 'ZONE' &&
+      matchedRequestedCamera.status === 'ACTIVE'
+    ) {
       autoOpenedActionRef.current = deepLinkActionScope;
       open('regions', matchedRequestedCamera.id);
     }
@@ -317,6 +334,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
   const isSourceSetupVisible = Boolean(
     import.meta.env.VITE_SMARTSITE_ENABLE_SOURCE_SETUP === 'true' &&
     catalogSelectedCamera &&
+    isSelectedZoneCamera &&
     !sites.baseError &&
     !cameras.baseError &&
     !revoked,
@@ -325,17 +343,18 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     apiUrl,
     token: session.accessToken,
     siteId: site?.id ?? '',
-    camera: catalogSelectedCamera,
+    camera: isSelectedZoneCamera ? catalogSelectedCamera : null,
     setupKey: key,
-    canWrite: canManageCameras && catalogSelectedCamera?.status === 'ACTIVE',
-    enabled: Boolean(isSourceSetupVisible && site && catalogSelectedCamera),
+    canWrite:
+      canManageCameras && isSelectedZoneCamera && catalogSelectedCamera?.status === 'ACTIVE',
+    enabled: Boolean(isSourceSetupVisible && site && catalogSelectedCamera && isSelectedZoneCamera),
     onUnauthorized: () => {
       if (site) handleStatusUnauthorized(site.id);
     },
   });
   const currentTaskScopeKey = `${site?.id ?? ''}:${catalogSelectedCamera?.id ?? ''}:${requestedAction ?? ''}:${matchedRequestedCamera?.id ?? ''}`;
   const activeTask: CameraWorkspaceTask | null =
-    !catalogSelectedCamera || catalogSelectedCamera.status !== 'ACTIVE'
+    !catalogSelectedCamera || !isSelectedZoneCamera || catalogSelectedCamera.status !== 'ACTIVE'
       ? null
       : isInlineRegionsOpen
         ? 'regions'
@@ -343,6 +362,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
           ? taskSelection.task
           : requestedAction === 'ppe' &&
               matchedRequestedCamera &&
+              matchedRequestedCamera.type === 'ZONE' &&
               catalogSelectedCamera.id === matchedRequestedCamera.id
             ? 'ppe'
             : isSourceSetupVisible
@@ -455,6 +475,7 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     !cameras.baseError &&
     focusedCameraId &&
     catalogSelectedCamera?.id === focusedCameraId &&
+    catalogSelectedCamera.type === 'ZONE' &&
     catalogSelectedCamera.status === 'ACTIVE'
   ) {
     headerReturnParams.set('cameraId', catalogSelectedCamera.id);
@@ -464,9 +485,12 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
     !cameras.baseError &&
     !headerReturnParams.has('cameraId') &&
     !requestedCameraId &&
-    catalogSelectedCamera?.status === 'ACTIVE'
+    catalogSelectedCamera?.type === 'ZONE' &&
+    catalogSelectedCamera.status === 'ACTIVE'
   ) {
     headerReturnParams.set('cameraId', catalogSelectedCamera.id);
+  } else if (catalogSelectedCamera?.type === 'GATE') {
+    headerReturnParams.delete('cameraId');
   }
 
   const errorNotice = (catalog: typeof sites | typeof cameras) =>
@@ -658,12 +682,17 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
               : 0
           }
           autoExpandPpeCameraId={
-            requestedAction === 'ppe' && matchedRequestedCamera ? matchedRequestedCamera.id : null
+            requestedAction === 'ppe' &&
+            matchedRequestedCamera &&
+            matchedRequestedCamera.type === 'ZONE'
+              ? matchedRequestedCamera.id
+              : null
           }
           onOpenApply={handleJumpToApplyWorker}
           applySavedBar={
             isSourceSetupVisible &&
             catalogSelectedCamera &&
+            isSelectedZoneCamera &&
             catalogSelectedCamera.status === 'ACTIVE' &&
             canManageCameras ? (
               <CameraApplySavedBar
@@ -743,7 +772,11 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
             ) : undefined
           }
           policyContext={
-            canReadCameras && !revoked && !sites.baseError && !cameras.baseError
+            canReadCameras &&
+            !revoked &&
+            !sites.baseError &&
+            !cameras.baseError &&
+            catalogSelectedCamera?.type !== 'GATE'
               ? {
                   setupKey: key,
                   token: session.accessToken,
@@ -753,16 +786,22 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
                 }
               : undefined
           }
-          statusContext={{
-            setupKey: key,
-            token: session.accessToken,
-            siteId: site.id,
-            client,
-            enabled: Boolean(canReadCameras && !revoked && !sites.baseError && !cameras.baseError),
-            onUnauthorized: () => {
-              handleStatusUnauthorized(site.id);
-            },
-          }}
+          statusContext={
+            catalogSelectedCamera?.type === 'GATE'
+              ? undefined
+              : {
+                  setupKey: key,
+                  token: session.accessToken,
+                  siteId: site.id,
+                  client,
+                  enabled: Boolean(
+                    canReadCameras && !revoked && !sites.baseError && !cameras.baseError,
+                  ),
+                  onUnauthorized: () => {
+                    handleStatusUnauthorized(site.id);
+                  },
+                }
+          }
         />
       )}
       {site && activeDialog?.kind === 'register' && canManageCameras && (

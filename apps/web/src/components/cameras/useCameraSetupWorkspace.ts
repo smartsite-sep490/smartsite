@@ -91,11 +91,11 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
     (offset, signal) =>
       client.listCameras(session.accessToken, site!.id, { offset, limit: 20 }, { signal }),
   );
-  const rows = cameras.rows.filter((row) => row.siteId === site?.id && row.type === 'ZONE');
+  const rows = cameras.rows.filter((row) => row.siteId === site?.id);
   const canManageCameras = capabilities.canManageRegions && !cameras.baseError;
   const canAccessTourZones = canManageCameras || capabilities.canManageZones || canReadZones;
   const hasTourCameraContext = Boolean(
-    site && canReadCameras && !cameras.baseError && rows.length > 0,
+    site && canReadCameras && !cameras.baseError && rows.some((row) => row.type === 'ZONE'),
   );
   const setupTourSteps = useMemo(
     () =>
@@ -107,7 +107,7 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
     [canManageCameras, canAccessTourZones, hasTourCameraContext],
   );
 
-  const selectedCamera = rows.find((row) => row.id === dialog?.cameraId);
+  const selectedCamera = rows.find((row) => row.id === dialog?.cameraId && row.type === 'ZONE');
   const dialogScope = useRef({ dialog, siteId: site?.id });
   useLayoutEffect(() => {
     dialogScope.current = { dialog, siteId: site?.id };
@@ -121,7 +121,7 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
   const requestedCameraId = params.get('cameraId');
   const loadedReturnCamera =
     !revoked && !sites.baseError && !cameras.baseError && requestedCameraId
-      ? rows.find((row) => row.id === requestedCameraId)
+      ? rows.find((row) => row.id === requestedCameraId && row.type === 'ZONE')
       : undefined;
   const explicitDialogCameraId =
     site &&
@@ -275,7 +275,7 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
       return;
     }
     const loadedRow = rows.find((row) => row.id === cameraId);
-    if (loadedRow ? loadedRow.status !== 'ACTIVE' : !allowUnloaded) {
+    if (loadedRow ? loadedRow.status !== 'ACTIVE' || loadedRow.type !== 'ZONE' : !allowUnloaded) {
       return;
     }
     setSelectedRegionCamera({ siteId: site.id, cameraId });
@@ -287,6 +287,13 @@ export function useCameraSetupWorkspace(apiUrl: string, session: SharedSession) 
 
   const open: CameraSetupOpenHandler = (kind, cameraId, trigger) => {
     if (!site) return;
+    if (
+      (kind === 'regions' || kind === 'manage') &&
+      cameraId &&
+      rows.some((row) => row.id === cameraId && row.type === 'GATE')
+    ) {
+      return;
+    }
     if (kind === 'regions') {
       syncActiveRegionCameraParam(cameraId, false);
     }

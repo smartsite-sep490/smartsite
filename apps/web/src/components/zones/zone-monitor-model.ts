@@ -23,6 +23,92 @@ export interface ZoneWorkerOperationalStatus {
   readonly tone: 'emerald' | 'amber' | 'rose' | 'slate';
 }
 
+export type ZoneMonitorStageState =
+  | { readonly kind: 'LOADING' }
+  | { readonly kind: 'DENIED'; readonly source: 'sites' | 'cameras' }
+  | { readonly kind: 'LOAD_ERROR'; readonly source: 'sites' | 'cameras' }
+  | { readonly kind: 'LINKED_SITE_UNAVAILABLE'; readonly fallbackSiteId: string | null }
+  | { readonly kind: 'NO_SITES' }
+  | {
+      readonly kind: 'LINKED_CAMERA_UNAVAILABLE';
+      readonly fallbackCameraId: string | null;
+      readonly inactiveZoneCameraCount: number;
+    }
+  | { readonly kind: 'ALL_CAMERAS_INACTIVE'; readonly inactiveZoneCameraCount: number }
+  | { readonly kind: 'NO_ZONE_CAMERAS'; readonly gateCameraCount: number };
+
+export interface ZoneMonitorStageInput {
+  readonly sitesPending: boolean;
+  readonly sitesError: boolean;
+  readonly sitesErrorStatus: number | null;
+  readonly scopedSiteCount: number;
+  readonly hasSelectedSite: boolean;
+  readonly hasUnresolvedLinkedSite: boolean;
+  readonly firstAvailableSiteId: string | null;
+  readonly camerasPending: boolean;
+  readonly camerasError: boolean;
+  readonly camerasErrorStatus: number | null;
+  readonly hasUnresolvedLinkedCamera: boolean;
+  readonly firstActiveCameraId: string | null;
+  readonly inactiveZoneCameraCount: number;
+  readonly gateCameraCount: number;
+}
+
+export function resolveZoneMonitorStageState(input: ZoneMonitorStageInput): ZoneMonitorStageState {
+  if (input.sitesPending) {
+    return { kind: 'LOADING' };
+  }
+
+  if (input.sitesError) {
+    if (input.sitesErrorStatus === 401 || input.sitesErrorStatus === 403) {
+      return { kind: 'DENIED', source: 'sites' };
+    }
+    return { kind: 'LOAD_ERROR', source: 'sites' };
+  }
+
+  if (input.hasUnresolvedLinkedSite) {
+    return {
+      kind: 'LINKED_SITE_UNAVAILABLE',
+      fallbackSiteId: input.firstAvailableSiteId,
+    };
+  }
+
+  if (input.scopedSiteCount === 0 || !input.hasSelectedSite) {
+    return { kind: 'NO_SITES' };
+  }
+
+  if (input.camerasPending) {
+    return { kind: 'LOADING' };
+  }
+
+  if (input.camerasError) {
+    if (input.camerasErrorStatus === 401 || input.camerasErrorStatus === 403) {
+      return { kind: 'DENIED', source: 'cameras' };
+    }
+    return { kind: 'LOAD_ERROR', source: 'cameras' };
+  }
+
+  if (input.hasUnresolvedLinkedCamera) {
+    return {
+      kind: 'LINKED_CAMERA_UNAVAILABLE',
+      fallbackCameraId: input.firstActiveCameraId,
+      inactiveZoneCameraCount: input.inactiveZoneCameraCount,
+    };
+  }
+
+  if (input.inactiveZoneCameraCount > 0) {
+    return {
+      kind: 'ALL_CAMERAS_INACTIVE',
+      inactiveZoneCameraCount: input.inactiveZoneCameraCount,
+    };
+  }
+
+  return {
+    kind: 'NO_ZONE_CAMERAS',
+    gateCameraCount: input.gateCameraCount,
+  };
+}
+
 const POLICY_LABEL_KEYS: Record<ZonePolicyKind, ZoneMonitorKey> = {
   PROHIBITED: 'zoneMonitor.region.policyProhibited',
   AUTHORIZATION_REQUIRED: 'zoneMonitor.region.policyAuthorizationRequired',
