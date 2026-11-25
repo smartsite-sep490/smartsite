@@ -239,8 +239,13 @@ import type {
 } from '@smartsite/contracts';
 export type { SchedulingRequestStatus };
 
-/** React Native FormData uses URI-backed files instead of browser File objects. */
-export type NativeUploadFile = { uri: string; name: string; type: string };
+/** Native URI metadata, with a byte reader for Expo's multipart fetch encoder. */
+export type NativeUploadFile = {
+  uri: string;
+  name: string;
+  type: string;
+  bytes?: () => Promise<Uint8Array>;
+};
 export type UploadFile = File | NativeUploadFile;
 function appendFile(form: FormData, field: string, file: Blob | NativeUploadFile, name?: string) {
   if ('uri' in file) form.append(field, file as unknown as Blob);

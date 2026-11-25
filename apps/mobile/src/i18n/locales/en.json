@@ -1038,6 +1038,7 @@
     "required": "Please enter {{label}}."
   },
   "uploads": {
+    "fileUnavailable": "Cannot read the photo or file on this device. Please select it again.",
     "cameraPermission": "Camera permission is required to take photos. You can enable it in device settings.",
     "photoTooLarge": "The photo exceeds 5 MB. Please retake it.",
     "evidencePhotoTooLarge": "The photo exceeds 1 MB. Please retake it with a tighter frame.",

@@ -16,6 +16,16 @@ import {
 } from '../../components/common/Icons';
 import { useTranslation } from '../../i18n';
 
+function uploadFile(uri: string, name: string, type: string): NativeUploadFile {
+  const source = new File(uri);
+  if (!source.exists || source.size <= 0) throw new Error(tr('uploads.fileUnavailable'));
+  // Expo 58 fetch encodes bytes(), whereas RN fetch consumes uri. Keep the reader
+  // non-enumerable so RN's getParts() and draft fingerprints retain plain metadata.
+  return Object.defineProperty({ uri, name, type }, 'bytes', {
+    value: () => source.bytes(),
+  });
+}
+
 function removeCached(file: NativeUploadFile) {
   try {
     const prefix = Paths?.cache?.uri?.replace(/\/+$/, '') + '/';
@@ -55,7 +65,7 @@ export async function capturePhoto(
       transformed.delete();
       throw new Error(document ? tr('uploads.photoTooLarge') : tr('uploads.evidencePhotoTooLarge'));
     }
-    return { uri: saved.uri, name: 'photo.jpg', type: 'image/jpeg' };
+    return uploadFile(saved.uri, 'photo.jpg', 'image/jpeg');
   } finally {
     if (original.exists) original.delete();
   }
@@ -127,7 +137,7 @@ export function Attachments({
           context.resize({ width: Math.min(1920, asset.width) });
           const image = await context.renderAsync();
           const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
-          const file = { uri: saved.uri, name: 'document-gallery.jpg', type: 'image/jpeg' };
+          const file = uploadFile(saved.uri, 'document-gallery.jpg', 'image/jpeg');
           if (new File(saved.uri).size > 5 * 1024 * 1024) {
             removeCached(file);
             throw new Error(tr('uploads.imageSizeLimit'));
@@ -153,7 +163,7 @@ export function Attachments({
               : asset.name.toLowerCase().endsWith('.png')
                 ? 'image/png'
                 : 'image/jpeg');
-          const file = { uri: asset.uri, name: asset.name, type: mime };
+          const file = uploadFile(asset.uri, asset.name, mime);
           await accept(file);
         }
       }

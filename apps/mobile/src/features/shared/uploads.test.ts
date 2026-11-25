@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { convertFormDataAsync } from 'expo/src/winter/fetch/convertFormData';
 
 const camera = vi.hoisted(() => ({
   permission: vi.fn(),
@@ -29,6 +30,9 @@ vi.mock('expo-file-system', () => ({
     get size() {
       return camera.size;
     }
+    async bytes() {
+      return new Uint8Array([83, 89, 78, 84, 72, 69, 84, 73, 67]);
+    }
     delete() {
       camera.deleted.push(this.uri);
     }
@@ -53,6 +57,18 @@ beforeEach(() => {
 });
 
 describe('camera photo preparation', () => {
+  it('encodes a camera document using the installed Expo multipart encoder', async () => {
+    const file = await capturePhoto(false, true);
+    const form = {
+      entries: () => [['file', file]][Symbol.iterator](),
+    } as unknown as FormData;
+    const result = await convertFormDataAsync(form, 'synthetic-boundary');
+    const body = new TextDecoder().decode(result.body);
+    expect(body).toContain('name="file"; filename="photo.jpg"');
+    expect(body).toContain('content-type: image/jpeg');
+    expect(body).toContain('SYNTHETIC');
+    expect(body).not.toContain('cache://');
+  });
   it('returns a bounded JPEG and removes the original camera capture', async () => {
     await expect(capturePhoto(true)).resolves.toEqual({
       uri: 'cache://resized.jpg',
