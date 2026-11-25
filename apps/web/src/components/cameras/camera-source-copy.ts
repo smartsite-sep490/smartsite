@@ -49,20 +49,28 @@ const en = {
   'cameraSource.testing': 'Testing connection…',
   'cameraSource.cancel': 'Cancel test',
   'cameraSource.refresh': 'Refresh hosts',
+  'cameraSource.refreshing': 'Checking AI hosts…',
   'cameraSource.loading': 'Checking available AI hosts…',
+  'cameraSource.prerequisiteLabel': 'Prerequisite',
+  'cameraSource.noHostsHeading': 'No AI machine is assigned to this Site',
   'cameraSource.noHosts':
-    'No AI host connected — assign a site AI host before testing video sources.',
+    'Registering a camera only saves its details and does not connect video. Contact the AI operator to assign a machine to this Site, then refresh.',
+  'cameraSource.hostFetchErrorHeading': 'Could not check AI hosts',
   'cameraSource.hostFetchError': 'Could not check AI hosts. Retry or verify backend connection.',
   'cameraSource.retryHosts': 'Retry',
+  'cameraSource.allHostsOfflineHeading': 'Assigned AI host is currently unavailable',
   'cameraSource.allHostsOffline':
-    'AI host offline ({{hosts}}) — reconnect it and refresh before testing.',
+    '{{hosts}} is offline. Reconnect the machine and refresh before testing video sources.',
   'cameraSource.testOnlyNote': '{{host}} is test-only (cannot activate live AI here).',
   'cameraSource.emptyWebcams':
     'No USB webcams found on {{host}}. Plug into the AI host or use RTSP.',
   'cameraSource.emptyVideos': 'No approved videos found on {{host}}.',
   'cameraSource.inactiveBadge': 'Disabled · Test only',
+  'cameraSource.inactiveBadgeBlocked': 'Disabled',
   'cameraSource.inactivePrepNotice':
     'Camera is disabled — you can test a connection now, then enable it in settings to activate AI.',
+  'cameraSource.inactiveBlockedNotice':
+    'Camera is disabled — enabling it alone will not connect video until this Site has an available AI machine.',
   'cameraSource.inactiveEnableToActivate':
     'Connection preview succeeded, but this camera is Disabled in configuration. Enable the camera in settings first before activating a live AI source.',
   'cameraSource.unavailable':
@@ -155,20 +163,28 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.testing': 'Đang kiểm tra kết nối…',
   'cameraSource.cancel': 'Hủy kiểm tra',
   'cameraSource.refresh': 'Kiểm tra lại máy AI',
+  'cameraSource.refreshing': 'Đang kiểm tra máy AI…',
   'cameraSource.loading': 'Đang kiểm tra các máy AI…',
+  'cameraSource.prerequisiteLabel': 'Điều kiện cần',
+  'cameraSource.noHostsHeading': 'Công trường này chưa có máy AI',
   'cameraSource.noHosts':
-    'Chưa kết nối máy AI — cần gắn máy AI cho công trường trước khi thử nguồn.',
+    'Đăng ký camera chỉ lưu thông tin, chưa có luồng hình. Hãy liên hệ người vận hành để gán máy AI cho công trường rồi kiểm tra lại.',
+  'cameraSource.hostFetchErrorHeading': 'Không kiểm tra được máy AI',
   'cameraSource.hostFetchError': 'Không kiểm tra được máy AI. Hãy thử lại hoặc kiểm tra kết nối.',
   'cameraSource.retryHosts': 'Thử lại',
+  'cameraSource.allHostsOfflineHeading': 'Máy AI của công trường hiện ngoại tuyến',
   'cameraSource.allHostsOffline':
-    'Máy AI đang ngoại tuyến ({{hosts}}) — kết nối lại rồi làm mới để kiểm tra.',
+    '{{hosts}} đang ngoại tuyến. Hãy kết nối lại máy rồi làm mới trước khi kiểm tra nguồn hình.',
   'cameraSource.testOnlyNote':
     '{{host}} chỉ hỗ trợ kiểm tra (chưa kích hoạt AI trực tiếp tại đây).',
   'cameraSource.emptyWebcams': 'Chưa thấy webcam USB trên {{host}}. Cắm vào máy AI hoặc dùng RTSP.',
   'cameraSource.emptyVideos': 'Chưa có video đã ghi trên {{host}}.',
   'cameraSource.inactiveBadge': 'Đang tắt · Chỉ kiểm tra',
+  'cameraSource.inactiveBadgeBlocked': 'Đang tắt',
   'cameraSource.inactivePrepNotice':
     'Camera đang tắt — bạn vẫn kiểm tra kết nối được, sau đó bật trong cài đặt để chạy AI.',
+  'cameraSource.inactiveBlockedNotice':
+    'Camera đang tắt — chỉ bật camera chưa có hình cho tới khi công trường có máy AI khả dụng.',
   'cameraSource.inactiveEnableToActivate':
     'Kiểm tra kết nối đã lấy được ảnh xem trước, nhưng camera đang Tắt trong cấu hình. Hãy bật camera trong cài đặt trước khi kích hoạt nguồn AI trực tiếp.',
   'cameraSource.unavailable':
