@@ -1,6 +1,6 @@
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
@@ -20,9 +20,34 @@ interface LandingPageProps {
 export function LandingPage({ onEnterApp }: LandingPageProps) {
   useTranslation();
 
+  const [isScrolled, setIsScrolled] = useState(false);
   const [activeAiTab, setActiveAiTab] = useState<'ppe' | 'zones'>('ppe');
 
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const scrollToTop = () =>
+    window.scrollTo({
+      top: 0,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'instant'
+        : 'smooth',
+    });
+  useEffect(() => {
+    const updateHeader = () => setIsScrolled(window.scrollY > 24);
+    updateHeader();
+    window.addEventListener('scroll', updateHeader, { passive: true });
+    return () => window.removeEventListener('scroll', updateHeader);
+  }, []);
+
+  useEffect(() => {
+    // The journey creates a pin spacer; refresh triggers in document order.
+    const observer = new ResizeObserver(() => {
+      ScrollTrigger.sort();
+      ScrollTrigger.refresh(true);
+    });
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   // 1. Hero Section Animation
   useGSAP(
@@ -175,18 +200,25 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
         });
 
         // 5. Safety AI Showcase
-        gsap.to('.ai-laser', {
-          scrollTrigger: {
-            trigger: '.safety-ai-section',
-            start: 'top center',
-            end: 'bottom center',
-            scrub: 1,
+        gsap.fromTo(
+          '.ai-laser',
+          { y: 0 },
+          {
+            scrollTrigger: {
+              trigger: '.ai-camera-frame',
+              start: 'top 80%',
+              end: 'bottom 20%',
+              scrub: 0.5,
+              invalidateOnRefresh: true,
+            },
+            y: () =>
+              Math.max(
+                0,
+                (containerRef.current?.querySelector('.ai-camera-frame')?.clientHeight ?? 0) - 2,
+              ),
+            ease: 'none',
           },
-          y: () =>
-            (containerRef.current?.querySelector('.ai-laser')?.parentElement?.clientHeight ?? 0) *
-            0.9,
-          ease: 'none',
-        });
+        );
         gsap.from('.ai-checklist-item', {
           scrollTrigger: { trigger: '.safety-ai-section', start: 'top 60%' },
           x: 30,
@@ -255,15 +287,14 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
   return (
     <div
       ref={containerRef}
-      className="relative w-full overflow-x-hidden min-h-screen bg-white text-slate-900 font-sans selection:bg-[#F66B17]/20 scroll-smooth"
+      className="relative w-full overflow-x-clip min-h-screen bg-white text-slate-900 font-sans selection:bg-[#F66B17]/20 scroll-smooth"
     >
       {/* 1. Header Navigation - Updated for Dark Hero */}
-      <header className="absolute top-0 inset-x-0 z-50 bg-transparent">
+      <header
+        className={`fixed top-0 inset-x-0 z-50 transition-colors duration-200 motion-reduce:transition-none ${isScrolled ? 'bg-[#171717]/90 backdrop-blur-md shadow-sm' : 'bg-transparent'}`}
+      >
         <div className="max-w-7xl mx-auto px-3 sm:px-6 h-20 flex items-center justify-between">
-          <div
-            className="flex items-center gap-2.5 cursor-pointer"
-            onClick={() => window.scrollTo(0, 0)}
-          >
+          <div className="flex items-center gap-2.5 cursor-pointer" onClick={scrollToTop}>
             <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm shrink-0 bg-white p-0.5 border border-white/10 flex items-center justify-center">
               <img
                 src="/smartsite-app-icon-white.png"
@@ -442,7 +473,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 4. One Platform Diagram */}
-      <section id="platform" className="platform-section py-32 px-6 max-w-6xl mx-auto scroll-mt-10">
+      <section id="platform" className="platform-section py-32 px-6 max-w-6xl mx-auto scroll-mt-24">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
           <div className="platform-text">
             <h2 className="text-xs font-bold uppercase tracking-widest text-[#F66B17] mb-4">
@@ -507,7 +538,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       {/* 5. Built Around Operations */}
       <section
         id="solutions"
-        className="solutions-section py-24 px-6 bg-[#F7F6F3] border-y border-[#EAEAEA] scroll-mt-10"
+        className="solutions-section py-24 px-6 bg-[#F7F6F3] border-y border-[#EAEAEA] scroll-mt-24"
       >
         <div className="max-w-6xl mx-auto">
           <h2 className="text-4xl md:text-5xl font-black text-[#2F3437] leading-tight mb-20 max-w-2xl">
@@ -651,7 +682,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       {/* 6. Safety AI - EXACTLY like screenshot 2 */}
       <section
         id="safety-ai"
-        className="safety-ai-section py-24 px-6 bg-[#041D2E] text-white overflow-hidden scroll-mt-10"
+        className="safety-ai-section py-24 px-6 bg-[#041D2E] text-white overflow-hidden scroll-mt-24"
       >
         <div className="max-w-7xl mx-auto space-y-12">
           {/* Section Header */}
@@ -695,7 +726,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           {/* Interactive AI Showcase Component */}
           <div className="bg-[#0B1521] border border-white/10 rounded-2xl flex flex-col lg:flex-row overflow-hidden shadow-2xl">
             {/* Left side: Video Feed */}
-            <div className="lg:w-2/3 relative aspect-video bg-black">
+            <div className="ai-camera-frame overflow-hidden lg:w-2/3 relative aspect-video bg-black">
               <img
                 src="https://images.pexels.com/photos/1216589/pexels-photo-1216589.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
                 alt={tr('common.construction_ai_view')}
@@ -785,7 +816,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 7. How It Works */}
-      <section id="how-it-works" className="timeline-section py-24 px-6 bg-[#F7F6F3] scroll-mt-10">
+      <section id="how-it-works" className="timeline-section py-24 px-6 bg-[#F7F6F3] scroll-mt-24">
         <div className="max-w-7xl mx-auto">
           <div className="mb-20">
             <div className="text-[#F66B17] text-[10px] font-black tracking-widest uppercase mb-4">
@@ -1027,7 +1058,7 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
       </section>
 
       {/* 9. Lifecycle (Connected from the gate to the jobsite) */}
-      <section className="lifecycle-section py-24 px-6 bg-white border-t border-[#EAEAEA] scroll-mt-10">
+      <section className="lifecycle-section py-24 px-6 bg-white border-t border-[#EAEAEA] scroll-mt-24">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-16 md:items-center">
           <div className="lifecycle-text md:w-1/2">
             <h3 className="text-4xl md:text-5xl font-black text-[#041D2E] mb-6 leading-tight">
@@ -1231,10 +1262,30 @@ export function LandingPage({ onEnterApp }: LandingPageProps) {
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto mt-16 pt-8 border-t border-slate-700/50">
+        <div className="max-w-6xl mx-auto mt-16 pt-8 border-t border-slate-700/50 flex items-center justify-between gap-6">
           <p className="text-slate-500 text-[10px]">
             {tr('landing_page.2026_smartsite_built_for_safer_construction')}
           </p>
+          <button
+            type="button"
+            onClick={scrollToTop}
+            aria-label={tr('landing_page.back_to_top')}
+            className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border border-white/30 bg-white/5 text-white hover:bg-[#F66B17] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#F66B17] transition-colors"
+          >
+            <svg
+              aria-hidden="true"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 19V5m-7 7 7-7 7 7" />
+            </svg>
+          </button>
         </div>
       </footer>
     </div>
