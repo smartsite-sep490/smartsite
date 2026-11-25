@@ -504,11 +504,11 @@ describe('TrackedObservationHistory', () => {
       'tracked-history-observed-ppe-chip-LANYARD_HOOK',
     ]);
     expect(chips[0]!.textContent).toContain('Hard Hat / Helmet');
-    expect(chips[0]!.textContent).toContain('Missing');
+    expect(chips[0]!.textContent).toContain('Possible missing');
     expect(chips[1]!.textContent).toContain('Safety Vest');
     expect(chips[1]!.textContent).toContain('Observed');
     expect(chips[2]!.textContent).toContain('Gloves');
-    expect(chips[2]!.textContent).toContain('Missing');
+    expect(chips[2]!.textContent).toContain('Possible missing');
     expect(chips[3]!.textContent).toContain('Boots');
     expect(chips[4]!.textContent).toContain('Goggles');
     expect(chips[5]!.textContent).toContain('Mask');

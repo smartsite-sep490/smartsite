@@ -45,7 +45,7 @@ const en = {
   'trackedHistory.frameSha256': 'Evidence #{{index}} SHA-256',
   'trackedHistory.observedPpeTitle': 'Observed PPE on this person',
   'trackedHistory.observedPpeStatus.PRESENT': 'Observed',
-  'trackedHistory.observedPpeStatus.MISSING': 'Missing',
+  'trackedHistory.observedPpeStatus.MISSING': 'Possible missing',
   'trackedHistory.observedPpeStatus.UNCLEAR': 'Unclear',
   'trackedHistory.observedPpeBoundaryNote':
     'Harness/lanyard hook indicates frame visibility only; does not confirm proper wear or tie-off.',
@@ -100,7 +100,7 @@ const vi: Record<keyof typeof en, string> = {
   'trackedHistory.frameSha256': 'SHA-256 bằng chứng #{{index}}',
   'trackedHistory.observedPpeTitle': 'PPE ghi nhận trên người này',
   'trackedHistory.observedPpeStatus.PRESENT': 'Thấy',
-  'trackedHistory.observedPpeStatus.MISSING': 'Thiếu',
+  'trackedHistory.observedPpeStatus.MISSING': 'Dấu hiệu thiếu',
   'trackedHistory.observedPpeStatus.UNCLEAR': 'Không rõ',
   'trackedHistory.observedPpeBoundaryNote':
     'Dây đai/móc chỉ ghi nhận xuất hiện trong khung hình, không xác nhận đeo hay móc đúng chuẩn.',
