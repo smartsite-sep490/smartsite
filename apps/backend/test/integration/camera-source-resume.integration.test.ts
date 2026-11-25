@@ -2,9 +2,14 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
+import {
+  computeCanonicalPayloadHash,
+  type CameraPolicyConfigurationBundle,
+} from '@smartsite/contracts';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { PARAMS_PROVIDER_TOKEN } from 'nestjs-pino';
+import type { DataSource } from 'typeorm';
 import type { BackendEnvironment } from '../../src/config/environment.js';
 import type { AuthService } from '../../src/modules/auth/auth.service.js';
 import type { CameraConfigurationService } from '../../src/modules/cameras/camera-configuration.service.js';
@@ -14,6 +19,10 @@ import { WorkerEventAdmission1795046400002 } from '../../src/database/migrations
 import { TrackedSubjectStorage1795046400003 } from '../../src/database/migrations/1795046400003-TrackedSubjectStorage.js';
 import { TrackedPendingRecoveryIndex1795046400004 } from '../../src/database/migrations/1795046400004-TrackedPendingRecoveryIndex.js';
 import { TrackedWireGenerationFence1795046400008 } from '../../src/database/migrations/1795046400008-TrackedWireGenerationFence.js';
+import { CameraPpePolicyStorage1795046400010 } from '../../src/database/migrations/1795046400010-CameraPpePolicyStorage.js';
+import { readHistoricalIssuedCameraBundleInTransaction } from '../../src/modules/cameras/camera-configuration-bundle-reader.js';
+import { insertCameraPolicyBundle } from '../../src/modules/cameras/camera-policy-bundle-write.js';
+import { recordCameraConfigurationAcknowledgement } from '../../src/modules/cameras/camera-configuration-acknowledgement.js';
 import { CameraEventAdmissionService } from '../../src/modules/cameras/camera-event-admission.service.js';
 import { TrackedPartAuthenticator } from '../../src/integrations/ai/tracked-part-authentication.js';
 import { TrackedFramePrototypeStore } from '../../src/integrations/ai/tracked-frame-storage.js';
@@ -32,6 +41,7 @@ test('source resume coordinates an accepted configuration without replacing sour
     db = owned.dataSource;
   try {
     await owned.initialize();
+    await db.transaction((tx) => new CameraPpePolicyStorage1795046400010().up(tx.queryRunner!));
     async function setup(
       mode:
         | 'success'
@@ -44,6 +54,7 @@ test('source resume coordinates an accepted configuration without replacing sour
         | 'scope404' = 'success',
     ) {
       const f = await seedTrackedFrameFixture(db, ['HARD_HAT']);
+      await issueV2PolicyFixture(db, f);
       let permitted = true;
       const calls: string[] = [];
       let activeCommand: string | undefined;
@@ -95,7 +106,7 @@ test('source resume coordinates an accepted configuration without replacing sour
       const command = {
         commandId: randomUUID(),
         expectedRevision: 4,
-        expectedConfigurationVersion: 1,
+        expectedConfigurationVersion: f.context.configurationVersion,
       };
       const fetcher = (async (url, init) => {
         const path = new URL(String(url)).pathname;
@@ -132,13 +143,16 @@ test('source resume coordinates an accepted configuration without replacing sour
           assert.deepEqual(body.generationBinding, activeBinding);
           preparedBinding = { ...activeBinding };
           assert.deepEqual(body.configuration, {
-            configurationVersion: 1,
+            configurationVersion: f.context.configurationVersion,
             viewRevision: 1,
             bundleSha256: f.context.bundleSha256,
           });
           if (mode === 'revoked') permitted = false;
           if (mode === 'changed')
-            await db.query('UPDATE camera SET configuration_version=2 WHERE id=$1', [f.cameraId]);
+            await db.query('UPDATE camera SET configuration_version=$2 WHERE id=$1', [
+              f.cameraId,
+              f.context.configurationVersion + 1,
+            ]);
           return Response.json({
             schemaVersion: '1.0.0',
             state: 'PREPARED',
@@ -165,7 +179,7 @@ test('source resume coordinates an accepted configuration without replacing sour
           sourceKind: 'LIVE',
           generationBinding: preparedBinding,
           configuration: {
-            configurationVersion: 1,
+            configurationVersion: f.context.configurationVersion,
             viewRevision: 1,
             bundleSha256: f.context.bundleSha256,
           },
@@ -204,7 +218,7 @@ test('source resume coordinates an accepted configuration without replacing sour
           f.command,
         );
         assert.equal(result.state, 'STARTED');
-        assert.equal(result.configurationVersion, 1);
+        assert.equal(result.configurationVersion, f.context.configurationVersion);
         assert.equal(result.viewRevision, 1);
         assert.equal(result.sourceRevision, 4);
         assert.equal(result.bundleSha256, f.context.bundleSha256);
@@ -326,6 +340,7 @@ test('resumeAfterSourceGap transitions active heads/pending via canonical renewa
         new TrackedSubjectStorage1795046400003(),
         new TrackedPendingRecoveryIndex1795046400004(),
         new TrackedWireGenerationFence1795046400008(),
+        new CameraPpePolicyStorage1795046400010(),
       ])
         await migration.up(manager.queryRunner!);
     });
@@ -351,6 +366,7 @@ test('resumeAfterSourceGap transitions active heads/pending via canonical renewa
       } = {},
     ) {
       const f = await seedTrackedFrameFixture(db, ['HARD_HAT']);
+      await issueV2PolicyFixture(db, f);
       const routeEpoch = '00000000-0000-4000-8000-000000000001';
       const officer = randomUUID();
       await db.query(
@@ -407,7 +423,17 @@ test('resumeAfterSourceGap transitions active heads/pending via canonical renewa
           ...base,
           framePartition: { ...base.framePartition, partIndex: 1, partCount: 2 },
           observations: [
-            { type: 'PERSON', trackId: 1 },
+            {
+              type: 'PERSON',
+              trackId: 1,
+              boundingBox: {
+                coordinateSpace: 'NORMALIZED_0_1',
+                x1: 0.3,
+                y1: 0.2,
+                x2: 0.6,
+                y2: 0.7,
+              },
+            },
             {
               type: 'PPE',
               trackId: 1,
@@ -577,12 +603,15 @@ test('resumeAfterSourceGap transitions active heads/pending via canonical renewa
             streamSessionId: f.generation.streamSessionId,
           });
           assert.deepEqual(body.configuration, {
-            configurationVersion: 1,
+            configurationVersion: f.context.configurationVersion,
             viewRevision: 1,
             bundleSha256: f.context.bundleSha256,
           });
           if (options.changeConfigAtPrepare)
-            await db.query('UPDATE camera SET configuration_version=2 WHERE id=$1', [f.cameraId]);
+            await db.query('UPDATE camera SET configuration_version=$2 WHERE id=$1', [
+              f.cameraId,
+              f.context.configurationVersion + 1,
+            ]);
           return Response.json({
             schemaVersion: '1.0.0',
             state: 'PREPARED',
@@ -680,7 +709,7 @@ test('resumeAfterSourceGap transitions active heads/pending via canonical renewa
 
         assert.equal(result.state, 'STARTED');
         assert.equal(result.sourceRevision, 4);
-        assert.equal(result.configurationVersion, 1);
+        assert.equal(result.configurationVersion, f.context.configurationVersion);
         assert.equal(result.viewRevision, 1);
         assert.equal(result.bundleSha256, f.context.bundleSha256);
         assert.notEqual(result.currentGenerationId, f.generation.workerGenerationId);
@@ -850,7 +879,7 @@ test('resumeAfterSourceGap transitions active heads/pending via canonical renewa
       async () => {
         const configChanged = await setupScenario({
           afterIssueHook: async ({ cameraId }) => {
-            await db.query('UPDATE camera SET configuration_version=2 WHERE id=$1', [cameraId]);
+            await db.query('UPDATE camera SET configuration_version=3 WHERE id=$1', [cameraId]);
           },
         });
         await assert.rejects(
@@ -1001,6 +1030,502 @@ test('resumeAfterSourceGap transitions active heads/pending via canonical renewa
             else process.env[k] = v;
           }
         }
+      },
+    );
+  } finally {
+    await owned.dispose();
+  }
+});
+
+async function issueV2PolicyFixture(
+  db: DataSource,
+  fixture: Awaited<ReturnType<typeof seedTrackedFrameFixture>>,
+) {
+  const base = await db.transaction((tx) =>
+    readHistoricalIssuedCameraBundleInTransaction(tx, {
+      ...fixture.context,
+      siteId: fixture.siteId,
+      cameraExternalId: fixture.cameraId,
+    }),
+  );
+  if (!base || base.schemaVersion !== '1.0.0') throw new Error('Legacy fixture missing');
+  const nextVersion = base.configurationVersion + 1;
+  const content: Omit<CameraPolicyConfigurationBundle, 'bundleSha256'> = {
+    schemaVersion: '2.0.0',
+    cameraId: fixture.cameraId,
+    cameraExternalId: fixture.cameraId,
+    configurationVersion: nextVersion,
+    viewRevision: base.viewRevision,
+    issuedAt: new Date().toISOString(),
+    cameraPpePolicy: { mode: 'DISABLED', reason: 'Synthetic Region policy fixture' },
+    regions: base.regions.map((region) => ({
+      regionId: region.regionId,
+      geometryVersion: region.geometryVersion,
+      coordinateSpace: region.coordinateSpace,
+      polygon: region.polygon,
+      zoneId: region.zoneId,
+      policyRevision: region.policyRevision,
+      ppePolicy: { mode: 'EXPLICIT', requiredPpe: ['HARD_HAT'] },
+    })),
+  };
+  const bundle: CameraPolicyConfigurationBundle = {
+    ...content,
+    bundleSha256: computeCanonicalPayloadHash(content),
+  };
+  await db.transaction(async (tx) => {
+    await tx.query('SELECT id FROM camera WHERE id=$1 FOR UPDATE', [fixture.cameraId]);
+    await tx.query('UPDATE camera SET configuration_version=$2 WHERE id=$1', [
+      fixture.cameraId,
+      nextVersion,
+    ]);
+    await insertCameraPolicyBundle(tx, fixture.siteId, bundle);
+  });
+  const receiptCommandId = randomUUID();
+  await recordCameraConfigurationAcknowledgement(db, fixture.cameraId, fixture.generation.secret, {
+    commandId: receiptCommandId,
+    workerGenerationId: fixture.generation.workerGenerationId,
+    streamSessionId: fixture.generation.streamSessionId,
+    configurationVersion: nextVersion,
+    bundleSha256: bundle.bundleSha256,
+    viewRevision: bundle.viewRevision,
+    outcome: 'LOADED',
+  });
+  Object.assign(fixture.context, {
+    configurationVersion: nextVersion,
+    bundleSha256: bundle.bundleSha256,
+    receiptCommandId,
+  });
+  return bundle;
+}
+
+test('resumeWithAuthority enforces v2 PPE policy eligibility before prepare or renewal while preserving legacy apply and exact retries', async (t) => {
+  const owned = createIsolatedTestDatabase(),
+    db = owned.dataSource;
+  try {
+    await owned.initialize();
+
+    function createGuardHarness(
+      f: Awaited<ReturnType<typeof seedTrackedFrameFixture>>,
+      options: {
+        commitStatus?: number;
+        authorizedSites?: string[];
+        automaticResume?: boolean;
+      } = {},
+    ) {
+      const calls: string[] = [];
+      let activeBinding = {
+        cameraId: f.cameraId,
+        workerGenerationId: f.generation.workerGenerationId,
+        streamSessionId: f.generation.streamSessionId,
+      };
+      let preparedBinding = { ...activeBinding };
+      let activeCommand: string | undefined;
+      const completed = new Map<string, Record<string, unknown>>();
+      const sites = options.authorizedSites ?? [f.siteId];
+      const runtimePolicy = options.automaticResume
+        ? {
+            profile: {
+              wireVersion: '1.7.0',
+              routeEpoch: '00000000-0000-4000-8000-000000000001',
+              profileSha256: 'a'.repeat(64),
+              allowedCameraIds: [f.cameraId],
+              clockToleranceMs: 5000,
+            },
+            pending: {
+              pendingTtlMs: 30000,
+              maxPendingFrames: 8,
+              maxPendingParts: 16,
+              maxPendingPayloadBytes: 100000,
+            },
+            heads: {
+              firstFramePolicy: 'FIRST_COMMITTED_CAPTURE',
+              maxCaptureGapMs: 10000,
+              maxSourceSequenceGap: '1',
+              maxSegmentRows: 32,
+            },
+            recovery: {
+              intervalMs: 50,
+              maxFramesPerCamera: 8,
+              automaticResume: { hostId: 'edge', minPersistentMs: 2000, maxStarts: 3 },
+            },
+            maxRecipients: 8,
+          }
+        : undefined;
+      const config = new ConfigService<BackendEnvironment, true>({
+        NODE_ENV: 'test',
+        SMARTSITE_AI_SERVICE_TOKEN: 'a'.repeat(32),
+        SMARTSITE_AI_SOURCE_APPLY_ENABLED: true,
+        AI_TRACKED_FRAME_RUNTIME_ENABLED: Boolean(options.automaticResume),
+        ...(runtimePolicy ? { AI_TRACKED_FRAME_RUNTIME_POLICY: runtimePolicy } : {}),
+        AI_CONFIGURATION_CAMERA_IDS: [f.cameraId],
+        SMARTSITE_AI_SOURCE_HOSTS: JSON.stringify([
+          {
+            id: 'edge',
+            label: 'Synthetic host',
+            siteIds: sites,
+            origin: 'http://127.0.0.1:62035',
+          },
+        ]),
+      });
+      const auth = {
+        authenticate: async () => ({
+          user: {
+            mustChangePassword: false,
+            roleAssignments: sites.map((siteId) => ({ role: 'SITE_MANAGER', siteId })),
+          },
+        }),
+      } as unknown as AuthService;
+      const cameras = {
+        get: async (_siteId: string, cameraId: string) => {
+          assert.equal(cameraId, f.cameraId);
+          return {
+            id: f.cameraId,
+            siteId: f.siteId,
+            externalId: f.cameraId,
+            type: 'ZONE',
+          };
+        },
+      } as unknown as CameraConfigurationService;
+      const fetcher = (async (url, init) => {
+        const path = new URL(String(url)).pathname;
+        const suffix = path.split('/').at(-1)!;
+        calls.push(suffix);
+        if (suffix === 'capabilities') {
+          return Response.json({
+            schemaVersion: '1.0.0',
+            hostId: 'edge',
+            label: 'Synthetic host',
+            sourceKinds: ['WEBCAM'],
+            webcams: [{ id: 'usb0', label: 'USB' }],
+            videos: [],
+            browserCameraSupported: false,
+            applySupported: true,
+            configurationResumeSupported: true,
+            sourceRevision: 4,
+          });
+        }
+        const body = JSON.parse(String(init?.body));
+        if (suffix === 'resume-status') {
+          if (!completed.has(body.commandId)) {
+            return Response.json({ code: 'SOURCE_RESUME_NOT_FOUND' }, { status: 404 });
+          }
+          if (activeCommand !== body.commandId) {
+            return Response.json({ code: 'SOURCE_RECONCILIATION_REQUIRED' }, { status: 409 });
+          }
+          return Response.json(completed.get(body.commandId));
+        }
+        if (suffix === 'prepare-resume') {
+          preparedBinding = { ...activeBinding };
+          return Response.json({
+            schemaVersion: '1.0.0',
+            state: 'PREPARED',
+            commandId: body.commandId,
+            sourceRevision: 4,
+            sourceKind: 'LIVE',
+            currentGenerationId: activeBinding.workerGenerationId,
+          });
+        }
+        if (suffix === 'commit-resume') {
+          activeBinding = {
+            cameraId: f.cameraId,
+            workerGenerationId: body.generation.workerGenerationId,
+            streamSessionId: body.generation.streamSessionId,
+          };
+          activeCommand = body.commandId;
+          completed.set(body.commandId, {
+            schemaVersion: '1.0.0',
+            state: 'RUNNING',
+            commandId: body.commandId,
+            sourceRevision: 4,
+            sourceKind: 'LIVE',
+            generationBinding: preparedBinding,
+            configuration: {
+              configurationVersion: f.context.configurationVersion,
+              viewRevision: f.context.viewRevision,
+              bundleSha256: f.context.bundleSha256,
+            },
+            newGenerationBinding: activeBinding,
+          });
+          if (options.commitStatus) {
+            return Response.json({ code: 'GATEWAY_TIMEOUT' }, { status: options.commitStatus });
+          }
+          return Response.json({
+            schemaVersion: '1.0.0',
+            state: 'RUNNING',
+            commandId: body.commandId,
+            sourceRevision: 4,
+            sourceKind: 'LIVE',
+            currentGenerationId: body.generation.workerGenerationId,
+          });
+        }
+        if (suffix === 'prepare') {
+          return Response.json({
+            schemaVersion: '1.0.0',
+            state: 'PREPARED',
+            commandId: body.commandId,
+            sourceRevision: 4,
+            sourceKind: 'LIVE',
+            currentGenerationId: activeBinding.workerGenerationId,
+          });
+        }
+        assert.equal(suffix, 'commit');
+        return Response.json({
+          schemaVersion: '1.0.0',
+          state: 'RUNNING',
+          commandId: body.commandId,
+          sourceRevision: 5,
+          sourceKind: 'LIVE',
+          currentGenerationId: body.generation.workerGenerationId,
+        });
+      }) as typeof fetch;
+
+      return {
+        calls,
+        service: new CameraSourceService(config, auth, cameras, fetcher, db),
+        currentGenerations: () =>
+          db.query<Array<{ id: string }>>(
+            'SELECT id FROM camera_worker_generation WHERE camera_id=$1 AND is_current',
+            [f.cameraId],
+          ),
+      };
+    }
+
+    await t.test(
+      'pre-v2-migration legacy 1.0.0 bundle denies resume with 409 before prepare/renewal while legacy apply remains allowed',
+      async () => {
+        const f = await seedTrackedFrameFixture(db, ['HARD_HAT']);
+        const h = createGuardHarness(f);
+        const cmd = {
+          commandId: randomUUID(),
+          expectedRevision: 4,
+          expectedConfigurationVersion: 1,
+        };
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await assert.rejects(
+            h.service.resume('synthetic-user-token', f.siteId, f.cameraId, 'edge', cmd),
+            (e) => e instanceof PublicHttpException && e.getStatus() === 409,
+          );
+        }
+        assert.ok(!h.calls.includes('prepare-resume'));
+        assert.ok(!h.calls.includes('commit-resume'));
+        assert.ok(!h.calls.includes('resume-status'));
+        assert.deepEqual(
+          (await h.currentGenerations()).map((r) => r.id),
+          [f.generation.workerGenerationId],
+        );
+
+        const applied = await h.service.apply(
+          'synthetic-user-token',
+          f.siteId,
+          f.cameraId,
+          'edge',
+          {
+            commandId: randomUUID(),
+            receiptId: randomUUID(),
+            expectedRevision: 4,
+          },
+        );
+        assert.equal(applied.state, 'RUNNING');
+        assert.equal(applied.sourceRevision, 5);
+        assert.notEqual(applied.currentGenerationId, f.generation.workerGenerationId);
+      },
+    );
+
+    await db.transaction(async (tx) => {
+      for (const migration of [
+        new WorkerEventAdmission1795046400002(),
+        new TrackedSubjectStorage1795046400003(),
+        new TrackedPendingRecoveryIndex1795046400004(),
+        new TrackedWireGenerationFence1795046400008(),
+        new CameraPpePolicyStorage1795046400010(),
+      ]) {
+        await migration.up(tx.queryRunner!);
+      }
+    });
+
+    await t.test(
+      'post-migration legacy 1.0.0 bundle denies both resume and resumeAfterSourceGap with 409 before prepare/renewal',
+      async () => {
+        const f = await seedTrackedFrameFixture(db, ['HARD_HAT']);
+        const h = createGuardHarness(f, { automaticResume: true });
+        await assert.rejects(
+          h.service.resume('synthetic-user-token', f.siteId, f.cameraId, 'edge', {
+            commandId: randomUUID(),
+            expectedRevision: 4,
+            expectedConfigurationVersion: 1,
+          }),
+          (e) => e instanceof PublicHttpException && e.getStatus() === 409,
+        );
+        assert.ok(!h.calls.includes('prepare-resume'));
+        assert.ok(!h.calls.includes('commit-resume'));
+        assert.deepEqual(
+          (await h.currentGenerations()).map((r) => r.id),
+          [f.generation.workerGenerationId],
+        );
+
+        await db.query(
+          "UPDATE camera_worker_generation SET observation_route_mode='EPISODE_TRACKED',tracking_route_epoch='00000000-0000-4000-8000-000000000001' WHERE id=$1",
+          [f.generation.workerGenerationId],
+        );
+        await assert.rejects(
+          h.service.resumeAfterSourceGap(
+            {
+              cameraId: f.cameraId,
+              generationId: f.generation.workerGenerationId,
+              streamSessionId: f.generation.streamSessionId,
+            },
+            async () => true,
+          ),
+          (e) => e instanceof PublicHttpException && e.getStatus() === 409,
+        );
+        assert.ok(!h.calls.includes('prepare-resume'));
+        assert.ok(!h.calls.includes('commit-resume'));
+        assert.deepEqual(
+          (await h.currentGenerations()).map((r) => r.id),
+          [f.generation.workerGenerationId],
+        );
+      },
+    );
+
+    await t.test(
+      'stale view, unconfirmed configuration, and inconsistent active region reject before prepare or renewal',
+      async () => {
+        const staleViewFixture = await seedTrackedFrameFixture(db, ['HARD_HAT']);
+        await issueV2PolicyFixture(db, staleViewFixture);
+        await db.query(
+          'UPDATE camera_view_revision SET is_current=false,retired_at=clock_timestamp() WHERE camera_id=$1 AND is_current=true',
+          [staleViewFixture.cameraId],
+        );
+        await db.query(
+          `INSERT INTO camera_view_revision(camera_id,revision,site_id,session_id,source_kind,width,height,view_validity,is_current,created_at)
+           VALUES($1,2,$2,$3,'LIVE',120,80,'UNCONFIRMED',true,clock_timestamp())`,
+          [
+            staleViewFixture.cameraId,
+            staleViewFixture.siteId,
+            staleViewFixture.generation.streamSessionId,
+          ],
+        );
+        const hView = createGuardHarness(staleViewFixture);
+        await assert.rejects(
+          hView.service.resume(
+            'synthetic-user-token',
+            staleViewFixture.siteId,
+            staleViewFixture.cameraId,
+            'edge',
+            {
+              commandId: randomUUID(),
+              expectedRevision: 4,
+              expectedConfigurationVersion: 2,
+            },
+          ),
+          (e) => e instanceof PublicHttpException && e.getStatus() === 409,
+        );
+        assert.ok(!hView.calls.includes('prepare-resume'));
+        assert.ok(!hView.calls.includes('commit-resume'));
+
+        const unconfirmedConfigFixture = await seedTrackedFrameFixture(db, ['HARD_HAT']);
+        await issueV2PolicyFixture(db, unconfirmedConfigFixture);
+        await db.query('UPDATE camera SET configuration_version=3 WHERE id=$1', [
+          unconfirmedConfigFixture.cameraId,
+        ]);
+        const hUnconfirmed = createGuardHarness(unconfirmedConfigFixture);
+        await assert.rejects(
+          hUnconfirmed.service.resume(
+            'synthetic-user-token',
+            unconfirmedConfigFixture.siteId,
+            unconfirmedConfigFixture.cameraId,
+            'edge',
+            {
+              commandId: randomUUID(),
+              expectedRevision: 4,
+              expectedConfigurationVersion: 3,
+            },
+          ),
+          (e) => e instanceof PublicHttpException && e.getStatus() === 409,
+        );
+        assert.ok(!hUnconfirmed.calls.includes('prepare-resume'));
+        assert.ok(!hUnconfirmed.calls.includes('commit-resume'));
+
+        const tamperedRegionFixture = await seedTrackedFrameFixture(db, ['HARD_HAT']);
+        await issueV2PolicyFixture(db, tamperedRegionFixture);
+        await db.query('UPDATE camera_observation_region SET is_active=false WHERE id=$1', [
+          tamperedRegionFixture.ppeRegionId,
+        ]);
+        const hRegion = createGuardHarness(tamperedRegionFixture);
+        await assert.rejects(
+          hRegion.service.resume(
+            'synthetic-user-token',
+            tamperedRegionFixture.siteId,
+            tamperedRegionFixture.cameraId,
+            'edge',
+            {
+              commandId: randomUUID(),
+              expectedRevision: 4,
+              expectedConfigurationVersion: 2,
+            },
+          ),
+          (e) => e instanceof PublicHttpException && e.getStatus() === 503,
+        );
+        assert.ok(!hRegion.calls.includes('prepare-resume'));
+        assert.ok(!hRegion.calls.includes('commit-resume'));
+        assert.deepEqual(
+          (await hRegion.currentGenerations()).map((r) => r.id),
+          [tamperedRegionFixture.generation.workerGenerationId],
+        );
+      },
+    );
+
+    await t.test(
+      'valid v2 policy resumes, replays lost commit idempotently, and preserves cross-scope and stale version 409/404',
+      async () => {
+        const f = await seedTrackedFrameFixture(db, ['HARD_HAT']);
+        const bundle = await issueV2PolicyFixture(db, f);
+        const foreignSite = randomUUID();
+        const h = createGuardHarness(f, {
+          commitStatus: 504,
+          authorizedSites: [f.siteId, foreignSite],
+        });
+
+        await assert.rejects(
+          h.service.resume('synthetic-user-token', foreignSite, f.cameraId, 'edge', {
+            commandId: randomUUID(),
+            expectedRevision: 4,
+            expectedConfigurationVersion: bundle.configurationVersion,
+          }),
+          (e) => e instanceof PublicHttpException && e.getStatus() === 404,
+        );
+        await assert.rejects(
+          h.service.resume('synthetic-user-token', f.siteId, f.cameraId, 'edge', {
+            commandId: randomUUID(),
+            expectedRevision: 4,
+            expectedConfigurationVersion: bundle.configurationVersion - 1,
+          }),
+          (e) => e instanceof PublicHttpException && e.getStatus() === 409,
+        );
+        assert.ok(!h.calls.includes('prepare-resume'));
+
+        const command = {
+          commandId: randomUUID(),
+          expectedRevision: 4,
+          expectedConfigurationVersion: bundle.configurationVersion,
+        };
+        await assert.rejects(
+          h.service.resume('synthetic-user-token', f.siteId, f.cameraId, 'edge', command),
+          (e) => e instanceof PublicHttpException && e.getStatus() === 504,
+        );
+        const replayed = await h.service.resume(
+          'synthetic-user-token',
+          f.siteId,
+          f.cameraId,
+          'edge',
+          command,
+        );
+        assert.equal(replayed.state, 'STARTED');
+        assert.equal(replayed.configurationVersion, bundle.configurationVersion);
+        assert.equal(replayed.viewRevision, bundle.viewRevision);
+        assert.equal(replayed.bundleSha256, bundle.bundleSha256);
+        assert.equal(h.calls.filter((c) => c === 'prepare-resume').length, 1);
+        assert.equal(h.calls.filter((c) => c === 'commit-resume').length, 1);
       },
     );
   } finally {

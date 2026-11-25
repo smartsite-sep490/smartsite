@@ -13,6 +13,7 @@ import {
   renewCameraWorkerGeneration,
 } from './camera-worker-generations.js';
 import { activateTestedCameraSource } from './camera-source-activation.js';
+import { readCurrentCameraPolicyBundle } from './camera-policy-bundle-reader.js';
 import { resumeAcceptedCameraSource } from './camera-source-resume.js';
 import type { SourceConfigurationResumeResult } from '@smartsite/contracts';
 import {
@@ -440,42 +441,57 @@ export class CameraSourceService {
           code: 'CONFLICT',
           message: 'Camera source revision changed',
         });
-      const rows = await database.query<
-        Array<{
-          configuration_version: string;
-          view_revision: string;
-          bundle_sha256: string;
-          generation_id: string;
-          stream_session_id: string;
-          external_id: string;
-        }>
-      >(
-        `SELECT c.configuration_version,v.revision AS view_revision,b.bundle_sha256,g.id AS generation_id,g.stream_session_id,c.external_id
-         FROM camera c JOIN camera_worker_generation g ON g.camera_id=c.id AND g.site_id=c.site_id AND g.is_current AND g.revoked_at IS NULL AND g.superseded_at IS NULL
-         JOIN camera_view_revision v ON v.camera_id=c.id AND v.site_id=c.site_id AND v.is_current AND v.source_kind='LIVE'
-         JOIN camera_configuration_bundle b ON b.camera_id=c.id AND b.site_id=c.site_id AND b.configuration_version=c.configuration_version AND b.view_revision=v.revision
-         WHERE c.id=$1 AND c.site_id=$2 AND c.status='ACTIVE'`,
-        [cameraId, siteId],
+      const { expected, policyBundle } = await database.transaction(
+        'REPEATABLE READ',
+        async (manager) => {
+          const rows = await manager.query<
+            Array<{
+              configuration_version: string;
+              view_revision: string;
+              bundle_sha256: string;
+              generation_id: string;
+              stream_session_id: string;
+              external_id: string;
+            }>
+          >(
+            `SELECT c.configuration_version,v.revision AS view_revision,b.bundle_sha256,g.id AS generation_id,g.stream_session_id,c.external_id
+             FROM camera c JOIN camera_worker_generation g ON g.camera_id=c.id AND g.site_id=c.site_id AND g.is_current AND g.revoked_at IS NULL AND g.superseded_at IS NULL
+             JOIN camera_view_revision v ON v.camera_id=c.id AND v.site_id=c.site_id AND v.is_current AND v.source_kind='LIVE'
+             JOIN camera_configuration_bundle b ON b.camera_id=c.id AND b.site_id=c.site_id AND b.configuration_version=c.configuration_version AND b.view_revision=v.revision
+             WHERE c.id=$1 AND c.site_id=$2 AND c.status='ACTIVE'`,
+            [cameraId, siteId],
+          );
+          const row = rows[0];
+          if (
+            rows.length !== 1 ||
+            !row ||
+            (expectedSource &&
+              (row.generation_id !== expectedSource.generationId ||
+                row.stream_session_id !== expectedSource.streamSessionId)) ||
+            row.external_id !== camera.externalId ||
+            Number(row.configuration_version) !== command.data.expectedConfigurationVersion ||
+            !Number.isSafeInteger(Number(row.view_revision))
+          )
+            throw new PublicHttpException(409, {
+              code: 'CONFLICT',
+              message: 'Accepted camera configuration or source owner changed',
+            });
+          const policy = await readCurrentCameraPolicyBundle(manager, cameraId);
+          if (
+            policy.cameraId !== cameraId ||
+            policy.cameraExternalId !== row.external_id ||
+            policy.configurationVersion !== command.data.expectedConfigurationVersion ||
+            policy.viewRevision !== Number(row.view_revision) ||
+            policy.bundleSha256 !== row.bundle_sha256
+          )
+            conflict('Accepted camera configuration or source owner changed');
+          return { expected: row, policyBundle: policy };
+        },
       );
-      const expected = rows[0];
-      if (
-        rows.length !== 1 ||
-        !expected ||
-        (expectedSource &&
-          (expected.generation_id !== expectedSource.generationId ||
-            expected.stream_session_id !== expectedSource.streamSessionId)) ||
-        expected.external_id !== camera.externalId ||
-        Number(expected.configuration_version) !== command.data.expectedConfigurationVersion ||
-        !Number.isSafeInteger(Number(expected.view_revision))
-      )
-        throw new PublicHttpException(409, {
-          code: 'CONFLICT',
-          message: 'Accepted camera configuration or source owner changed',
-        });
       const configuration = {
-        configurationVersion: command.data.expectedConfigurationVersion,
-        viewRevision: Number(expected.view_revision),
-        bundleSha256: expected.bundle_sha256,
+        configurationVersion: policyBundle.configurationVersion,
+        viewRevision: policyBundle.viewRevision,
+        bundleSha256: policyBundle.bundleSha256,
       };
       const known = await this.call(
         host!.origin,
