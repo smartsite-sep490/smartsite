@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { SmartSiteManagementClient } from '../src/management';
+import { parseTrackedEpisodeObservationPage } from '@smartsite/contracts/tracked-episode-frames';
 const site = '11111111-1111-4111-8111-111111111111',
   episode = '22222222-2222-4222-8222-222222222222',
   alert = '33333333-3333-4333-8333-333333333333';
@@ -25,6 +26,100 @@ const page = () => ({
   ],
 });
 afterEach(() => vi.unstubAllGlobals());
+
+it('retains an older server response when new evidence was requested', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json(page())),
+  );
+  const result = await new SmartSiteManagementClient(
+    'https://example.test',
+  ).listTrackedEpisodeObservations('token', site, episode, { includeObservedPpe: true });
+  expect(result.items[0]).not.toHaveProperty('observedPpe');
+});
+
+it('does not widen unrequested response shapes or execute evidence accessors', () => {
+  const body = page();
+  const getter = vi.fn(() => []);
+  Object.defineProperty(body.items[0], 'observedPpe', { enumerable: true, get: getter });
+  expect(
+    parseTrackedEpisodeObservationPage(body, episode, { includeObservedPpe: true }),
+  ).toBeNull();
+  expect(getter).not.toHaveBeenCalled();
+  const injected = { ...page(), items: [{ ...page().items[0], observedPpe: [] }] };
+  expect(parseTrackedEpisodeObservationPage(injected, episode)).toBeNull();
+  expect(
+    parseTrackedEpisodeObservationPage(injected, episode, {
+      includeObservedPpe: 'true',
+    } as never),
+  ).toBeNull();
+});
+
+it.each([false, 1, 'true', null])(
+  'rejects nonliteral evidence opt-ins before sending',
+  async (value) => {
+    const fetcher = vi.fn<typeof fetch>();
+    vi.stubGlobal('fetch', fetcher);
+    await expect(
+      new SmartSiteManagementClient('https://example.test').listTrackedEpisodeObservations(
+        'token',
+        site,
+        episode,
+        { includeObservedPpe: value } as never,
+      ),
+    ).rejects.toMatchObject({ code: 'invalid-response' });
+    expect(fetcher).not.toHaveBeenCalled();
+  },
+);
+
+it('opts into bounded original-person PPE evidence while retaining older response compatibility', async () => {
+  const observedPpe = [
+    { ppeItem: 'HARD_HAT', status: 'MISSING' },
+    { ppeItem: 'FULL_BODY_HARNESS', status: 'PRESENT' },
+    { ppeItem: 'LANYARD_HOOK', status: 'PRESENT' },
+    { ppeItem: 'MASK', status: 'PRESENT' },
+  ];
+  const response = { ...page(), items: [{ ...page().items[0], observedPpe }] };
+  const fetcher = vi.fn<typeof fetch>(async () => Response.json(response));
+  vi.stubGlobal('fetch', fetcher);
+  const result = await new SmartSiteManagementClient(
+    'https://example.test',
+  ).listTrackedEpisodeObservations('token', site, episode, { includeObservedPpe: true });
+  expect(result.items[0]?.observedPpe).toEqual(observedPpe);
+  expect(String(fetcher.mock.calls[0]?.[0])).toContain('includeObservedPpe=true');
+});
+
+it.each([
+  [{ ppeItem: 'FULL_BODY_HARNESS', status: 'MISSING' }],
+  [{ ppeItem: 'LANYARD_HOOK', status: 'MISSING' }],
+  [{ ppeItem: 'MASK', status: 'ALLOWED' }],
+  [{ ppeItem: 'IDENTITY', status: 'PRESENT' }],
+  [{ ppeItem: 'MASK', status: 'PRESENT', workerName: 'untrusted' }],
+  [
+    { ppeItem: 'MASK', status: 'PRESENT' },
+    { ppeItem: 'MASK', status: 'PRESENT' },
+  ],
+  Array.from({ length: 17 }, () => ({ ppeItem: 'MASK', status: 'PRESENT' })),
+])('rejects invalid PPE evidence without weakening normal history parsing', async (...values) => {
+  const observedPpe = values;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () =>
+      Response.json({
+        ...page(),
+        items: [{ ...page().items[0], observedPpe }],
+      }),
+    ),
+  );
+  await expect(
+    new SmartSiteManagementClient('https://example.test').listTrackedEpisodeObservations(
+      'token',
+      site,
+      episode,
+      { includeObservedPpe: true },
+    ),
+  ).rejects.toMatchObject({ code: 'invalid-response' });
+});
 const identitySource = {
   alertId: alert,
   eventId: site,

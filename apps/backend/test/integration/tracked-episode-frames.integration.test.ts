@@ -115,7 +115,8 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
           },
         },
       );
-      const segmentId = randomUUID();
+      const segmentId = randomUUID(),
+        otherSegmentId = randomUUID();
       const emit = async (
         sequence: string,
         ppeItem: string,
@@ -156,6 +157,14 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
               regionId: f.ppeRegionId!,
               geometryVersion: 1,
             },
+            ...['MASK', 'FULL_BODY_HARNESS', 'LANYARD_HOOK', 'MASK'].map((item) => ({
+              type: 'PPE',
+              trackId,
+              ppeItem: item,
+              status: 'PRESENT',
+              regionId: f.ppeRegionId!,
+              geometryVersion: 1,
+            })),
             ...(version === 'v2-disabled-overlap'
               ? [
                   {
@@ -168,6 +177,25 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
                   },
                 ]
               : []),
+            {
+              type: 'PERSON',
+              trackId: trackId + 10000,
+              boundingBox: {
+                x1: 0.1,
+                y1: 0.1,
+                x2: 0.8,
+                y2: 0.9,
+                coordinateSpace: 'NORMALIZED_0_1',
+              },
+            },
+            {
+              type: 'PPE',
+              trackId: trackId + 10000,
+              ppeItem: 'GLOVES',
+              status: 'PRESENT',
+              regionId: f.ppeRegionId!,
+              geometryVersion: 1,
+            },
           ],
           evidence: [
             {
@@ -184,6 +212,17 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
                 segmentId,
                 link: previousEventId
                   ? { kind: 'CONTINUE', previousEventId, previousPersonObservationIndex: 0 }
+                  : { kind: 'START', reason: 'INITIAL' },
+              },
+              {
+                personObservationIndex: version === 'v2-disabled-overlap' ? 7 : 6,
+                segmentId: otherSegmentId,
+                link: previousEventId
+                  ? {
+                      kind: 'CONTINUE',
+                      previousEventId,
+                      previousPersonObservationIndex: version === 'v2-disabled-overlap' ? 7 : 6,
+                    }
                   : { kind: 'START', reason: 'INITIAL' },
               },
             ],
@@ -241,6 +280,22 @@ for (const version of ['v1', 'v2-uppercase', 'v2-disabled-overlap'] as const)
       assert.equal(page.throughSequence, '9007199254740994');
       assert.equal(page.items[0]!.eventId, later.payload.eventId);
       assert.deepEqual(page.items[0]!.observationIndexes, [1]);
+      assert.equal(Object.hasOwn(page.items[0]!, 'observedPpe'), false);
+      const enriched = await reader.pageObservations(request(), f.siteId, episodeId, {
+        limit: 1,
+        includeObservedPpe: true,
+      });
+      assert.deepEqual(enriched.items[0]!.observedPpe, [
+        { ppeItem: 'SAFETY_VEST', status: 'MISSING' },
+        { ppeItem: 'MASK', status: 'PRESENT' },
+        { ppeItem: 'FULL_BODY_HARNESS', status: 'PRESENT' },
+        { ppeItem: 'LANYARD_HOOK', status: 'PRESENT' },
+      ]);
+      await assert.rejects(
+        reader.pageObservations(request(), randomUUID(), episodeId, {
+          includeObservedPpe: true,
+        }),
+      );
       await emit('9007199254740995', 'HARD_HAT', 500, later.payload.eventId);
       const second = await reader.pageObservations(request(), f.siteId, episodeId, {
         offset: 1,
