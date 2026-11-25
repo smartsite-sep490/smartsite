@@ -391,9 +391,9 @@ function SourceWorkspace({
         }
       : applying.isSuccess
         ? {
-            state: 'connected' as const,
-            dot: 'bg-emerald-600',
-            pill: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+            state: 'activated' as const,
+            dot: 'bg-teal-600',
+            pill: 'border-teal-200 bg-teal-50 text-teal-900',
             key: 'cameraSource.statusConnected' as const,
           }
         : {

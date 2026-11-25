@@ -11,7 +11,7 @@ const en = {
   'cameraSource.resumeStarted':
     'Check configuration status and live frames in the camera panel. A started session alone does not confirm monitoring is ready.',
   'cameraSource.title': 'Connect camera',
-  'cameraSource.statusConnected': 'Connected',
+  'cameraSource.statusConnected': 'Source activated',
   'cameraSource.statusNotConnected': 'Not connected',
   'cameraSource.statusChecking': 'Checking…',
   'cameraSource.apply': 'Save and activate source',
@@ -23,7 +23,7 @@ const en = {
   'cameraSource.confirmApplyBtn': 'Confirm source replacement',
   'cameraSource.cancelApplyConfirm': 'Cancel',
   'cameraSource.running':
-    'Source is running in a new session. Take a fresh reference image and confirm regions/PPE before monitoring.',
+    'Source is running in a new session (activation alone does not prove ongoing live monitoring). Take a fresh reference image and confirm regions/PPE before monitoring.',
   'cameraSource.applyError':
     'Activation was not confirmed. Check the current camera connection status before retrying; the previous source may have stopped.',
   'cameraSource.intro':
@@ -143,7 +143,7 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.resumeStarted':
     'Kiểm tra trạng thái cấu hình và ảnh trực tiếp tại bảng camera. Phiên đã bắt đầu chưa có nghĩa giám sát đã sẵn sàng.',
   'cameraSource.title': 'Kết nối camera',
-  'cameraSource.statusConnected': 'Đã kết nối',
+  'cameraSource.statusConnected': 'Đã kích hoạt nguồn',
   'cameraSource.statusNotConnected': 'Chưa kết nối',
   'cameraSource.statusChecking': 'Đang kiểm tra',
   'cameraSource.apply': 'Lưu và kích hoạt nguồn',
@@ -155,7 +155,7 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.confirmApplyBtn': 'Xác nhận đổi nguồn',
   'cameraSource.cancelApplyConfirm': 'Hủy',
   'cameraSource.running':
-    'Nguồn đang chạy trong phiên mới. Lấy ảnh tham chiếu mới và xác nhận vùng/PPE trước khi giám sát.',
+    'Nguồn đang chạy trong phiên mới (chưa tự chứng minh giám sát trực tiếp đang hoạt động ổn định). Hãy lấy ảnh tham chiếu mới và xác nhận vùng/PPE trước khi giám sát.',
   'cameraSource.applyError':
     'Chưa xác nhận được kích hoạt. Kiểm tra trạng thái kết nối camera trước khi thử lại; nguồn cũ có thể đã dừng.',
   'cameraSource.intro':

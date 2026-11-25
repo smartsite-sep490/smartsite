@@ -795,20 +795,23 @@ describe('source-specific camera setup', () => {
       await user.click(screen.getByRole('button', { name: 'Save and activate source' }));
       await user.click(screen.getByRole('button', { name: 'Confirm source replacement' }));
       await waitFor(() =>
-        expect(screen.getByTestId('camera-source-connection-status').textContent).toBe('Connected'),
+        expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
+          'Source activated',
+        ),
       );
       expect(
         screen
           .getByTestId('camera-source-connection-status')
           .getAttribute('data-connection-status'),
-      ).toBe('connected');
+      ).toBe('activated');
+      expect(screen.getByText(/does not prove ongoing live monitoring/i)).toBeTruthy();
 
-      // Vietnamese copy parity: heading Kết nối camera, status Đã kết nối, no máy AI jargon
+      // Vietnamese copy parity: heading Kết nối camera, honest activation status (does not claim proven LIVE), no máy AI jargon
       await i18n.changeLanguage('vi');
       await waitFor(() => {
         expect(screen.getByRole('heading', { name: 'Kết nối camera' })).toBeTruthy();
         expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
-          'Đã kết nối',
+          'Đã kích hoạt nguồn',
         );
         expect(screen.getByRole('button', { name: 'Kiểm tra kết nối' })).toBeTruthy();
       });
