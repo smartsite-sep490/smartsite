@@ -13,6 +13,7 @@ import { CorrectionModal } from './correction-modal';
 import { MissingAttendance } from './missing-attendance';
 import {
   AttendanceDayView,
+  AttendanceDisclosure,
   AttendanceCorrectionHistory,
   attendanceFullTime,
 } from './attendance-day-view';
@@ -115,43 +116,44 @@ export function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () 
             )}
             {data.zoneAttendanceReview && (
               <View style={attStyles.correctionOriginal}>
-                <Text style={attStyles.quickTitle}>{t('attendanceReview.zoneTitle')}</Text>
-                <Text style={attStyles.quickHint}>
-                  {t('attendanceReview.zoneEvidence', {
-                    ins: data.zoneAttendanceReview.gateInCount,
-                    outs: data.zoneAttendanceReview.gateOutCount,
-                    sessions: data.zoneAttendanceReview.sessionCount,
-                  })}
-                </Text>
-                <Text style={attStyles.quickHint}>
-                  {t('attendanceReview.zoneRollCall')}{' '}
-                  {t(`labels.${data.zoneAttendanceReview.teamAttendanceStatus}`)}
-                </Text>
-                <Text style={attStyles.quickHint}>
-                  {t(
-                    data.zoneAttendanceReview.status === 'CONFIRMED'
-                      ? 'attendanceReview.zoneConfirmed'
-                      : data.zoneAttendanceReview.status === 'CONFLICTED'
-                        ? 'attendanceReview.zoneConflict'
-                        : 'attendanceReview.zoneHint',
+                <AttendanceDisclosure title={t('attendanceReview.zoneTitle')}>
+                  <Text style={attStyles.quickHint}>
+                    {t('attendanceReview.zoneEvidence', {
+                      ins: data.zoneAttendanceReview.gateInCount,
+                      outs: data.zoneAttendanceReview.gateOutCount,
+                      sessions: data.zoneAttendanceReview.sessionCount,
+                    })}
+                  </Text>
+                  <Text style={attStyles.quickHint}>
+                    {t('attendanceReview.zoneRollCall')}{' '}
+                    {t(`labels.${data.zoneAttendanceReview.teamAttendanceStatus}`)}
+                  </Text>
+                  <Text style={attStyles.quickHint}>
+                    {t(
+                      data.zoneAttendanceReview.status === 'CONFIRMED'
+                        ? 'attendanceReview.zoneConfirmed'
+                        : data.zoneAttendanceReview.status === 'CONFLICTED'
+                          ? 'attendanceReview.zoneConflict'
+                          : 'attendanceReview.zoneHint',
+                    )}
+                  </Text>
+                  {data.zoneAttendanceReview.decision && (
+                    <>
+                      <Text style={attStyles.quickHint}>
+                        {t('attendanceReview.zoneReviewedBy', {
+                          name: data.zoneAttendanceReview.decision.reviewedByName ?? '',
+                          time: attendanceFullTime(
+                            data.zoneAttendanceReview.decision.reviewedAt,
+                            data.day.timezone,
+                          ),
+                        })}
+                      </Text>
+                      <Text style={attStyles.quickHint}>
+                        {data.zoneAttendanceReview.decision.reason}
+                      </Text>
+                    </>
                   )}
-                </Text>
-                {data.zoneAttendanceReview.decision && (
-                  <>
-                    <Text style={attStyles.quickHint}>
-                      {t('attendanceReview.zoneReviewedBy', {
-                        name: data.zoneAttendanceReview.decision.reviewedByName ?? '',
-                        time: attendanceFullTime(
-                          data.zoneAttendanceReview.decision.reviewedAt,
-                          data.day.timezone,
-                        ),
-                      })}
-                    </Text>
-                    <Text style={attStyles.quickHint}>
-                      {data.zoneAttendanceReview.decision.reason}
-                    </Text>
-                  </>
-                )}
+                </AttendanceDisclosure>
                 {scope.role === 'contractor' && data.zoneAttendanceReview.canConfirm && (
                   <Button
                     label={t('attendanceReview.confirmZoneHours')}
@@ -168,26 +170,29 @@ export function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () 
             )}
             {data.gateAbsenceReview && (
               <View style={attStyles.correctionOriginal}>
-                <Text style={attStyles.quickTitle}>{t('attendanceReview.absenceTitle')}</Text>
-                <Text style={attStyles.quickHint}>
-                  {t('attendanceReview.absenceEvidence', {
-                    gates: data.gateAbsenceReview.gateEventCount,
-                    events: data.gateAbsenceReview.attendanceEventCount,
-                    sessions: data.gateAbsenceReview.sessionCount,
-                  })}
-                </Text>
-                <Text style={attStyles.quickHint}>
-                  {t(
-                    data.gateAbsenceReview.status === 'CONFIRMED_ABSENT'
-                      ? 'attendanceReview.absenceConfirmed'
-                      : data.gateAbsenceReview.status === 'CONFLICTED'
-                        ? 'attendanceReview.absenceChanged'
-                        : 'attendanceReview.absenceHint',
+                <AttendanceDisclosure title={t('attendanceReview.absenceTitle')}>
+                  <Text style={attStyles.quickHint}>
+                    {t('attendanceReview.absenceEvidence', {
+                      gates: data.gateAbsenceReview.gateEventCount,
+                      events: data.gateAbsenceReview.attendanceEventCount,
+                      sessions: data.gateAbsenceReview.sessionCount,
+                    })}
+                  </Text>
+                  <Text style={attStyles.quickHint}>
+                    {t(
+                      data.gateAbsenceReview.status === 'CONFIRMED_ABSENT'
+                        ? 'attendanceReview.absenceConfirmed'
+                        : data.gateAbsenceReview.status === 'CONFLICTED'
+                          ? 'attendanceReview.absenceChanged'
+                          : 'attendanceReview.absenceHint',
+                    )}
+                  </Text>
+                  {data.gateAbsenceReview.decision && (
+                    <Text style={attStyles.quickHint}>
+                      {data.gateAbsenceReview.decision.reason}
+                    </Text>
                   )}
-                </Text>
-                {data.gateAbsenceReview.decision && (
-                  <Text style={attStyles.quickHint}>{data.gateAbsenceReview.decision.reason}</Text>
-                )}
+                </AttendanceDisclosure>
                 {scope.role === 'contractor' &&
                   data.gateAbsenceReview.canConfirm &&
                   data.gateAbsenceReview.teamAttendance && (
@@ -293,7 +298,6 @@ const attStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  quickTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
   quickHint: { fontSize: 12, lineHeight: 19, color: colors.textMuted },
   successNotice: {
     padding: 14,

@@ -1,10 +1,10 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import type { useWorkspace } from './workspace-context';
 import { ProfileScreen } from './home-profile';
-import { translate as t } from '../../i18n';
+import { translate as t, setLanguage } from '../../i18n';
 
 const { logout } = vi.hoisted(() => ({ logout: vi.fn(async () => {}) }));
 vi.mock('../auth/auth-context', () => ({ useAuth: () => ({ session: { logout } }) }));
@@ -13,12 +13,118 @@ vi.mock('../shared/uploads', () => ({ Attachments: () => null, EvidenceButton: (
 let workspace: ReturnType<typeof useWorkspace>;
 let root: ReactTestRenderer;
 let cache: QueryClient;
+
+async function mountFaceStatus() {
+  const client = new SmartSiteManagementClient('https://api.example.test');
+  vi.spyOn(client, 'listWorkers').mockResolvedValue({
+    items: [
+      {
+        id: 'worker',
+        siteId: 'site',
+        userId: 'user',
+        contractorId: 'contractor',
+        externalId: 'W000001',
+        displayName: 'Synthetic Worker',
+        isActive: true,
+        createdAt: '',
+      },
+    ],
+    total: 1,
+  });
+  workspace = {
+    client,
+    token: 'token',
+    workerId: 'worker',
+    queryKey: ['mobile', 'face-status'],
+    user: {
+      id: 'user',
+      username: 'synthetic',
+      displayName: 'Synthetic Worker',
+      isActive: true,
+      mustChangePassword: false,
+      roleAssignments: [],
+    },
+    scope: {
+      role: 'worker',
+      siteId: 'site',
+      siteName: 'Site',
+      contractorId: '',
+      contractorName: '',
+    },
+  };
+  cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  await act(async () => {
+    root = create(
+      <QueryClientProvider client={cache}>
+        <ProfileScreen onScopeChange={vi.fn()} />
+      </QueryClientProvider>,
+    );
+  });
+  for (let i = 0; i < 3; i++)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+}
+beforeEach(() => {
+  vi.spyOn(SmartSiteManagementClient.prototype, 'myWorkerFaceStatus').mockResolvedValue({
+    status: 'NOT_ENROLLED',
+  });
+});
 afterEach(async () => {
   if (root) await act(async () => root.unmount());
   cache?.clear();
   vi.restoreAllMocks();
   logout.mockClear();
+  await setLanguage('vi');
 });
+
+it.each(['vi', 'en'] as const)(
+  'shows real face states independently of an active account in %s',
+  async (language) => {
+    await setLanguage(language);
+    const status = vi.mocked(SmartSiteManagementClient.prototype.myWorkerFaceStatus);
+    status.mockResolvedValue({ status: 'ACTIVE' });
+    await mountFaceStatus();
+    for (const value of [
+      'ACTIVE',
+      'NOT_ENROLLED',
+      'REVOKED',
+      'NEEDS_REENROLL',
+      'DELETED',
+    ] as const) {
+      status.mockResolvedValue({ status: value });
+      await act(async () => {
+        await cache.invalidateQueries({ queryKey: ['mobile', 'face-status', 'own-face-status'] });
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(JSON.stringify(root.toJSON())).toContain(t(`profileFace.${value}`));
+    }
+    status.mockRejectedValue(new Error('synthetic unavailable'));
+    await act(async () => {
+      await cache.invalidateQueries({ queryKey: ['mobile', 'face-status', 'own-face-status'] });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(JSON.stringify(root.toJSON())).toContain(t('profileFace.unavailable'));
+    expect(JSON.stringify(root.toJSON())).not.toContain(t('profileFace.DELETED'));
+    const retry = root.root.findAll(
+      (n) =>
+        String(n.type) === 'Pressable' &&
+        n.props.accessibilityLabel === `${t('profileFace.title')}: ${t('profileFace.unavailable')}`,
+    )[0]!;
+    status.mockResolvedValue({ status: 'ACTIVE' });
+    await act(async () => {
+      retry.props.onPress();
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(JSON.stringify(root.toJSON())).toContain(t('profileFace.ACTIVE'));
+  },
+);
 
 it.each(['worker', 'contractor'] as const)(
   'requires confirmation before signing out the %s and hides device notification settings',
@@ -68,6 +174,7 @@ it.each(['worker', 'contractor'] as const)(
       await act(async () => button.props.onPress());
     };
     expect(JSON.stringify(root.toJSON())).not.toContain(t('push.title'));
+    if (role === 'contractor') expect(client.myWorkerFaceStatus).not.toHaveBeenCalled();
     await press(t('profile.siteLocation'));
     expect(switchScope).toHaveBeenCalledTimes(1);
     expect(
@@ -93,7 +200,7 @@ it.each(['worker', 'contractor'] as const)(
   },
 );
 
-it('shows the Worker account without face enrollment controls or face API requests', async () => {
+it('shows own face status without face enrollment controls or management API requests', async () => {
   const client = new SmartSiteManagementClient('https://api.example.test');
   vi.spyOn(client, 'listWorkers').mockResolvedValue({
     items: [
@@ -177,7 +284,8 @@ it('shows the Worker account without face enrollment controls or face API reques
   const labels = pressables.map((n) => n.props.accessibilityLabel);
   expect(labels).toContain('Đổi mật khẩu và đăng nhập lại');
   expect(labels).toContain('Đăng xuất');
-  expect(labels.some((label: string) => /khuôn mặt|đăng ký|thu hồi/i.test(label))).toBe(false);
+  expect(labels).toContain(`${t('profileFace.title')}: ${t('profileFace.NOT_ENROLLED')}`);
+  expect(client.myWorkerFaceStatus).toHaveBeenCalledWith('token', 'site-a');
   expect(face).not.toHaveBeenCalled();
   expect(enroll).not.toHaveBeenCalled();
   expect(personal).not.toHaveBeenCalled();

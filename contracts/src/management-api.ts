@@ -280,6 +280,11 @@ export interface FaceEnrollmentQualityResponse {
   reasonCode: string;
 }
 
+/** Own Worker status only. Never includes templates, samples or consent metadata. */
+export interface WorkerFaceStatusResponse {
+  status: 'NOT_ENROLLED' | 'ACTIVE' | 'REVOKED' | 'NEEDS_REENROLL' | 'DELETED';
+}
+
 export interface FaceProfileResponse {
   id: string;
   workerId: string;

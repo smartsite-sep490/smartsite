@@ -28,6 +28,7 @@ import {
   IconMapPin,
   IconGlobe,
   IconLogout,
+  IconFaceScan,
 } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
 import { useTranslation, setLanguage } from '../../i18n';
@@ -472,6 +473,22 @@ export function ProfileScreen({
     enabled: accountDetails && scope.role === 'worker' && !!worker.data?.id,
     queryFn: () => client.workerCompliance(token, scope.siteId, worker.data!.id),
   });
+  const face = useQuery({
+    queryKey: [...queryKey, 'own-face-status', worker.data?.id],
+    enabled: scope.role === 'worker' && !!worker.data?.id,
+    queryFn: () => client.myWorkerFaceStatus(token, scope.siteId),
+    refetchOnMount: 'always',
+    refetchInterval: 60000,
+  });
+  const faceStatus =
+    face.isError || worker.isError
+      ? 'unavailable'
+      : !worker.data
+        ? worker.isPending
+          ? 'loading'
+          : 'unavailable'
+        : (face.data?.status ?? 'loading');
+  const faceActive = faceStatus === 'ACTIVE';
 
   if (documents && scope.role === 'worker' && worker.data)
     return (
@@ -686,6 +703,53 @@ export function ProfileScreen({
               </>
             )}
 
+            {scope.role === 'worker' && (
+              <>
+                <View style={profileStyles.menuDivider} />
+                <Pressable
+                  accessibilityRole={faceStatus === 'unavailable' ? 'button' : 'text'}
+                  accessibilityLabel={`${t('profileFace.title')}: ${t(`profileFace.${faceStatus}`)}`}
+                  accessibilityHint={faceStatus === 'unavailable' ? t('common.retry') : undefined}
+                  disabled={faceStatus !== 'unavailable' || face.isFetching || worker.isFetching}
+                  onPress={() => {
+                    if (worker.isError || !worker.data) void worker.refetch();
+                    else void face.refetch();
+                  }}
+                  style={profileStyles.menuItem}
+                >
+                  <View
+                    style={[profileStyles.menuIconBox, { backgroundColor: colors.primaryLight }]}
+                  >
+                    <IconFaceScan size={18} color={colors.primary} />
+                  </View>
+                  <View style={profileStyles.menuTextCol}>
+                    <Text style={profileStyles.menuTitle}>{t('profileFace.title')}</Text>
+                    <Text style={profileStyles.menuSubtitle}>
+                      {t(faceStatus === 'unavailable' ? 'common.retry' : 'profileFace.subtitle')}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      profileStyles.statusBadge,
+                      {
+                        backgroundColor: faceActive ? colors.successBg : colors.surfaceSubtle,
+                        maxWidth: '48%',
+                        flexShrink: 1,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        profileStyles.statusBadgeText,
+                        { color: faceActive ? colors.successText : colors.textSecondary },
+                      ]}
+                    >
+                      {t(`profileFace.${faceStatus}`)}
+                    </Text>
+                  </View>
+                </Pressable>
+              </>
+            )}
             <View style={profileStyles.menuDivider} />
 
             {/* Row 4: Security / Change Password */}

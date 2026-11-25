@@ -443,3 +443,27 @@ it('offers missing attendance from the board even when no attendance day exists'
   await click('Báo thiếu công');
   expect(JSON.stringify(root.toJSON())).toContain('Ca chưa có phiên quét cổng');
 });
+
+it('collapses multiple missing shifts and opens the correction for the selected shift', async () => {
+  vi.mocked(workspace.client.attendanceOverview).mockResolvedValue({
+    sessions: [],
+    corrections: [],
+    canRequestCorrection: true,
+    canReviewCorrection: false,
+    missingSchedules: ['First', 'Second'].map((name) => ({
+      scheduleId: name,
+      shiftName: `${name} missing shift`,
+      workDate: today,
+      startsAt: `${today}T01:00:00Z`,
+      endsAt: `${today}T10:00:00Z`,
+    })),
+  });
+  await mount();
+  for (let i = 0; !buttons('2 ca chưa ghi nhận công').length && i < 40; i++) await settle();
+  expect(buttons('Báo thiếu công')).toHaveLength(0);
+  expect(JSON.stringify(root.toJSON())).not.toContain('Second missing shift');
+  await click('2 ca chưa ghi nhận công');
+  expect(buttons('Báo thiếu công')).toHaveLength(2);
+  await act(async () => buttons('Báo thiếu công')[1]!.props.onPress());
+  expect(JSON.stringify(root.toJSON())).toContain('Ca chưa có phiên quét cổng');
+});

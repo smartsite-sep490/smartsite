@@ -39,6 +39,7 @@ import {
   FaceEnrollmentSessionResponseDto,
   FaceEnrollmentQualityResponseDto,
   FaceProfileResponseDto,
+  WorkerFaceStatusResponseDto,
 } from '../../../common/http/management-response.dto.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
@@ -173,6 +174,12 @@ export class FaceEnrollmentController {
       workerId: profile.workerId,
     });
     return profileResponse(profile);
+  }
+
+  @Get('sites/:siteId/workers/me/face-status')
+  @ApiOkResponse({ type: WorkerFaceStatusResponseDto })
+  async ownStatus(@Req() request: AuthenticatedRequest, @Param('siteId') siteId: string) {
+    return this.enrollment.ownStatus(request.user!, siteId);
   }
 
   @Get('workers/:workerId/face-profile')

@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import type { AttendanceOverviewResponse } from '@smartsite/api-client';
 import { useTranslation } from '../../i18n';
 import { useWorkspace } from '../workspace/workspace-context';
-import { Body, Button, Hint, QueryState } from '../shared/ui';
+import { Button, Hint, QueryState } from '../shared/ui';
+import { colors } from '../../theme/colors';
 import { CorrectionModal } from './correction-modal';
-import { AttendanceCorrectionHistory } from './attendance-day-view';
+import { AttendanceCorrectionHistory, AttendanceDisclosure } from './attendance-day-view';
 
 type MissingSchedule = NonNullable<AttendanceOverviewResponse['missingSchedules']>[number];
 
@@ -34,33 +35,47 @@ export function MissingAttendance({
     !query.data.hasPendingCorrection &&
     !query.data.corrections.some((c) => c.status === 'PENDING') &&
     !query.isError;
+  const missingSchedules = (query.data?.missingSchedules ?? []).filter(
+    (s) => (!fromDate || s.workDate >= fromDate) && (!toDate || s.workDate <= toDate),
+  );
+  const rows = missingSchedules.map((schedule) => (
+    <View key={schedule.scheduleId} style={styles.row}>
+      <View style={styles.copy}>
+        <Text style={styles.title}>{schedule.shiftName}</Text>
+        <Text style={styles.date}>{schedule.workDate}</Text>
+      </View>
+      {allowed && (
+        <Button
+          secondary
+          label={t('attendance.requestMissing')}
+          onPress={() => {
+            setSelected(schedule);
+            setSent(false);
+          }}
+        />
+      )}
+    </View>
+  ));
   return (
     <View style={{ gap: 12 }}>
       {sent && <Hint>{t('attendance.adjustmentSuccess')}</Hint>}
       <QueryState query={query}>
         {(data) => (
           <>
-            {(data.missingSchedules ?? [])
-              .filter(
-                (s) => (!fromDate || s.workDate >= fromDate) && (!toDate || s.workDate <= toDate),
-              )
-              .map((schedule) => (
-                <View key={schedule.scheduleId} style={{ gap: 8 }}>
-                  <Body>
-                    {schedule.workDate} · {schedule.shiftName}
-                  </Body>
-                  <Hint>{t('attendance.missingHint')}</Hint>
-                  {allowed && (
-                    <Button
-                      label={t('attendance.requestMissing')}
-                      onPress={() => {
-                        setSelected(schedule);
-                        setSent(false);
-                      }}
-                    />
-                  )}
-                </View>
-              ))}
+            {rows.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.title}>{t('attendance.requestMissing')}</Text>
+                {rows.length > 1 ? (
+                  <AttendanceDisclosure
+                    title={t('attendanceDetail.missingShifts', { count: rows.length })}
+                  >
+                    {rows}
+                  </AttendanceDisclosure>
+                ) : (
+                  rows
+                )}
+              </View>
+            )}
             {!dayId && (
               <AttendanceCorrectionHistory
                 data={data}
@@ -88,3 +103,11 @@ export function MissingAttendance({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  card: { padding: 12, borderRadius: 14, backgroundColor: colors.surface, gap: 8 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 },
+  copy: { flexGrow: 1, flexBasis: 140, gap: 3 },
+  title: { fontSize: 12, lineHeight: 19, fontWeight: '600', color: colors.textPrimary },
+  date: { fontSize: 11, lineHeight: 17, color: colors.textMuted },
+});

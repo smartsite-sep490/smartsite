@@ -184,6 +184,28 @@ it('shows estimated hours and missing checkout clearly, with raw scans and deduc
 });
 
 it.each(['vi', 'en'] as const)(
+  'keeps review reasons compact and reveals every unique reason in %s',
+  async (language) => {
+    await setLanguage(language);
+    detail.day.anomalies = ['MISSING_CHECKOUT', 'EARLY_EXIT', 'MISSING_CHECKOUT'];
+    await mount();
+    expect(buttons(t('attendanceDetail.attention'))[0]!.props.accessibilityState.expanded).toBe(
+      false,
+    );
+    expect(text()).not.toContain(t('labels.EARLY_EXIT'));
+    await click(t('attendanceDetail.attention'));
+    expect(text()).toContain(t('labels.EARLY_EXIT'));
+    expect(
+      text()
+        .split('\n')
+        .filter((value) => value === t('labels.EARLY_EXIT')),
+    ).toHaveLength(1);
+    await click(t('attendanceDetail.attention'));
+    expect(text()).not.toContain(t('labels.EARLY_EXIT'));
+  },
+);
+
+it.each(['vi', 'en'] as const)(
   'uses site time and shows the checkout date for overnight shifts in %s',
   async (language) => {
     await setLanguage(language);
@@ -582,5 +604,7 @@ it('keeps confirmed shift minutes separate from elapsed gate-session minutes', a
   expect(text()).not.toContain(minutes(6));
   expect(text()).toContain('22:25');
   expect(text()).toContain('22:31');
+  expect(text()).not.toContain(t('attendanceDetail.sessionTimeHint'));
+  await click(t('attendanceDetail.calculationDetails'));
   expect(text()).toContain(t('attendanceDetail.sessionTimeHint'));
 });
