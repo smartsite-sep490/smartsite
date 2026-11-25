@@ -210,6 +210,7 @@ import type {
   FaceEnrollmentSessionResponse,
   FaceEnrollmentQualityResponse,
   FaceProfileResponse,
+  WorkerFaceStatusResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
   ZoneEntryDecisionResponse,
@@ -3213,6 +3214,13 @@ export class SmartSiteManagementClient {
     return this.request<FaceProfileResponse>(
       'POST',
       `/face-enrollments/${pathId(sessionId)}/complete`,
+      token,
+    );
+  }
+  myWorkerFaceStatus(token: string, siteId: string) {
+    return this.request<WorkerFaceStatusResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/workers/me/face-status`,
       token,
     );
   }

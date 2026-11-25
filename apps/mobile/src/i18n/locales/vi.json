@@ -1536,7 +1536,10 @@
     "correctionNumber": "Yêu cầu {{index}}",
     "proposedTimes": "Giờ đề nghị điều chỉnh",
     "reviewNote": "Ghi chú xét duyệt",
-    "sessionTimeHint": "Giờ vào/ra là mốc của phiên qua cổng. Công được tính trong phạm vi ca và theo chính sách nghỉ/ra ngoài; xem tổng công đã xác nhận hoặc tạm tính ở trên."
+    "sessionTimeHint": "Giờ vào/ra là mốc của phiên qua cổng. Công được tính trong phạm vi ca và theo chính sách nghỉ/ra ngoài; xem tổng công đã xác nhận hoặc tạm tính ở trên.",
+    "reviewReasons": "{{count}} nội dung cần kiểm tra",
+    "reviewHint": "Giờ công được xác nhận sau khi đối chiếu dữ liệu.",
+    "missingShifts": "{{count}} ca chưa ghi nhận công"
   },
   "scheduleDay": {
     "title": "Chi tiết ngày làm",
@@ -1717,5 +1720,16 @@
     "declineHint": "Chỉ cần nhập lý do từ 5 ký tự khi từ chối.",
     "swapConfirmed": "Đã đồng ý đổi ca. Đơn được chuyển đến nhà thầu xét duyệt.",
     "swapDeclined": "Đã từ chối lời mời đổi ca."
+  },
+  "profileFace": {
+    "title": "Khuôn mặt",
+    "subtitle": "Trạng thái nhận diện",
+    "ACTIVE": "Đã kích hoạt",
+    "NOT_ENROLLED": "Chưa đăng ký",
+    "REVOKED": "Đã vô hiệu hóa",
+    "NEEDS_REENROLL": "Cần đăng ký lại",
+    "DELETED": "Đã xóa",
+    "loading": "Đang kiểm tra",
+    "unavailable": "Chưa xác định"
   }
 }

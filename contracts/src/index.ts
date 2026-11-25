@@ -135,6 +135,7 @@ export type {
   FaceEnrollmentQualityResponse,
   EnrollmentCaptureTarget,
   FaceProfileResponse,
+  WorkerFaceStatusResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
   ZoneEntryDecisionStatus,

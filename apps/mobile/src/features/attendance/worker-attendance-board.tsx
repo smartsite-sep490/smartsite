@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AttendanceDayResponse, AttendanceSummaryResponse } from '@smartsite/api-client';
 import { useTranslation, uiLocale } from '../../i18n';
@@ -6,6 +5,7 @@ import { localizedLabel } from '../../i18n/messages';
 import { IconChevronRight } from '../../components/common/Icons';
 import { colors } from '../../theme/colors';
 import { minutes } from '../shared/data';
+import { AttendanceNotices } from './attendance-notices';
 
 export function WorkerAttendanceSummary({
   summary,
@@ -62,13 +62,6 @@ export function WorkerAttendanceDay({
   onPress: () => void;
 }) {
   const { t } = useTranslation();
-  const [now, setNow] = useState(Date.now);
-  const hasPendingLeave = day.anomalies.includes('PENDING_LEAVE');
-  useEffect(() => {
-    if (!hasPendingLeave) return;
-    const timer = setInterval(() => setNow(Date.now()), 60000);
-    return () => clearInterval(timer);
-  }, [hasPendingLeave]);
   const confirmed = day.confirmedMinutes !== null;
   const needsReview = day.status === 'NEEDS_REVIEW';
   const shift = day.shiftName ?? t('attendance.shiftNotAssigned');
@@ -79,9 +72,6 @@ export function WorkerAttendanceDay({
       minute: '2-digit',
       hour12: false,
     });
-  const anomalies = day.anomalies.filter(
-    (anomaly) => anomaly !== 'PENDING_REQUEST' || !day.anomalies.includes('PENDING_LEAVE'),
-  );
 
   return (
     <Pressable
@@ -123,24 +113,7 @@ export function WorkerAttendanceDay({
         </View>
         <IconChevronRight size={16} color={colors.textMuted} />
       </View>
-      {anomalies.length > 0 && (
-        <Text numberOfLines={2} style={styles.noticeText}>
-          {anomalies
-            .map((anomaly) =>
-              anomaly === 'PENDING_LEAVE'
-                ? t(
-                    day.presence === 'OUTSIDE' &&
-                      day.provisionalMinutes === 0 &&
-                      day.endsAt &&
-                      Date.parse(day.endsAt) <= now
-                      ? 'leavePolicy.absentPendingLeave'
-                      : 'leavePolicy.pendingLeave',
-                  )
-                : localizedLabel(anomaly),
-            )
-            .join(' · ')}
-        </Text>
-      )}
+      <AttendanceNotices day={day} />
     </Pressable>
   );
 }
@@ -198,5 +171,4 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 11, lineHeight: 16, fontWeight: '600', color: colors.textSecondary },
   reviewStatus: { backgroundColor: colors.warningLightBg },
   reviewText: { color: colors.warningText },
-  noticeText: { fontSize: 11, lineHeight: 17, color: colors.warningText },
 });

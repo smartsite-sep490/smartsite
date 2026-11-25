@@ -11,6 +11,7 @@ import { colors } from '../../theme/colors';
 import { IconChevronDown, IconChevronUp } from '../../components/common/Icons';
 import { minutes } from '../shared/data';
 import { Button, Hint } from '../shared/ui';
+import { AttendanceNotices } from './attendance-notices';
 
 function clock(value: string | null | undefined, timezone: string) {
   return value
@@ -64,7 +65,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function Disclosure({ title, children }: PropsWithChildren<{ title: string }>) {
+export function AttendanceDisclosure({ title, children }: PropsWithChildren<{ title: string }>) {
   const [open, setOpen] = useState(false);
   return (
     <View style={styles.disclosure}>
@@ -165,35 +166,39 @@ export function AttendanceDayView({
               timeZone: 'UTC',
             }).format(new Date(`${day.workDate}T00:00:00Z`))}
           </Text>
-          <Text style={styles.workerName}>{day.workerName}</Text>
-          <Text style={styles.caption}>{siteName}</Text>
-          <StatusBadge status={day.status} />
-        </View>
-        <View style={styles.totalBlock}>
-          <Text style={styles.label}>
-            {t(
-              day.status === 'ABSENT'
-                ? 'attendance.worked'
-                : day.confirmedMinutes !== null
-                  ? 'attendance.confirmedHours'
-                  : 'attendance.provisionalHours',
-            )}
-          </Text>
-          <Text style={styles.total}>
-            {minutes(day.confirmedMinutes ?? day.provisionalMinutes)}
-          </Text>
-          {day.confirmedMinutes === null && day.status !== 'ABSENT' && (
-            <Text style={styles.caption}>{t('attendanceDetail.provisionalHint')}</Text>
-          )}
-        </View>
-        <View style={styles.metrics}>
-          <View style={styles.metric}>
-            <Text style={styles.caption}>{t('attendance.regularHoursLabel')}</Text>
-            <Text style={styles.metricValue}>{minutes(day.regularMinutes)}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.workerName}>{day.workerName}</Text>
+            <StatusBadge status={day.status} />
           </View>
-          <View style={styles.metric}>
-            <Text style={styles.caption}>{t('attendance.overtime')}</Text>
-            <Text style={styles.metricValue}>{minutes(day.overtimeMinutes)}</Text>
+          <Text style={styles.caption}>{siteName}</Text>
+        </View>
+        <View style={styles.hoursOverview}>
+          <View style={styles.totalBlock}>
+            <Text style={styles.label}>
+              {t(
+                day.status === 'ABSENT'
+                  ? 'attendance.worked'
+                  : day.confirmedMinutes !== null
+                    ? 'attendance.confirmedHours'
+                    : 'attendance.provisionalHours',
+              )}
+            </Text>
+            <Text style={styles.total}>
+              {minutes(day.confirmedMinutes ?? day.provisionalMinutes)}
+            </Text>
+            {day.confirmedMinutes === null && day.status !== 'ABSENT' && (
+              <Text style={styles.caption}>{t('attendanceDetail.provisionalHint')}</Text>
+            )}
+          </View>
+          <View style={styles.metrics}>
+            <View style={styles.metric}>
+              <Text style={styles.caption}>{t('attendance.regularHoursLabel')}</Text>
+              <Text style={styles.metricValue}>{minutes(day.regularMinutes)}</Text>
+            </View>
+            <View style={styles.metric}>
+              <Text style={styles.caption}>{t('attendance.overtime')}</Text>
+              <Text style={styles.metricValue}>{minutes(day.overtimeMinutes)}</Text>
+            </View>
           </View>
         </View>
         <View style={styles.shift}>
@@ -218,18 +223,7 @@ export function AttendanceDayView({
         </View>
       </View>
 
-      {day.anomalies.length > 0 && (
-        <View style={styles.warningNotice}>
-          <Text style={styles.noticeTitle}>{t('attendanceDetail.attention')}</Text>
-          {Array.from(new Set(day.anomalies))
-            .filter((a) => a !== 'PENDING_REQUEST' || !day.anomalies.includes('PENDING_LEAVE'))
-            .map((a) => (
-              <Text key={a} style={styles.noticeText}>
-                {a === 'PENDING_LEAVE' ? t('leavePolicy.pendingLeave') : localizedLabel(a)}
-              </Text>
-            ))}
-        </View>
-      )}
+      <AttendanceNotices key={day.id} day={day} expandable />
 
       <View style={styles.sectionHeading}>
         <Text accessibilityRole="header" style={styles.sectionTitle}>
@@ -259,8 +253,7 @@ export function AttendanceDayView({
             workDate={day.workDate}
             missing
           />
-          <Hint>{t('attendanceDetail.sessionTimeHint')}</Hint>
-          <Disclosure title={t('attendanceDetail.originalSession', { index: index + 1 })}>
+          <AttendanceDisclosure title={t('attendanceDetail.originalSession', { index: index + 1 })}>
             <DetailRow
               label={t('attendance.checkIn')}
               value={attendanceFullTime(s.rawInAt, day.timezone)}
@@ -270,7 +263,7 @@ export function AttendanceDayView({
               value={attendanceFullTime(s.rawOutAt, day.timezone)}
             />
             {s.ignoreReason && <Text style={styles.reason}>{s.ignoreReason}</Text>}
-          </Disclosure>
+          </AttendanceDisclosure>
           {canCorrect && !['IGNORED', 'IGNORED_DUPLICATE'].includes(s.status) && (
             <Button
               secondary
@@ -289,7 +282,8 @@ export function AttendanceDayView({
       ))}
 
       <View style={styles.card}>
-        <Disclosure title={t('attendanceDetail.calculationDetails')}>
+        <AttendanceDisclosure title={t('attendanceDetail.calculationDetails')}>
+          <Hint>{t('attendanceDetail.sessionTimeHint')}</Hint>
           <DetailRow
             label={t('workerHome.gateExits')}
             value={day.exitCount === undefined ? '—' : String(day.exitCount)}
@@ -313,7 +307,7 @@ export function AttendanceDayView({
           {day.maxExitCount !== undefined && (
             <DetailRow label={t('attendanceDetail.maxExits')} value={String(day.maxExitCount)} />
           )}
-        </Disclosure>
+        </AttendanceDisclosure>
       </View>
     </>
   );
@@ -387,15 +381,16 @@ const styles = StyleSheet.create({
   },
   summary: {
     backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 18,
-    gap: 20,
+    borderRadius: 16,
+    padding: 14,
+    gap: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  identity: { gap: 6, alignItems: 'flex-start' },
+  identity: { gap: 4, alignItems: 'flex-start' },
+  nameRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   date: { fontSize: 14, lineHeight: 22, color: colors.textSecondary, fontWeight: '600' },
-  workerName: { fontSize: 21, lineHeight: 29, fontWeight: '700', color: colors.textPrimary },
+  workerName: { fontSize: 18, lineHeight: 25, fontWeight: '700', color: colors.textPrimary },
   label: {
     fontSize: 13,
     lineHeight: 20,
@@ -404,31 +399,34 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   caption: { fontSize: 12, lineHeight: 19, color: colors.textMuted, flexShrink: 1 },
-  totalBlock: { gap: 4 },
+  hoursOverview: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
+  totalBlock: { gap: 3, flexGrow: 1, flexBasis: 110 },
   total: {
-    fontSize: 36,
-    lineHeight: 46,
+    fontSize: 28,
+    lineHeight: 36,
     fontWeight: '800',
     color: colors.textPrimary,
     fontVariant: ['tabular-nums'],
   },
-  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  metrics: { flexGrow: 1, flexBasis: 120, gap: 8 },
   metric: {
-    flexGrow: 1,
-    flexBasis: 120,
-    borderRadius: 12,
-    padding: 12,
-    gap: 4,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 10,
+    padding: 10,
+    gap: 2,
     backgroundColor: colors.surfaceSubtle,
   },
   metricValue: {
-    fontSize: 18,
-    lineHeight: 26,
+    fontSize: 15,
+    lineHeight: 22,
     color: colors.textPrimary,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
-  shift: { borderTopWidth: 1, borderColor: colors.borderLight, paddingTop: 14, gap: 4 },
+  shift: { borderTopWidth: 1, borderColor: colors.borderLight, paddingTop: 10, gap: 3 },
   shiftTime: {
     fontSize: 15,
     lineHeight: 23,
@@ -453,16 +451,6 @@ const styles = StyleSheet.create({
   warningText: { color: colors.warningText },
   neutralBg: { backgroundColor: colors.surfaceSubtle },
   neutralText: { color: colors.textSecondary },
-  warningNotice: {
-    backgroundColor: colors.warningLightBg,
-    borderRadius: 14,
-    padding: 14,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: colors.warningBg,
-  },
-  noticeTitle: { fontSize: 13, lineHeight: 20, fontWeight: '700', color: colors.warningText },
-  noticeText: { fontSize: 13, lineHeight: 20, color: colors.warningText },
   sectionHeading: { gap: 3, paddingTop: 6, paddingHorizontal: 2 },
   sectionTitle: {
     fontSize: 15,
