@@ -148,7 +148,11 @@ export interface AttendanceDayDetailResponse {
     teamAttendanceStatus: 'NOT_YET' | 'PRESENT' | 'ABSENT';
     decision?: { reviewedBy: string; reviewedByName?: string; reviewedAt: string; reason: string };
   };
+  /** A missing roll call is represented by expectedTeamAttendanceVersion=0. */
   gateAbsenceReview?: {
+    expectedTeamAttendanceVersion?: number;
+    /** Empty placeholders with only rejected reports; not worked attendance evidence. */
+    emptyRejectedReportCount?: number;
     canConfirm: boolean;
     gateEventCount: number;
     attendanceEventCount: number;
@@ -193,10 +197,11 @@ export interface ReviewAttendanceDayCommand {
   expectedVersion: number;
   reviewNote: string;
 }
-/** Resolves a PRESENT roll call with no Gate or attendance evidence; never grants work hours. */
+/** Resolves a PRESENT or missing roll call with no Gate or attendance evidence; never grants work hours. */
 export interface ConfirmAttendanceAbsenceCommand {
   requestId: string;
   expectedVersion: number;
+  /** Zero means no leader roll-call record; positive values match its persisted version. */
   expectedTeamAttendanceVersion: number;
   reason: string;
 }

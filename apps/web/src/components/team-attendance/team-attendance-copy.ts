@@ -52,11 +52,13 @@ const en = {
     '{name} ({code}) has attendance evidence on {date}, but no leader roll call. The Contractor Representative checks Gate sessions or approved corrections and confirms working hours.',
   'teamWeb.zoneReviewedBy': 'Reviewed by {name} at {time}',
 
-  'teamWeb.absenceTitle': 'Review: Present without Gate IN/OUT',
+  'teamWeb.absenceTitle': 'Review absence: no Gate IN/OUT',
   'teamWeb.absenceHint':
     'Hours remain zero. Check the leader’s roll call and Gate evidence before confirming that this Worker was absent.',
   'teamWeb.absenceEvidence':
     'Gate passages: {gates} · attendance events: {events} · sessions: {sessions}',
+  'teamWeb.absenceRejectedReport':
+    '{count} empty missing-attendance report(s) were rejected. They do not count as worked attendance; report history is retained.',
   'teamWeb.absenceRecorded': 'Leader recorded Present at {time}',
   'teamWeb.absenceConfirm': 'Confirm absent — 0 hours',
   'teamWeb.absenceReason': 'Reason for confirming absence',
@@ -70,7 +72,9 @@ const en = {
   'teamWeb.absenceConflict':
     'Evidence changed after the absence review. Reconciliation is required.',
   'teamWeb.absenceChanged': 'Attendance changed. Refresh the record and check the evidence again.',
-  'teamWeb.absenceNotifyTitle': 'Present without Gate evidence — review required',
+  'teamWeb.absenceNotifyTitle': 'No Gate evidence — absence review required',
+  'teamWeb.missingRollCallAbsenceMessage':
+    '{name} ({code}) has no leader roll call on {date} and no Gate IN/OUT. The Contractor Representative must check and confirm absent — 0 hours if the Worker did not attend.',
   'teamWeb.absenceNotifyMessage':
     '{name} ({code}) was marked present on {date}, but has no Gate IN/OUT. The Contractor Representative checks and confirms absence if the Worker did not attend. If the Worker attended, ask them to submit a missing-attendance correction.',
   'teamWeb.leader': 'Team leader',
@@ -198,11 +202,13 @@ const vi: Record<keyof typeof en, string> = {
     '{name} ({code}) có bằng chứng giờ làm ngày {date} nhưng chưa được nhóm trưởng điểm danh. Đại diện nhà thầu kiểm tra lượt cổng hoặc giờ sửa công đã duyệt và chốt giờ công.',
   'teamWeb.zoneReviewedBy': 'Người chốt: {name} · {time}',
 
-  'teamWeb.absenceTitle': 'Cần đối soát: Có mặt nhưng không có IN/OUT',
+  'teamWeb.absenceTitle': 'Đối soát vắng mặt: Không có IN/OUT',
   'teamWeb.absenceHint':
     'Giữ 0 giờ công. Kiểm tra điểm danh của nhóm trưởng và bằng chứng cổng trước khi xác nhận công nhân vắng.',
   'teamWeb.absenceEvidence':
     'Lượt qua cổng: {gates} · sự kiện chấm công: {events} · phiên làm việc: {sessions}',
+  'teamWeb.absenceRejectedReport':
+    '{count} đơn báo thiếu chấm công có phiên rỗng đã bị từ chối. Các đơn này không tính là bằng chứng giờ làm; lịch sử đơn vẫn được giữ nguyên.',
   'teamWeb.absenceRecorded': 'Nhóm trưởng ghi Có mặt lúc {time}',
   'teamWeb.absenceConfirm': 'Xác nhận vắng — 0 giờ',
   'teamWeb.absenceReason': 'Lý do xác nhận vắng',
@@ -216,7 +222,9 @@ const vi: Record<keyof typeof en, string> = {
   'teamWeb.absenceConflict': 'Có bằng chứng thay đổi sau khi xác nhận vắng. Cần đối soát lại.',
   'teamWeb.absenceChanged':
     'Dữ liệu chấm công đã thay đổi. Hãy làm mới và kiểm tra lại bằng chứng.',
-  'teamWeb.absenceNotifyTitle': 'Có mặt nhưng thiếu bằng chứng cổng — cần đối soát',
+  'teamWeb.absenceNotifyTitle': 'Thiếu bằng chứng cổng — cần xác nhận vắng',
+  'teamWeb.missingRollCallAbsenceMessage':
+    '{name} ({code}) chưa được đội trưởng điểm danh ngày {date} và không có lượt vào/ra cổng. Đại diện nhà thầu kiểm tra và xác nhận vắng — 0 giờ nếu công nhân không đi làm.',
   'teamWeb.absenceNotifyMessage':
     '{name} ({code}) được điểm danh Có mặt ngày {date} nhưng không có lượt vào/ra cổng. Đại diện nhà thầu kiểm tra và xác nhận vắng nếu không đi làm. Nếu có đi làm, công nhân gửi đơn báo thiếu chấm công.',
   'teamWeb.leader': 'Nhóm trưởng',

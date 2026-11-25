@@ -436,4 +436,119 @@ describe('TrackedObservationHistory', () => {
       expect(dd.className).toContain('font-mono');
     }
   });
+
+  it('omits observed PPE section gracefully when absent or empty, renders all 8 catalog labels concisely with non-compliance boundary note for Harness/Hook PRESENT, and collapses contradictory same-family states to Unclear/Không rõ', async () => {
+    const legacyAbsentItem: TrackedEpisodeOriginalObservation = {
+      ...OBSERVATION_A_HELMET_FINDING,
+    };
+    const emptyObservedItem: TrackedEpisodeOriginalObservation = {
+      ...OBSERVATION_B_SAME_EVENT_VEST_FINDING,
+      observedPpe: [],
+    };
+    const allEightItems: TrackedEpisodeOriginalObservation = {
+      ...OBSERVATION_C_SEPARATE_EVENT_OTHER_PERSON_SLOT,
+      observedPpe: [
+        { ppeItem: 'LANYARD_HOOK', status: 'PRESENT' },
+        { ppeItem: 'HARD_HAT', status: 'MISSING' },
+        { ppeItem: 'FULL_BODY_HARNESS', status: 'PRESENT' },
+        { ppeItem: 'MASK', status: 'PRESENT' },
+        { ppeItem: 'SAFETY_VEST', status: 'PRESENT' },
+        { ppeItem: 'GLOVES', status: 'MISSING' },
+        { ppeItem: 'BOOTS', status: 'PRESENT' },
+        { ppeItem: 'GOGGLES', status: 'PRESENT' },
+      ],
+    };
+    const contradictoryItem: TrackedEpisodeOriginalObservation = {
+      alertId: 'cccc3333-3333-4333-8333-333333333333',
+      eventId: '66666666-6666-4666-8666-666666666666',
+      personObservationIndex: 1,
+      payloadHash: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+      sourceSequence: '18446744073709551613',
+      capturedAt: '2026-11-01T10:16:30.000Z',
+      observationIndexes: [2],
+      frames: SHARED_EVENT_FRAMES,
+      observedPpe: [
+        { ppeItem: 'HARD_HAT', status: 'PRESENT' },
+        { ppeItem: 'HARD_HAT', status: 'MISSING' },
+        { ppeItem: 'SAFETY_VEST', status: 'PRESENT' },
+      ],
+    };
+
+    render(
+      <TrackedObservationHistory
+        {...buildProps({
+          items: [legacyAbsentItem, emptyObservedItem, allEightItems, contradictoryItem],
+          total: 4,
+        })}
+      />,
+    );
+
+    const rows = screen.getAllByTestId('tracked-history-item');
+    expect(rows).toHaveLength(4);
+
+    // 1. Legacy absent and empty observedPpe omit the section cleanly
+    expect(within(rows[0]!).queryByTestId('tracked-history-observed-ppe')).toBeNull();
+    expect(within(rows[1]!).queryByTestId('tracked-history-observed-ppe')).toBeNull();
+
+    // 2. All 8 catalog labels rendered in deterministic PPE_FAMILY_CATALOG order with Harness/Hook non-compliance note
+    const allEightBox = within(rows[2]!).getByTestId('tracked-history-observed-ppe');
+    const chips = within(allEightBox).getAllByTestId(/^tracked-history-observed-ppe-chip-/);
+    expect(chips.map((el) => el.getAttribute('data-testid'))).toEqual([
+      'tracked-history-observed-ppe-chip-HARD_HAT',
+      'tracked-history-observed-ppe-chip-SAFETY_VEST',
+      'tracked-history-observed-ppe-chip-GLOVES',
+      'tracked-history-observed-ppe-chip-BOOTS',
+      'tracked-history-observed-ppe-chip-GOGGLES',
+      'tracked-history-observed-ppe-chip-MASK',
+      'tracked-history-observed-ppe-chip-FULL_BODY_HARNESS',
+      'tracked-history-observed-ppe-chip-LANYARD_HOOK',
+    ]);
+    expect(chips[0]!.textContent).toContain('Hard Hat / Helmet');
+    expect(chips[0]!.textContent).toContain('Possible missing');
+    expect(chips[1]!.textContent).toContain('Safety Vest');
+    expect(chips[1]!.textContent).toContain('Observed');
+    expect(chips[2]!.textContent).toContain('Gloves');
+    expect(chips[2]!.textContent).toContain('Possible missing');
+    expect(chips[3]!.textContent).toContain('Boots');
+    expect(chips[4]!.textContent).toContain('Goggles');
+    expect(chips[5]!.textContent).toContain('Mask');
+    expect(chips[6]!.textContent).toContain('Full-body harness');
+    expect(chips[6]!.textContent).toContain('Observed');
+    expect(chips[7]!.textContent).toContain('Lanyard hook');
+    expect(chips[7]!.textContent).toContain('Observed');
+    const harnessNote = within(allEightBox).getByTestId('tracked-history-observed-ppe-note');
+    expect(harnessNote.textContent).toMatch(/frame visibility only|does not confirm/i);
+    expect(allEightBox.textContent).not.toMatch(/\b(compliant|safe to work|all clear)\b/i);
+
+    // 3. Contradictory same-family (PRESENT + MISSING) collapses to a single Unclear badge; no Harness note when Harness/Hook absent
+    const contradictoryBox = within(rows[3]!).getByTestId('tracked-history-observed-ppe');
+    const hardHatChips = within(contradictoryBox).getAllByTestId(
+      'tracked-history-observed-ppe-chip-HARD_HAT',
+    );
+    expect(hardHatChips).toHaveLength(1);
+    expect(hardHatChips[0]!.textContent).toContain('Hard Hat / Helmet');
+    expect(hardHatChips[0]!.textContent).toContain('Unclear');
+    expect(hardHatChips[0]!.textContent).not.toContain('Observed');
+    expect(hardHatChips[0]!.textContent).not.toContain('Missing');
+    expect(within(contradictoryBox).queryByTestId('tracked-history-observed-ppe-note')).toBeNull();
+
+    // 4. Vietnamese labels + Không rõ for contradictory family
+    await act(async () => {
+      await i18n.changeLanguage('vi');
+    });
+    expect(
+      within(allEightBox).getByTestId('tracked-history-observed-ppe-chip-FULL_BODY_HARNESS')
+        .textContent,
+    ).toContain('Dây đai an toàn toàn thân');
+    expect(
+      within(allEightBox).getByTestId('tracked-history-observed-ppe-chip-LANYARD_HOOK').textContent,
+    ).toContain('Móc dây an toàn');
+    expect(
+      within(allEightBox).getByTestId('tracked-history-observed-ppe-chip-MASK').textContent,
+    ).toContain('Khẩu trang');
+    expect(
+      within(contradictoryBox).getByTestId('tracked-history-observed-ppe-chip-HARD_HAT')
+        .textContent,
+    ).toContain('Không rõ');
+  });
 });

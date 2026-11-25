@@ -8,11 +8,14 @@ import { AttendanceDaysService } from '../../src/modules/workforce/attendance/at
 import { AttendanceReconciliationService } from '../../src/modules/workforce/attendance/attendance-reconciliation.service.js';
 import { SchedulingNotificationService } from '../../src/modules/workforce/notifications/scheduling-notification.service.js';
 import { ContractorTeamsService } from '../../src/modules/workforce/teams/contractor-teams.service.js';
+import { MissingRollCallAbsence1795651200004 } from '../../src/database/migrations/1795651200004-MissingRollCallAbsence.js';
 import { AttendanceAbsenceReview1795651200000 } from '../../src/database/migrations/1795651200000-AttendanceAbsenceReview.js';
 import {
   AccessAttemptEntity,
   AccessAuditEntity,
   AttendanceAbsenceReviewEntity,
+  AttendanceSessionEntity,
+  AttendanceCorrectionEntity,
   AttendanceDayEntity,
   AttendanceEventEntity,
   ContractorEntity,
@@ -571,6 +574,209 @@ test('Gate absence review: persisted scope, evidence checks, immutable roll call
       },
     );
     await t.test(
+      'missing leader roll call requires scoped zero-hour approval and preserves missing roll call',
+      async () => {
+        const { day } = await makeCase('2026-10-01', false);
+        await db.getRepository(TeamAttendanceEntity).delete({ scheduleId: day.scheduleId! });
+        await db.transaction((m) => reconciliation.refresh(m, day.id));
+        const detail = await days.detail(rep, siteId, day.id);
+        assert.equal(detail.day.status, 'NEEDS_REVIEW');
+        assert.deepEqual(detail.day.anomalies, ['ZONE_ATTENDANCE_PENDING']);
+        assert.equal(detail.gateAbsenceReview?.canConfirm, true);
+        assert.equal(detail.gateAbsenceReview?.expectedTeamAttendanceVersion, 0);
+        assert.equal(detail.gateAbsenceReview?.teamAttendance, undefined);
+        const command = { ...(await commandFor(day.id)), expectedTeamAttendanceVersion: 0 };
+        await assert.rejects(
+          days.confirmAbsence(
+            actor(otherRep, UserRole.CONTRACTOR_REPRESENTATIVE),
+            siteId,
+            day.id,
+            command,
+          ),
+        );
+        await assert.rejects(days.confirmAbsence(peer, siteId, day.id, command));
+        await db.transaction((m) => reconciliation.refresh(m, day.id));
+        const notices = await db
+          .getRepository(UserNotificationEntity)
+          .findBy({ siteId, event: 'ABSENCE_REVIEW_REQUIRED' });
+        const own = notices.filter((n) => n.content.dayId === day.id);
+        assert.equal(own.length, 1);
+        assert.equal(own[0]!.recipientUserId, repId);
+        assert.match(
+          (await notifications.list(rep, 'ALL', 0, 100)).items.find((n) => n.id === own[0]!.id)!
+            .message,
+          /no leader roll call/,
+        );
+        await Promise.all([
+          days.confirmAbsence(rep, siteId, day.id, command),
+          days.confirmAbsence(rep, siteId, day.id, command),
+        ]);
+        const resolved = await days.detail(rep, siteId, day.id);
+        assert.equal(resolved.day.status, 'ABSENT');
+        assert.equal(resolved.day.regularMinutes + resolved.day.overtimeMinutes, 0);
+        assert.equal(resolved.gateAbsenceReview?.status, 'CONFIRMED_ABSENT');
+        assert.equal(
+          await db.getRepository(TeamAttendanceEntity).existsBy({ scheduleId: day.scheduleId! }),
+          false,
+        );
+        assert.equal(
+          await db.getRepository(AttendanceAbsenceReviewEntity).countBy({ dayId: day.id }),
+          1,
+        );
+        await recordGate(day, 'IN');
+        await db.transaction((m) => reconciliation.refresh(m, day.id));
+        const changed = await days.detail(rep, siteId, day.id);
+        assert.equal(changed.day.status, 'NEEDS_REVIEW');
+        assert.equal(changed.gateAbsenceReview?.status, 'CONFLICTED');
+      },
+    );
+    await t.test(
+      'a rejected empty missing-attendance report is not worked attendance and does not prevent zero-hour absence review',
+      async () => {
+        const { day } = await makeCase('2026-10-06', false);
+        await db.getRepository(TeamAttendanceEntity).delete({ scheduleId: day.scheduleId! });
+        const report = await db
+          .getRepository(AttendanceSessionEntity)
+          .save({
+            id: randomUUID(),
+            dayId: day.id,
+            siteId,
+            workerId,
+            shiftAssignmentId: day.scheduleId,
+            checkInEventId: null,
+            checkOutEventId: null,
+            effectiveInAt: null,
+            effectiveOutAt: null,
+            status: 'MISSING_IN',
+            version: 1,
+            appliedCorrectionId: null,
+          });
+        await db
+          .getRepository(AttendanceCorrectionEntity)
+          .save({
+            id: randomUUID(),
+            attendanceSessionId: report.id,
+            requestedBy: workerUser,
+            expectedSessionVersion: 1,
+            proposedInAt: day.startsAt!,
+            proposedOutAt: day.endsAt!,
+            reason: 'Synthetic missing attendance report',
+            status: 'REJECTED',
+            reviewedBy: repId,
+            reviewedAt: new Date(),
+            reviewNote: 'Worker did not attend',
+          });
+        await db.transaction((m) => reconciliation.refresh(m, day.id));
+        const detail = await days.detail(rep, siteId, day.id);
+        assert.equal(detail.gateAbsenceReview?.canConfirm, true);
+        assert.deepEqual(detail.day.anomalies, ['ZONE_ATTENDANCE_PENDING']);
+        await days.confirmAbsence(rep, siteId, day.id, {
+          ...(await commandFor(day.id)),
+          expectedTeamAttendanceVersion: 0,
+        });
+        assert.equal((await days.detail(rep, siteId, day.id)).day.status, 'ABSENT');
+        assert.equal(
+          (await db.getRepository(AttendanceSessionEntity).findOneByOrFail({ id: report.id }))
+            .status,
+          'MISSING_IN',
+        );
+        assert.equal(
+          await db
+            .getRepository(AttendanceCorrectionEntity)
+            .countBy({ attendanceSessionId: report.id, status: 'REJECTED' }),
+          1,
+        );
+      },
+    );
+    await t.test(
+      'pending, cancelled, unreviewed or approved reports never qualify as rejected empty reports',
+      async () => {
+        for (const status of ['PENDING', 'CANCELLED', 'APPROVED', 'NONE'] as const) {
+          const { day } = await makeCase(
+            '2026-10-' + { PENDING: '07', CANCELLED: '08', APPROVED: '09', NONE: '10' }[status],
+            false,
+          );
+          await db.getRepository(TeamAttendanceEntity).delete({ scheduleId: day.scheduleId! });
+          const report = await db
+            .getRepository(AttendanceSessionEntity)
+            .save({
+              id: randomUUID(),
+              dayId: day.id,
+              siteId,
+              workerId,
+              shiftAssignmentId: day.scheduleId,
+              checkInEventId: null,
+              checkOutEventId: null,
+              effectiveInAt: null,
+              effectiveOutAt: null,
+              status: 'MISSING_IN',
+              version: 1,
+              appliedCorrectionId: null,
+            });
+          if (status !== 'NONE')
+            await db
+              .getRepository(AttendanceCorrectionEntity)
+              .save({
+                id: randomUUID(),
+                attendanceSessionId: report.id,
+                requestedBy: workerUser,
+                expectedSessionVersion: 1,
+                proposedInAt: day.startsAt!,
+                proposedOutAt: day.endsAt!,
+                reason: 'Synthetic unresolved missing report',
+                status,
+                reviewedBy: status === 'PENDING' ? null : repId,
+                reviewedAt: status === 'PENDING' ? null : new Date(),
+              });
+          await db.transaction((m) => reconciliation.refresh(m, day.id));
+          assert.equal(
+            (await days.detail(rep, siteId, day.id)).gateAbsenceReview?.canConfirm ?? false,
+            false,
+          );
+          await assert.rejects(
+            days.confirmAbsence(rep, siteId, day.id, {
+              ...(await commandFor(day.id)),
+              expectedTeamAttendanceVersion: 0,
+            }),
+          );
+        }
+      },
+    );
+    await t.test(
+      'missing roll call cannot approve with evidence, stale roll call, pending requests or before overtime ends',
+      async () => {
+        for (const variant of ['gate', 'rollcall', 'overtime', 'pending'] as const) {
+          const { day, record, schedule } = await makeCase(
+            '2026-10-' + { gate: '02', rollcall: '03', overtime: '04', pending: '05' }[variant],
+            false,
+          );
+          await db.getRepository(TeamAttendanceEntity).delete({ scheduleId: schedule.id });
+          await db.transaction((m) => reconciliation.refresh(m, day.id));
+          const command = { ...(await commandFor(day.id)), expectedTeamAttendanceVersion: 0 };
+          if (variant === 'gate') await recordGate(day, 'OUT');
+          if (variant === 'rollcall') await db.getRepository(TeamAttendanceEntity).save(record);
+          if (variant === 'overtime' || variant === 'pending')
+            await db.getRepository(OvertimeRequestEntity).save({
+              id: randomUUID(),
+              siteId,
+              workerId,
+              scheduleId: schedule.id,
+              expectedShiftId: shift.id,
+              startsAt: day.endsAt!,
+              endsAt: new Date('2026-11-24T10:00:00Z'),
+              requestedBy: workerUser,
+              reason: 'Synthetic overtime review blocker',
+              status: variant === 'pending' ? 'PENDING' : 'APPROVED',
+            });
+          await assert.rejects(days.confirmAbsence(rep, siteId, day.id, command));
+          assert.equal(
+            await db.getRepository(AttendanceAbsenceReviewEntity).existsBy({ dayId: day.id }),
+            false,
+          );
+        }
+      },
+    );
+    await t.test(
       'review schema matches metadata and rejects inconsistent roll-call snapshots',
       async () => {
         assert.deepEqual(
@@ -605,6 +811,10 @@ test('Gate absence review: persisted scope, evidence checks, immutable roll call
         const runner = db.createQueryRunner();
         await runner.connect();
         try {
+          await assert.rejects(
+            new MissingRollCallAbsence1795651200004().down(runner),
+            /Preserve missing roll-call/,
+          );
           await assert.rejects(
             new AttendanceAbsenceReview1795651200000().down(runner),
             /Preserve absence review/,

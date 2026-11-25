@@ -275,7 +275,7 @@ function TrackedEpisodeEvidenceWorkspaceInner({
   const historyScopeKey = `${workspaceKey}::${effectiveAlertId ?? 'ALL'}`;
 
   const historyQuery = useInfiniteQuery({
-    queryKey: [...baseQueryKey, 'history', effectiveAlertId ?? 'ALL'],
+    queryKey: [...baseQueryKey, 'history', effectiveAlertId ?? 'ALL', 'includeObservedPpe:true'],
     enabled: usableDetail !== null,
     initialPageParam: { offset: 0 } as HistoryPageParam,
     retry: false,
@@ -286,6 +286,7 @@ function TrackedEpisodeEvidenceWorkspaceInner({
       const options: TrackedEpisodeObservationOptions = {
         offset: pageParam.offset,
         limit: HISTORY_PAGE_LIMIT,
+        includeObservedPpe: true,
         ...(pageParam.throughSequence !== undefined
           ? { throughSequence: pageParam.throughSequence }
           : {}),

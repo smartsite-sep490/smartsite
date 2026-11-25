@@ -187,26 +187,34 @@ export function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () 
                           : 'attendanceReview.absenceHint',
                     )}
                   </Text>
+                  {!!data.gateAbsenceReview.emptyRejectedReportCount && (
+                    <Text style={attStyles.quickHint}>
+                      {t('attendanceReview.absenceRejectedReport', {
+                        count: data.gateAbsenceReview.emptyRejectedReportCount,
+                      })}
+                    </Text>
+                  )}
                   {data.gateAbsenceReview.decision && (
                     <Text style={attStyles.quickHint}>
                       {data.gateAbsenceReview.decision.reason}
                     </Text>
                   )}
                 </AttendanceDisclosure>
-                {scope.role === 'contractor' &&
-                  data.gateAbsenceReview.canConfirm &&
-                  data.gateAbsenceReview.teamAttendance && (
-                    <Button
-                      label={t('attendanceReview.confirmAbsence')}
-                      onPress={() =>
-                        setReview({
-                          kind: 'absence',
-                          value: data.day,
-                          teamAttendanceVersion: data.gateAbsenceReview!.teamAttendance!.version,
-                        })
-                      }
-                    />
-                  )}
+                {scope.role === 'contractor' && data.gateAbsenceReview.canConfirm && (
+                  <Button
+                    label={t('attendanceReview.confirmAbsence')}
+                    onPress={() =>
+                      setReview({
+                        kind: 'absence',
+                        value: data.day,
+                        teamAttendanceVersion:
+                          data.gateAbsenceReview!.expectedTeamAttendanceVersion ??
+                          data.gateAbsenceReview!.teamAttendance?.version ??
+                          0,
+                      })
+                    }
+                  />
+                )}
               </View>
             )}
             <QueryState query={overview}>
@@ -246,7 +254,8 @@ export function AttendanceDetail({ dayId, onBack }: { dayId: string; onBack: () 
                 !query.data.gateAbsenceReview?.canConfirm ||
                 review.value.version !== query.data.day.version ||
                 review.teamAttendanceVersion !==
-                  query.data.gateAbsenceReview.teamAttendance?.version))
+                  (query.data.gateAbsenceReview.expectedTeamAttendanceVersion ??
+                    query.data.gateAbsenceReview.teamAttendance?.version)))
           }
           timezone={query.data.day.timezone}
           onClose={() => setReview(null)}

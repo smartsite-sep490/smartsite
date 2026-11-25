@@ -1,4 +1,8 @@
 {
+  "errors.qr_site_mismatch": "Mã QR hoặc công nhân không thuộc công trường này. Từ chối cho vào.",
+  "errors.qr_direction_mismatch": "Mã QR không đúng hướng ra/vào.",
+  "errors.qr_site_or_direction_mismatch": "Mã QR hoặc công nhân không thuộc công trường này. Từ chối cho vào.",
+  "landing_page.back_to_top": "Quay lên đầu trang",
   "incident_view.review_decision": "Quyết định xác minh",
   "incident_view.verify_and_close_action": "Xác minh đạt và đóng công việc",
   "incident_view.return_for_rework": "Yêu cầu xử lý lại",

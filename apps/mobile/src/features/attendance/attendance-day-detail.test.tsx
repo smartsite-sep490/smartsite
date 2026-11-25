@@ -396,46 +396,53 @@ it('offers early-checkout acknowledgement only when the server capability permit
   });
 });
 
-it('opens the absence review from an authorized day and preserves the day/roll-call versions', async () => {
-  workspace.scope.role = 'contractor';
-  detail.sessions = [];
-  detail.gateAbsenceReview = {
-    canConfirm: true,
-    gateEventCount: 0,
-    attendanceEventCount: 0,
-    sessionCount: 0,
-    status: 'PENDING',
-    teamAttendance: {
-      version: 4,
-      status: 'PRESENT',
-      recordedBy: 'leader',
-      recordedAt: '2026-11-20T10:05:00Z',
-    },
-  };
-  const confirm = vi
-    .spyOn(workspace.client, 'confirmAttendanceAbsence')
-    .mockResolvedValue({ id: 'day' });
-  await mount();
-  await click(t('attendanceReview.confirmAbsence'));
-  expect(buttons(t('common.confirm'))[0]!.props.disabled).toBe(true);
-  await act(async () =>
-    root.root
-      .findAll(
-        (node) =>
-          String(node.type) === 'TextInput' &&
-          node.props.accessibilityLabel === t('attendanceReview.reason'),
-      )[0]!
-      .props.onChangeText('Verified absent from the Site'),
-  );
-  await click(t('common.confirm'));
-  await settle();
-  expect(confirm).toHaveBeenCalledWith('token', 'site', 'day', {
-    requestId: expect.any(String),
-    expectedVersion: 1,
-    expectedTeamAttendanceVersion: 4,
-    reason: 'Verified absent from the Site',
-  });
-});
+it.each([0, 4])(
+  'opens absence review with roll-call version %s, including missing roll call',
+  async (version) => {
+    workspace.scope.role = 'contractor';
+    detail.sessions = [];
+    detail.gateAbsenceReview = {
+      canConfirm: true,
+      gateEventCount: 0,
+      attendanceEventCount: 0,
+      sessionCount: 0,
+      status: 'PENDING',
+      teamAttendance: {
+        version: 4,
+        status: 'PRESENT',
+        recordedBy: 'leader',
+        recordedAt: '2026-11-20T10:05:00Z',
+      },
+    };
+    if (version === 0) {
+      delete detail.gateAbsenceReview!.teamAttendance;
+      detail.gateAbsenceReview!.expectedTeamAttendanceVersion = 0;
+    }
+    const confirm = vi
+      .spyOn(workspace.client, 'confirmAttendanceAbsence')
+      .mockResolvedValue({ id: 'day' });
+    await mount();
+    await click(t('attendanceReview.confirmAbsence'));
+    expect(buttons(t('common.confirm'))[0]!.props.disabled).toBe(true);
+    await act(async () =>
+      root.root
+        .findAll(
+          (node) =>
+            String(node.type) === 'TextInput' &&
+            node.props.accessibilityLabel === t('attendanceReview.reason'),
+        )[0]!
+        .props.onChangeText('Verified absent from the Site'),
+    );
+    await click(t('common.confirm'));
+    await settle();
+    expect(confirm).toHaveBeenCalledWith('token', 'site', 'day', {
+      requestId: expect.any(String),
+      expectedVersion: 1,
+      expectedTeamAttendanceVersion: version,
+      reason: 'Verified absent from the Site',
+    });
+  },
+);
 it('does not offer absence confirmation without the Backend capability', async () => {
   workspace.scope.role = 'contractor';
   detail.gateAbsenceReview = {

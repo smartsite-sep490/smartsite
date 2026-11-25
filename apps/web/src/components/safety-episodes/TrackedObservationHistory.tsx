@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PPE_FAMILY_CATALOG, type PpeFamily } from '@smartsite/contracts/ppe-items';
 import type {
   TrackedEpisodeMediaRepresentation,
   TrackedEpisodeMediaSource,
@@ -47,6 +48,49 @@ const selectionKeyOf = (
   representation: TrackedEpisodeMediaRepresentation,
 ) =>
   `${source.alertId}:${source.eventId}:${source.personObservationIndex}:${source.evidenceIndex}:${representation}`;
+
+type ObservedPpeDisplayState = 'PRESENT' | 'MISSING' | 'UNCLEAR';
+
+interface ObservedPpeSummaryEntry {
+  item: PpeFamily;
+  state: ObservedPpeDisplayState;
+  presentOnly: boolean;
+}
+
+function summarizeObservedPpe(
+  entries: TrackedEpisodeOriginalObservation['observedPpe'],
+): ObservedPpeSummaryEntry[] {
+  if (!entries?.length) return [];
+  const statesByItem = new Map<PpeFamily, Set<'PRESENT' | 'MISSING'>>();
+  for (const entry of entries) {
+    const set = statesByItem.get(entry.ppeItem) ?? new Set<'PRESENT' | 'MISSING'>();
+    set.add(entry.status);
+    statesByItem.set(entry.ppeItem, set);
+  }
+  const summary: ObservedPpeSummaryEntry[] = [];
+  for (const family of PPE_FAMILY_CATALOG) {
+    const states = statesByItem.get(family.item);
+    if (!states || states.size === 0) continue;
+    const state: ObservedPpeDisplayState =
+      states.has('PRESENT') && states.has('MISSING')
+        ? 'UNCLEAR'
+        : states.has('MISSING')
+          ? 'MISSING'
+          : 'PRESENT';
+    summary.push({
+      item: family.item,
+      state,
+      presentOnly: state === 'PRESENT' && family.observationSemantics === 'PRESENT_ONLY',
+    });
+  }
+  return summary;
+}
+
+function observedPpeBadgeVariant(state: ObservedPpeDisplayState): 'danger' | 'warning' | 'neutral' {
+  if (state === 'MISSING') return 'danger';
+  if (state === 'UNCLEAR') return 'warning';
+  return 'neutral';
+}
 
 export function TrackedObservationHistory(props: TrackedObservationHistoryProps) {
   return <TrackedObservationHistoryContent key={props.scopeKey} {...props} />;
@@ -189,6 +233,8 @@ function TrackedObservationHistoryContent({
               const rowKey = rowKeyOf(item, rowIndex);
               const isExpanded = expandedRowKeys.has(rowKey);
               const technicalId = `tracked-history-tech-${rowIndex}`;
+              const observedPpeSummary = summarizeObservedPpe(item.observedPpe);
+              const hasPresentOnlyPpe = observedPpeSummary.some((entry) => entry.presentOnly);
               const ppeIndexes =
                 item.observationIndexes.length > 0
                   ? item.observationIndexes.join(', ')
@@ -284,6 +330,39 @@ function TrackedObservationHistoryContent({
                       )}
                     </Button>
                   </div>
+
+                  {observedPpeSummary.length > 0 && (
+                    <div
+                      data-testid="tracked-history-observed-ppe"
+                      className="mt-3 space-y-1.5 border-t border-slate-100 pt-2.5"
+                    >
+                      <p className="text-[11px] font-semibold text-slate-600">
+                        {tSafety('trackedHistory.observedPpeTitle')}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {observedPpeSummary.map((entry) => (
+                          <Badge
+                            key={entry.item}
+                            variant={observedPpeBadgeVariant(entry.state)}
+                            data-testid={`tracked-history-observed-ppe-chip-${entry.item}`}
+                          >
+                            <span>
+                              {tSafety(`trackedHistory.observedPpeItem.${entry.item}`)} ·{' '}
+                              {tSafety(`trackedHistory.observedPpeStatus.${entry.state}`)}
+                            </span>
+                          </Badge>
+                        ))}
+                      </div>
+                      {hasPresentOnlyPpe && (
+                        <p
+                          data-testid="tracked-history-observed-ppe-note"
+                          className="text-[11px] text-slate-500"
+                        >
+                          {tSafety('trackedHistory.observedPpeBoundaryNote')}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {item.frames.length === 0 ? (
                     <p className="mt-3 text-xs text-slate-500">

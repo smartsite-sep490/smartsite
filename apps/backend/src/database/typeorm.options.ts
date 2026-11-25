@@ -104,6 +104,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      MissingRollCallAbsence1795651200004,
       DirectWorkerQrSession1795651200003,
       AttendanceMultipleShifts1795651200002,
       AttendanceAbsenceReview1795651200000,
@@ -225,3 +226,5 @@ import { AccountEmailRecovery1795392000000 } from './migrations/1795392000000-Ac
 import { MobilePushDelivery1795478400000 } from './migrations/1795478400000-MobilePushDelivery.js';
 import { AttendanceMultipleShifts1795651200002 } from './migrations/1795651200002-AttendanceMultipleShifts.js';
 import { DirectWorkerQrSession1795651200003 } from './migrations/1795651200003-DirectWorkerQrSession.js';
+
+import { MissingRollCallAbsence1795651200004 } from './migrations/1795651200004-MissingRollCallAbsence.js';

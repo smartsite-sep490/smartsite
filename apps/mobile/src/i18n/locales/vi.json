@@ -721,7 +721,8 @@
     "serverFallback": "QR dự phòng do máy chủ cấp"
   },
   "notifications": {
-    "ABSENCE_REVIEW_REQUIRED": "Có mặt nhưng thiếu bằng chứng cổng — cần đối soát",
+    "ABSENCE_REVIEW_REQUIRED": "Thiếu bằng chứng cổng — cần xác nhận vắng",
+    "missingRollCallAbsenceMessage": "{{name}} ({{code}}) chưa được đội trưởng điểm danh ngày {{date}} và không có lượt vào/ra cổng. Đại diện nhà thầu kiểm tra và xác nhận vắng — 0 giờ nếu công nhân không đi làm.",
     "gateAbsenceReviewMessage": "{{name}} ({{code}}) được điểm danh Có mặt ngày {{date}} nhưng không có lượt vào/ra cổng. Hãy kiểm tra trước khi xác nhận vắng.",
     "title": "Thông báo",
     "detailTitle": "Chi tiết thông báo",
@@ -1555,8 +1556,9 @@
   },
   "attendanceReview": {
     "confirmAbsence": "Xác nhận vắng — 0 giờ",
-    "absenceTitle": "Cần đối soát: Có mặt nhưng không có IN/OUT",
+    "absenceTitle": "Đối soát vắng mặt: Không có IN/OUT",
     "absenceHint": "Giữ 0 giờ công. Kiểm tra bằng chứng cổng và điểm danh của nhóm trưởng. Chỉ xác nhận vắng khi ca và tăng ca được duyệt đã kết thúc, không có bằng chứng cổng hoặc chấm công.",
+    "absenceRejectedReport": "{{count}} đơn báo thiếu chấm công có phiên rỗng đã bị từ chối. Các đơn này không tính là bằng chứng giờ làm; lịch sử đơn vẫn được giữ nguyên.",
     "absenceEvidence": "Lượt qua cổng: {{gates}} · sự kiện chấm công: {{events}} · phiên làm việc: {{sessions}}",
     "absenceConfirmed": "Đã xác nhận vắng — 0 giờ. Giữ nguyên điểm danh ban đầu.",
     "absenceChanged": "Bằng chứng chấm công đã thay đổi. Hãy tải lại và kiểm tra.",
