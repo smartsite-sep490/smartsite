@@ -1480,6 +1480,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
             scheduleVersionId: version.id,
             workDate,
             isActive: true,
+            createdAt: new Date(`${workDate}T00:00:00Z`),
           });
           await dataSource.getRepository(WorkerScheduleEntity).save({
             id: randomUUID(),
@@ -1489,6 +1490,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
             scheduleVersionId: version.id,
             workDate,
             isActive: true,
+            createdAt: new Date(`${workDate}T00:00:00Z`),
           });
           return target;
         }
