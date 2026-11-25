@@ -29,6 +29,7 @@ import { WorkerAttendanceDay, WorkerAttendanceSummary } from './worker-attendanc
 import { AttendanceDetail } from './attendance-day-detail';
 import { RequestSheet } from '../shared/request-sheet';
 import { MissingAttendance } from './missing-attendance';
+import { AttendanceNotices } from './attendance-notices';
 
 export function AttendanceScreen({
   initialDayId,
@@ -517,33 +518,7 @@ export function AttendanceScreen({
                             </Text>
                           )}
 
-                          {day.anomalies.length > 0 && (
-                            <View style={attStyles.anomaliesRow}>
-                              {day.anomalies
-                                .filter(
-                                  (a) =>
-                                    a !== 'PENDING_REQUEST' ||
-                                    !day.anomalies.includes('PENDING_LEAVE'),
-                                )
-                                .map((a, i) => (
-                                  <View key={i} style={attStyles.anomalyPill}>
-                                    <Text style={attStyles.anomalyText}>
-                                      ⚠️{' '}
-                                      {a === 'PENDING_LEAVE'
-                                        ? t(
-                                            day.presence === 'OUTSIDE' &&
-                                              day.provisionalMinutes === 0 &&
-                                              day.endsAt &&
-                                              Date.parse(day.endsAt) <= Date.now()
-                                              ? 'leavePolicy.absentPendingLeave'
-                                              : 'leavePolicy.pendingLeave',
-                                          )
-                                        : localizedLabel(a)}
-                                    </Text>
-                                  </View>
-                                ))}
-                            </View>
-                          )}
+                          <AttendanceNotices day={day} />
 
                           <View style={attStyles.dayCardFooter}>
                             <Text style={attStyles.dayDetailLink}>{t('attendance.dayDetail')}</Text>
@@ -946,22 +921,6 @@ const attStyles = StyleSheet.create({
     fontSize: 13,
     color: '#64748B',
     fontWeight: '600',
-  },
-  anomaliesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  anomalyPill: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-  },
-  anomalyText: {
-    fontSize: 13,
-    color: '#92400E',
-    fontWeight: '700',
   },
   dayCardFooter: {
     flexDirection: 'row',

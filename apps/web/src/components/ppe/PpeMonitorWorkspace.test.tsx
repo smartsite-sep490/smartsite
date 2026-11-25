@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoginResponse } from '@smartsite/api-client';
 import { ApiError } from '@smartsite/api-client';
+import i18n, { LANGUAGE_STORAGE_KEY } from '../../i18n';
 import { PpeMonitorWorkspace } from './PpeMonitorWorkspace';
 
 const state = vi.hoisted(() => ({ sites: vi.fn(), cameras: vi.fn() }));
@@ -384,4 +385,237 @@ it('moving from toolbar into Focus reaches the viewer and returning reaches the 
   );
   fireEvent.click(screen.getByTestId('focused-exit-to-grid'));
   await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('monitor-grid-btn')));
+});
+
+describe('linked camera setup recovery and distinct loading/error/auth boundaries', () => {
+  const inactiveCamera = {
+    ...camera,
+    id: '4772d181-1111-4111-8111-4772d1810001',
+    code: 'CAM1',
+    name: 'Site Yard Cam 1',
+    status: 'INACTIVE',
+  };
+
+  beforeEach(async () => {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, 'en');
+    await i18n.changeLanguage('en');
+  });
+
+  afterEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
+  it('offers a site- and camera-scoped Camera Setup recovery link for a verified inactive camera on the authorized Site for SITE_MANAGER (EN/VI) while keeping SAFETY_OFFICER read-only', async () => {
+    entry = `/ppe?siteId=${site}&cameraId=${inactiveCamera.id}`;
+    state.cameras.mockResolvedValue({ items: [inactiveCamera], total: 1 });
+
+    const { unmount } = render(
+      <PpeMonitorWorkspace
+        apiUrl="https://backend.example"
+        session={session('manager-tok', 'SITE_MANAGER')}
+        aiPaused
+      />,
+      { wrapper },
+    );
+
+    const card = await screen.findByTestId('monitor-linked-camera-empty');
+    expect(card.textContent).toContain('The linked camera is unavailable.');
+    expect(card.textContent).toMatch(/disabled in configuration/i);
+
+    const setupLink = within(card).getByTestId('monitor-linked-camera-setup-link');
+    expect(setupLink.getAttribute('href')).toBe(
+      `/camera-setup?siteId=${encodeURIComponent(site)}&cameraId=${encodeURIComponent(inactiveCamera.id)}`,
+    );
+
+    // Vietnamese copy parity
+    await i18n.changeLanguage('vi');
+    await waitFor(() => {
+      expect(card.textContent).toContain('Camera trong liên kết không khả dụng.');
+      expect(card.textContent).toContain('Camera này đang tắt trong cấu hình.');
+      expect(setupLink.textContent).toContain('Xem Thiết lập Camera');
+    });
+
+    // Safety Officer stays read-only: no Camera Setup recovery link (no new role grants)
+    unmount();
+    query.clear();
+    await i18n.changeLanguage('en');
+
+    render(
+      <PpeMonitorWorkspace
+        apiUrl="https://backend.example"
+        session={session('officer-tok', 'SAFETY_OFFICER')}
+        aiPaused
+      />,
+      { wrapper },
+    );
+
+    const officerCard = await screen.findByTestId('monitor-linked-camera-empty');
+    expect(officerCard.textContent).toMatch(/Site Manager/i);
+    expect(within(officerCard).queryByTestId('monitor-linked-camera-setup-link')).toBeNull();
+    expect(screen.queryByRole('link', { name: /Camera Setup|Thiết lập Camera/i })).toBeNull();
+  });
+
+  it('strips unknown or foreign cameraId from the Camera Setup recovery link while preserving authorized siteId and active camera fallback', async () => {
+    const foreignCameraId = '99999999-9999-4999-8999-999999999999';
+    const otherSiteId = '88888888-8888-4888-8888-888888888888';
+    entry = `/ppe?siteId=${site}&cameraId=${foreignCameraId}`;
+    // Even if a foreign-site row were present in payload, siteCameras filters it out and never propagates its ID.
+    state.cameras.mockResolvedValue({
+      items: [camera, { ...inactiveCamera, id: foreignCameraId, siteId: otherSiteId }],
+      total: 2,
+    });
+
+    render(
+      <PpeMonitorWorkspace
+        apiUrl="https://backend.example"
+        session={session('manager-tok', 'SITE_MANAGER')}
+        aiPaused
+      />,
+      { wrapper },
+    );
+
+    const card = await screen.findByTestId('monitor-linked-camera-empty');
+    const setupLink = within(card).getByTestId('monitor-linked-camera-setup-link');
+    expect(setupLink.getAttribute('href')).toBe(`/camera-setup?siteId=${encodeURIComponent(site)}`);
+    expect(setupLink.getAttribute('href')).not.toContain(foreignCameraId);
+
+    // Active site camera fallback button remains available alongside the recovery link
+    expect(within(card).getByTestId('monitor-clear-linked-camera')).toBeTruthy();
+  });
+
+  it('does not render a Camera Setup recovery link when there is no authorized selected Site', async () => {
+    const unassignedSite = '77777777-7777-4777-8777-777777777777';
+    entry = `/ppe?siteId=${unassignedSite}&cameraId=${inactiveCamera.id}`;
+    state.sites.mockResolvedValue({ items: [], total: 0 });
+
+    render(
+      <PpeMonitorWorkspace
+        apiUrl="https://backend.example"
+        session={session('manager-tok', 'SITE_MANAGER')}
+        aiPaused
+      />,
+      { wrapper },
+    );
+
+    expect(await screen.findByText('The linked site is unavailable.')).toBeTruthy();
+    expect(screen.queryByTestId('monitor-linked-camera-empty')).toBeNull();
+    expect(screen.queryByTestId('monitor-linked-camera-setup-link')).toBeNull();
+    expect(screen.queryByTestId('monitor-inspect-camera-setup')).toBeNull();
+    expect(state.cameras).not.toHaveBeenCalled();
+  });
+
+  it('keeps loading, 403 auth denial, and 503 metadata errors distinct without mislabelling them as empty or showing a Camera Setup link', async () => {
+    entry = `/ppe?siteId=${site}&cameraId=${inactiveCamera.id}`;
+
+    // 1) Loading state while camera list is pending
+    let resolveCameras!: (value: { items: (typeof camera)[]; total: number }) => void;
+    state.cameras.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCameras = resolve;
+        }),
+    );
+
+    const { unmount } = render(
+      <PpeMonitorWorkspace
+        apiUrl="https://backend.example"
+        session={session('manager-tok', 'SITE_MANAGER')}
+        aiPaused
+      />,
+      { wrapper },
+    );
+
+    expect(await screen.findByTestId('monitor-catalog-status')).toBeTruthy();
+    expect(screen.getByTestId('monitor-catalog-status').textContent).toContain('Loading…');
+    expect(screen.queryByTestId('monitor-linked-camera-empty')).toBeNull();
+    expect(screen.queryByTestId('monitor-linked-camera-setup-link')).toBeNull();
+
+    resolveCameras({ items: [inactiveCamera], total: 1 });
+    expect(await screen.findByTestId('monitor-linked-camera-setup-link')).toBeTruthy();
+    unmount();
+    query.clear();
+
+    // 2) 403 auth denial on camera fetch -> role="alert" denied notice, NOT empty/unavailable
+    state.cameras.mockRejectedValueOnce(new ApiError('http', 'Forbidden', 403));
+    const deniedView = render(
+      <PpeMonitorWorkspace
+        apiUrl="https://backend.example"
+        session={session('manager-tok', 'SITE_MANAGER')}
+        aiPaused
+      />,
+      { wrapper },
+    );
+
+    const authAlert = await screen.findByTestId('monitor-camera-auth-error');
+    expect(authAlert.getAttribute('role')).toBe('alert');
+    expect(screen.queryByTestId('monitor-linked-camera-empty')).toBeNull();
+    expect(screen.queryByTestId('monitor-linked-camera-setup-link')).toBeNull();
+    expect(screen.queryByTestId('monitor-no-active-cameras')).toBeNull();
+    deniedView.unmount();
+    query.clear();
+
+    // 3) 503 metadata error on camera fetch -> role="alert" with Retry, NOT empty/unavailable, recovers on Retry
+    state.cameras
+      .mockRejectedValueOnce(new ApiError('http', 'Service Unavailable', 503))
+      .mockResolvedValueOnce({ items: [inactiveCamera], total: 1 });
+
+    render(
+      <PpeMonitorWorkspace
+        apiUrl="https://backend.example"
+        session={session('manager-tok', 'SITE_MANAGER')}
+        aiPaused
+      />,
+      { wrapper },
+    );
+
+    const errorAlert = await screen.findByRole('alert');
+    expect(errorAlert.textContent).toContain('Could not load preview cameras for this site.');
+    expect(screen.queryByTestId('monitor-linked-camera-empty')).toBeNull();
+    expect(screen.queryByTestId('monitor-linked-camera-setup-link')).toBeNull();
+
+    fireEvent.click(within(errorAlert).getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByTestId('monitor-linked-camera-setup-link')).toBeTruthy();
+  });
+
+  it('suppresses the Camera Setup recovery link when parent Site metadata fails on a retained next-page 503 or a 403/503 refetch after an inactive camera deep link loaded', async () => {
+    entry = `/ppe?siteId=${site}&cameraId=${inactiveCamera.id}`;
+    const firstSitePage = [
+      { id: site, name: 'Site A', code: 'A' },
+      ...Array.from({ length: 19 }, (_, i) => ({
+        id: `11111111-1111-4111-8111-${String(i + 2).padStart(12, '0')}`,
+        name: `Other Site ${i + 2}`,
+        code: `S${i + 2}`,
+      })),
+    ];
+    state.sites
+      .mockResolvedValueOnce({ items: firstSitePage, total: 21 })
+      .mockRejectedValueOnce(new ApiError('http', 'Service Unavailable', 503))
+      .mockRejectedValueOnce(new ApiError('http', 'Forbidden', 403));
+    state.cameras.mockResolvedValue({ items: [inactiveCamera], total: 1 });
+
+    render(
+      <PpeMonitorWorkspace
+        apiUrl="https://backend.example"
+        session={session('manager-tok', 'SITE_MANAGER')}
+        aiPaused
+      />,
+      { wrapper },
+    );
+
+    // 1) Initial load succeeds -> recovery CTA is offered for verified inactive camera
+    expect(await screen.findByTestId('monitor-linked-camera-setup-link')).toBeTruthy();
+
+    // 2) Next-page Site metadata fetch fails 503 -> useMonitorPages retains sites.rows, but recovery CTA MUST be suppressed
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    await screen.findByRole('button', { name: 'Retry' });
+    expect(screen.getByTestId('monitor-linked-camera-empty')).toBeTruthy();
+    expect(screen.queryByTestId('monitor-linked-camera-setup-link')).toBeNull();
+
+    // 3) Retry next-page fails 403 -> useMonitorPages purges sites.rows and shows auth denial with zero recovery CTA
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    const siteAuthAlert = await screen.findByTestId('monitor-site-auth-error');
+    expect(siteAuthAlert.getAttribute('role')).toBe('alert');
+    expect(screen.queryByTestId('monitor-linked-camera-empty')).toBeNull();
+    expect(screen.queryByTestId('monitor-linked-camera-setup-link')).toBeNull();
+  });
 });

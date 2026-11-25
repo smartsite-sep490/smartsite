@@ -1472,6 +1472,8 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
             startsAt: new Date('2026-09-01T13:00:00Z'),
             endsAt: new Date('2026-09-01T14:00:00Z'),
           });
+          // PostgreSQL's DEFAULT now() does not follow the mocked JavaScript Date.
+          const createdAt = new Date(workDate + 'T07:00:00+07:00');
           const target = await dataSource.getRepository(WorkerScheduleEntity).save({
             id: randomUUID(),
             siteId,
@@ -1480,7 +1482,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
             scheduleVersionId: version.id,
             workDate,
             isActive: true,
-            createdAt: new Date(`${workDate}T00:00:00Z`),
+            createdAt,
           });
           await dataSource.getRepository(WorkerScheduleEntity).save({
             id: randomUUID(),
@@ -1490,7 +1492,7 @@ test('MF03: interval totals, missing checkout, notifications, approvals, scope a
             scheduleVersionId: version.id,
             workDate,
             isActive: true,
-            createdAt: new Date(`${workDate}T00:00:00Z`),
+            createdAt,
           });
           return target;
         }

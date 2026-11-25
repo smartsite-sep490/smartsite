@@ -1536,7 +1536,10 @@
     "correctionNumber": "Request {{index}}",
     "proposedTimes": "Proposed times",
     "reviewNote": "Review note",
-    "sessionTimeHint": "Entry and exit show the gate session times. Counted hours are limited to the shift and follow break and exit policies; see the confirmed or provisional total above."
+    "sessionTimeHint": "Entry and exit show the gate session times. Counted hours are limited to the shift and follow break and exit policies; see the confirmed or provisional total above.",
+    "reviewReasons": "{{count}} items to review",
+    "reviewHint": "Hours are confirmed after the records are reconciled.",
+    "missingShifts": "{{count}} shifts without attendance"
   },
   "scheduleDay": {
     "title": "Workday details",
@@ -1717,5 +1720,16 @@
     "declineHint": "A reason of at least 5 characters is required only when declining.",
     "swapConfirmed": "You agreed to the swap. The contractor will review the request.",
     "swapDeclined": "You declined the swap invitation."
+  },
+  "profileFace": {
+    "title": "Face recognition",
+    "subtitle": "Recognition status",
+    "ACTIVE": "Active",
+    "NOT_ENROLLED": "Not enrolled",
+    "REVOKED": "Revoked",
+    "NEEDS_REENROLL": "Re-enroll needed",
+    "DELETED": "Deleted",
+    "loading": "Checking",
+    "unavailable": "Unavailable"
   }
 }

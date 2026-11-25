@@ -210,6 +210,7 @@ import type {
   FaceEnrollmentSessionResponse,
   FaceEnrollmentQualityResponse,
   FaceProfileResponse,
+  WorkerFaceStatusResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,
   ZoneEntryDecisionResponse,
@@ -2198,7 +2199,7 @@ export class SmartSiteManagementClient {
     options: TrackedEpisodeObservationOptions = {},
     requestOptions?: RequestOptions,
   ): Promise<TrackedEpisodeObservationPage> {
-    const allowed = ['offset', 'limit', 'throughSequence', 'alertId'];
+    const allowed = ['offset', 'limit', 'throughSequence', 'alertId', 'includeObservedPpe'];
     if (
       !options ||
       Object.keys(options).some((k) => !allowed.includes(k)) ||
@@ -2212,12 +2213,19 @@ export class SmartSiteManagementClient {
           options.limit < 1 ||
           options.limit > 20)) ||
       (options.throughSequence !== undefined && typeof options.throughSequence !== 'string') ||
-      (options.alertId !== undefined && typeof options.alertId !== 'string')
+      (options.alertId !== undefined && typeof options.alertId !== 'string') ||
+      (options.includeObservedPpe !== undefined && options.includeObservedPpe !== true)
     )
       throw new ApiError('invalid-response', 'Invalid tracked history request.');
     const query = new URLSearchParams(),
       raw: Record<string, string> = {};
-    for (const key of ['offset', 'limit', 'throughSequence', 'alertId'] as const)
+    for (const key of [
+      'offset',
+      'limit',
+      'throughSequence',
+      'alertId',
+      'includeObservedPpe',
+    ] as const)
       if (options[key] !== undefined) raw[key] = String(options[key]);
     const parsed = parseTrackedEpisodeObservationQuery(raw);
     if (!parsed) throw new ApiError('invalid-response', 'Invalid tracked history request.');
@@ -3206,6 +3214,13 @@ export class SmartSiteManagementClient {
     return this.request<FaceProfileResponse>(
       'POST',
       `/face-enrollments/${pathId(sessionId)}/complete`,
+      token,
+    );
+  }
+  myWorkerFaceStatus(token: string, siteId: string) {
+    return this.request<WorkerFaceStatusResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/workers/me/face-status`,
       token,
     );
   }

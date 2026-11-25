@@ -18,6 +18,10 @@ export const MONITOR_READABILITY_EN = {
   'monitor.clearLinkedCamera': 'Show available site cameras',
   'monitor.linkedCameraHint':
     'The requested camera may be disabled in configuration or belong to another site.',
+  'monitor.linkedCameraInactiveHint':
+    'This camera is disabled in configuration. Open Camera Setup to enable or configure it.',
+  'monitor.linkedCameraInactiveOfficerHint':
+    'This camera is disabled in configuration. Ask the assigned Site Manager to enable it.',
   'monitor.emptyInactiveHint':
     '{inactive} camera(s) in loaded pages are saved as Disabled in configuration.',
   'monitor.emptyOfficerHint':
@@ -83,6 +87,10 @@ export const MONITOR_READABILITY_VI: Record<MonitorReadabilityKey, string> = {
   'monitor.clearLinkedCamera': 'Xem các camera khả dụng của công trường',
   'monitor.linkedCameraHint':
     'Camera trong liên kết có thể đang tắt trong cấu hình hoặc thuộc công trường khác.',
+  'monitor.linkedCameraInactiveHint':
+    'Camera này đang tắt trong cấu hình. Mở Thiết lập Camera để bật hoặc cấu hình.',
+  'monitor.linkedCameraInactiveOfficerHint':
+    'Camera này đang tắt trong cấu hình. Liên hệ Quản lý công trường được phân công để bật camera.',
   'monitor.emptyInactiveHint':
     'Có {inactive} camera trong trang đã tải đang ở trạng thái Đang tắt trong cấu hình.',
   'monitor.emptyOfficerHint':

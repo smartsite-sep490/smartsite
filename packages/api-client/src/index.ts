@@ -69,6 +69,7 @@ export type {
   FaceEnrollmentSessionResponse,
   FaceEnrollmentSessionStatus,
   FaceProfileResponse,
+  WorkerFaceStatusResponse,
   ZoneResponse,
   ZoneAccessEffect,
   ZoneAccessGrantResponse,

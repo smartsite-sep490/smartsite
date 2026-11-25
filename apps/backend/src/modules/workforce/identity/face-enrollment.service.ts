@@ -1,5 +1,5 @@
 import { createHash, randomUUID, randomBytes } from 'node:crypto';
-import type { EnrollmentCaptureTarget } from '@smartsite/contracts';
+import type { EnrollmentCaptureTarget, WorkerFaceStatusResponse } from '@smartsite/contracts';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { IsNotEmpty, IsString, MaxLength, Matches, Equals } from 'class-validator';
 import { DataSource, In, IsNull, MoreThan, Not, type EntityManager } from 'typeorm';
@@ -7,7 +7,8 @@ import { command, conflict, missing, uuid } from '../../../common/configuration/
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { UserEntity, UserRole } from '../../../database/entities/user.entity.js';
 import { UserRoleAssignmentEntity } from '../../../database/entities/user-role-assignment.entity.js';
-import type { WorkerEntity } from '../../../database/entities/worker.entity.js';
+import { WorkerEntity } from '../../../database/entities/worker.entity.js';
+import { requireSiteRole } from '../access/qr-access.service.js';
 import {
   FaceEnrollmentSessionEntity,
   FaceEnrollmentSessionStatus,
@@ -176,6 +177,23 @@ export class FaceEnrollmentService {
         await manager.getRepository(FaceEnrollmentSessionEntity).save(session);
       }
       return session;
+    });
+  }
+
+  async ownStatus(actor: WorkforceActor, siteId: string): Promise<WorkerFaceStatusResponse> {
+    requireSiteRole(actor, siteId, [UserRole.WORKER]);
+    return this.dataSource.transaction(async (manager) => {
+      const worker = await manager.getRepository(WorkerEntity).findOne({
+        where: { siteId, userId: actor.id },
+        select: { id: true },
+      });
+      if (!worker) missing();
+      const profile = await manager.getRepository(FaceProfileEntity).findOne({
+        where: { workerId: worker.id },
+        select: { status: true },
+        order: { createdAt: 'DESC', id: 'DESC' },
+      });
+      return { status: profile?.status ?? 'NOT_ENROLLED' };
     });
   }
 

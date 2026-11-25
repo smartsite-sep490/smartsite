@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import type { DataSource, EntityManager } from 'typeorm';
 import type {
   TrackedEpisodeDetail,
+  TrackedEpisodeOriginalObservation,
   TrackedObservationIdentity,
   TrackedObservationIdentityCard,
   TrackedEpisodeObservationOptions,
@@ -193,7 +194,12 @@ export class TrackedEpisodeFrameQuery {
       return result;
     });
   }
-  private async qualify(manager: EntityManager, e: Scope, row: Mapping) {
+  private async qualify(
+    manager: EntityManager,
+    e: Scope,
+    row: Mapping,
+    includeObservedPpe = false,
+  ) {
     if (
       !isStoredTrackedPayloadValid(row.rawPayload) ||
       computeCanonicalPayloadHash(row.rawPayload) !== row.payloadHash ||
@@ -272,6 +278,7 @@ export class TrackedEpisodeFrameQuery {
     });
     if (!bundle) conflict('Tracked evidence configuration is unavailable');
     let observationIndexes: number[];
+    let observedPpe: TrackedEpisodeOriginalObservation['observedPpe'];
     if (row.alertType === 'RESTRICTED_ZONE_INTRUSION') {
       observationIndexes = await readTrackedZoneFindingIndexes(this.db, manager, {
         siteId: e.siteId,
@@ -321,6 +328,16 @@ export class TrackedEpisodeFrameQuery {
           if (!context) conflict('Tracked evidence region is unavailable');
           contexts.set(key, context);
         }
+      }
+      if (includeObservedPpe) {
+        const seen = new Set<string>();
+        observedPpe = raw.observations.flatMap((o) => {
+          if (o.type !== 'PPE' || o.trackId !== person.trackId) return [];
+          const key = `${o.ppeItem}:${o.status}`;
+          if (seen.has(key)) return [];
+          seen.add(key);
+          return [{ ppeItem: o.ppeItem, status: o.status }];
+        });
       }
       const candidate = new AlertCandidateEvaluator()
         .evaluate(
@@ -373,6 +390,7 @@ export class TrackedEpisodeFrameQuery {
         capturedAt: raw.capturedAt,
         observationIndexes,
         frames,
+        ...(observedPpe === undefined ? {} : { observedPpe }),
       },
     };
   }
@@ -388,14 +406,15 @@ export class TrackedEpisodeFrameQuery {
       limit = options.limit ?? 20;
     if (
       Object.keys(options).some(
-        (k) => !['offset', 'limit', 'throughSequence', 'alertId'].includes(k),
+        (k) => !['offset', 'limit', 'throughSequence', 'alertId', 'includeObservedPpe'].includes(k),
       ) ||
       !Number.isSafeInteger(offset) ||
       offset < 0 ||
       !Number.isSafeInteger(limit) ||
       limit < 1 ||
       limit > 20 ||
-      (options.throughSequence !== undefined && !sequence(options.throughSequence))
+      (options.throughSequence !== undefined && !sequence(options.throughSequence)) ||
+      (options.includeObservedPpe !== undefined && options.includeObservedPpe !== true)
     )
       invalid();
     const alert = options.alertId === undefined ? null : uuid(options.alertId).toLowerCase(),
@@ -432,7 +451,8 @@ export class TrackedEpisodeFrameQuery {
         [...params, offset, limit],
       );
       const items = [];
-      for (const row of rows) items.push((await this.qualify(manager, e, row)).item);
+      for (const row of rows)
+        items.push((await this.qualify(manager, e, row, options.includeObservedPpe === true)).item);
       return {
         episodeId: id,
         contentRevision: e.contentRevision,

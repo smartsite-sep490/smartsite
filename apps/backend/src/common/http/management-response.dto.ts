@@ -178,6 +178,11 @@ export class RegionPageResponseDto {
   @ApiProperty() total!: number;
 }
 
+export class WorkerFaceStatusResponseDto {
+  @ApiProperty({ enum: ['NOT_ENROLLED', 'ACTIVE', 'REVOKED', 'NEEDS_REENROLL', 'DELETED'] })
+  status!: import('@smartsite/contracts').WorkerFaceStatusResponse['status'];
+}
+
 export class WorkerResponseDto {
   @ApiProperty({ format: 'uuid' }) id!: string;
   @ApiProperty({ format: 'uuid' }) siteId!: string;

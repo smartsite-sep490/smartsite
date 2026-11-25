@@ -9,7 +9,9 @@ import {
 } from '../../src/modules/workforce/identity/safety-face-receipt-store.js';
 import { SafetyFaceProfileMetadataReader } from '../../src/modules/workforce/safety-face-profile.reader.js';
 
-test('trusted Face receipts append idempotently without implicit enrollment consent or cross-Site grants', async () => {
+test('trusted Face receipts append idempotently without implicit enrollment consent or cross-Site grants', async (t) => {
+  // Keep JS Date behind PostgreSQL so fixture receipt timestamps must come from the DB clock.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2024, 0, 1, 0, 0, 0) });
   const owned = createIsolatedTestDatabase(),
     db = owned.dataSource;
   try {
@@ -17,7 +19,8 @@ test('trusted Face receipts append idempotently without implicit enrollment cons
     const siteId = randomUUID(),
       workerId = randomUUID(),
       profileId = randomUUID(),
-      actorUserId = randomUUID();
+      actorUserId = randomUUID(),
+      enrollmentConsentedAt = '2025-01-01T00:00:00.000Z';
     await db.query('INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,$1::uuid::text)', [
       siteId,
     ]);
@@ -30,12 +33,40 @@ test('trusted Face receipts append idempotently without implicit enrollment cons
       [workerId, siteId],
     );
     await db.query(
-      "INSERT INTO face_profile(id,worker_id,encrypted_template,profile_reference_hash,model_version,status,consent_version,consented_at,created_by_user_id,consent_method) VALUES($1,$2,$3,$4,'synthetic-v1','ACTIVE','enrollment-v1',statement_timestamp(),$5,'SUPERVISED_WORKER_CONFIRMATION')",
-      [profileId, workerId, 'x'.repeat(128), 'a'.repeat(64), actorUserId],
+      "INSERT INTO face_profile(id,worker_id,encrypted_template,profile_reference_hash,model_version,status,consent_version,consented_at,created_by_user_id,consent_method) VALUES($1,$2,$3,$4,'synthetic-v1','ACTIVE','enrollment-v1',$6::timestamptz,$5,'SUPERVISED_WORKER_CONFIRMATION')",
+      [profileId, workerId, 'x'.repeat(128), 'a'.repeat(64), actorUserId, enrollmentConsentedAt],
     );
     const [{ safety_revision: profileRevision }] = await db.query(
       'SELECT safety_revision FROM face_profile WHERE id=$1',
       [profileId],
+    );
+    const [clock] = await db.query<
+      Array<{
+        grantAt: string;
+        revokeAt: string;
+        nextGrantAt: string;
+        profileRevokedAt: string;
+        laterRevocationAt: string;
+      }>
+    >(
+      `WITH anchor AS (
+         SELECT date_trunc('milliseconds', statement_timestamp() AT TIME ZONE 'UTC') AS now_utc
+       )
+       SELECT
+         to_char(now_utc - interval '4 seconds', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "grantAt",
+         to_char(now_utc - interval '3 seconds', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "revokeAt",
+         to_char(now_utc - interval '2 seconds', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "nextGrantAt",
+         to_char(now_utc - interval '1 second', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "profileRevokedAt",
+         to_char(now_utc, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "laterRevocationAt"
+       FROM anchor`,
+    );
+    assert.ok(clock, 'Expected PostgreSQL millisecond receipt timestamps');
+    assert.ok(
+      enrollmentConsentedAt < clock.grantAt &&
+        clock.grantAt < clock.revokeAt &&
+        clock.revokeAt < clock.nextGrantAt &&
+        clock.nextGrantAt < clock.profileRevokedAt &&
+        clock.profileRevokedAt < clock.laterRevocationAt,
     );
     const input = {
       siteId,
@@ -45,7 +76,7 @@ test('trusted Face receipts append idempotently without implicit enrollment cons
       actorUserId,
       sourceRecordId: randomUUID(),
       sourceRecordHash: 'b'.repeat(64),
-      occurredAt: new Date().toISOString(),
+      occurredAt: clock.grantAt,
       consentVersion: 'synthetic-safety-v1',
       purpose: 'SAFETY_MF06' as const,
     };
@@ -89,7 +120,7 @@ test('trusted Face receipts append idempotently without implicit enrollment cons
       actorUserId,
       sourceRecordId: randomUUID(),
       sourceRecordHash: 'd'.repeat(64),
-      occurredAt: new Date().toISOString(),
+      occurredAt: clock.revokeAt,
     };
     await assert.rejects(
       db.transaction((tx) => appendSafetyFaceRevocation(tx, { ...revoke, siteId: randomUUID() })),
@@ -118,7 +149,7 @@ test('trusted Face receipts append idempotently without implicit enrollment cons
     const nextGrant = {
       ...input,
       sourceRecordId: randomUUID(),
-      occurredAt: new Date().toISOString(),
+      occurredAt: clock.nextGrantAt,
     };
     const simultaneous = await Promise.all(
       Array.from({ length: 4 }, () => db.transaction((tx) => appendSafetyFaceGrant(tx, nextGrant))),
@@ -127,14 +158,14 @@ test('trusted Face receipts append idempotently without implicit enrollment cons
     assert.equal(simultaneous.filter((result) => !result.replayed).length, 1);
     assert.equal((await db.query('SELECT count(*)::int n FROM safety_face_consent'))[0].n, 2);
     await db.query(
-      "UPDATE face_profile SET status='REVOKED',revoked_at=statement_timestamp() WHERE id=$1",
-      [profileId],
+      "UPDATE face_profile SET status='REVOKED',revoked_at=$2::timestamptz WHERE id=$1",
+      [profileId, clock.profileRevokedAt],
     );
     const laterRevocation = {
       ...revoke,
       consentId: simultaneous[0]!.id,
       sourceRecordId: randomUUID(),
-      occurredAt: new Date().toISOString(),
+      occurredAt: clock.laterRevocationAt,
     };
     assert.equal(
       (await db.transaction((tx) => appendSafetyFaceRevocation(tx, laterRevocation))).replayed,

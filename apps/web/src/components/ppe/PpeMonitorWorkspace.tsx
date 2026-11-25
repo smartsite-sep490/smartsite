@@ -245,14 +245,30 @@ function MonitorScope({
     </label>
   );
 
+  const siteAuthDenied =
+    sites.isError &&
+    sites.error instanceof ApiError &&
+    [401, 403].includes(sites.error.status ?? 0);
+
   const siteNotices = (
     <>
       {sites.isPending ? (
         <p role="status" className="w-full text-sm text-slate-600">
           {t('monitor.loading')}
         </p>
+      ) : siteAuthDenied ? (
+        <div
+          role="alert"
+          data-testid="monitor-site-auth-error"
+          className="w-full rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-sm font-medium text-amber-950"
+        >
+          {t('monitor.denied')}
+        </div>
       ) : sites.isError && !sites.isFetchNextPageError ? (
-        <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-sm text-rose-900">
+        <div
+          role="alert"
+          className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-sm text-rose-900"
+        >
           <span>{trMonitor('monitor.siteErrorDetail')}</span>
           <button
             type="button"
@@ -283,7 +299,7 @@ function MonitorScope({
           {t('monitor.emptySite')}
         </p>
       ) : null}
-      {sites.hasNextPage && (
+      {!siteAuthDenied && sites.hasNextPage && (
         <button
           type="button"
           className="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
@@ -343,6 +359,7 @@ function MonitorScope({
           canManageCameras={session.user.roleAssignments.some(
             (r) => r.role === 'SITE_MANAGER' && r.siteId === site.id,
           )}
+          isSiteMetadataError={sites.isError}
           canViewSafetyRecords={canViewSafetyRecords}
           linkedCameraId={site.id === linkedSiteId ? linkedCameraId : ''}
           onSyncCameraUrl={syncMonitorSelection}
@@ -368,6 +385,7 @@ function CameraScope({
   siteSelector,
   siteNotices,
   canManageCameras,
+  isSiteMetadataError,
   canViewSafetyRecords,
   linkedCameraId,
   onSyncCameraUrl,
@@ -378,6 +396,7 @@ function CameraScope({
   siteSelector: ReactNode;
   siteNotices: ReactNode;
   canManageCameras: boolean;
+  isSiteMetadataError: boolean;
   canViewSafetyRecords: boolean;
   linkedCameraId: string;
   onSyncCameraUrl: (nextSiteId: string, nextCameraId?: string) => void;
@@ -547,6 +566,18 @@ function CameraScope({
   const siteCameras = cameras.rows.filter((row) => row.siteId === site.id);
   const active = siteCameras.filter((row) => row.status === 'ACTIVE');
   const inactiveCount = siteCameras.filter((row) => row.status !== 'ACTIVE').length;
+  const verifiedLinkedCamera =
+    linkedCameraId && chosen === linkedCameraId
+      ? siteCameras.find((row) => row.id === linkedCameraId)
+      : undefined;
+  const cameraAuthDenied =
+    cameras.isError &&
+    cameras.error instanceof ApiError &&
+    [401, 403].includes(cameras.error.status ?? 0);
+  const canOfferSetupRecovery = canManageCameras && !isSiteMetadataError;
+  const linkedCameraSetupHref = verifiedLinkedCamera
+    ? `/camera-setup?siteId=${encodeURIComponent(site.id)}&cameraId=${encodeURIComponent(verifiedLinkedCamera.id)}`
+    : `/camera-setup?siteId=${encodeURIComponent(site.id)}`;
   const selected =
     active.find((row) => row.id === chosen) ??
     (linkedCameraId && chosen === linkedCameraId ? undefined : active[0]);
@@ -741,45 +772,78 @@ function CameraScope({
             {t('monitor.paused')}
           </p>
         )}
-        {cameras.isError && !cameras.isFetchNextPageError && (
-          <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-900">
-            <span>{trMonitor('monitor.cameraErrorDetail')}</span>
-            <button
-              type="button"
-              className="inline-flex min-h-8 items-center rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-100 cursor-pointer"
-              onClick={() => void cameras.refetch()}
-            >
-              {t('monitor.retry')}
-            </button>
+        {cameraAuthDenied ? (
+          <div
+            role="alert"
+            data-testid="monitor-camera-auth-error"
+            className="w-full rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm font-medium text-amber-950"
+          >
+            {t('monitor.denied')}
           </div>
+        ) : (
+          cameras.isError &&
+          !cameras.isFetchNextPageError && (
+            <div
+              role="alert"
+              className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-900"
+            >
+              <span>{trMonitor('monitor.cameraErrorDetail')}</span>
+              <button
+                type="button"
+                className="inline-flex min-h-8 items-center rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-900 hover:bg-rose-100 cursor-pointer"
+                onClick={() => void cameras.refetch()}
+              >
+                {t('monitor.retry')}
+              </button>
+            </div>
+          )
         )}
         {linkedCameraId &&
           chosen === linkedCameraId &&
           !selected &&
           !cameras.isPending &&
           !cameras.isError &&
-          !cameras.hasNextPage && (
+          (Boolean(verifiedLinkedCamera) || !cameras.hasNextPage) && (
             <div
               data-testid="monitor-linked-camera-empty"
               className="flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-950"
             >
-              <div className="space-y-0.5">
+              <div className="min-w-0 flex-1 space-y-0.5">
                 <p role="status" className="font-semibold">
                   {t('monitor.linkedCameraUnavailable')}
                 </p>
                 <p className="text-xs sm:text-sm text-amber-900/80">
-                  {trMonitor('monitor.linkedCameraHint')}
+                  {verifiedLinkedCamera
+                    ? trMonitor(
+                        canOfferSetupRecovery
+                          ? 'monitor.linkedCameraInactiveHint'
+                          : 'monitor.linkedCameraInactiveOfficerHint',
+                      )
+                    : trMonitor('monitor.linkedCameraHint')}
                 </p>
               </div>
-              {active.length > 0 && (
-                <button
-                  type="button"
-                  data-testid="monitor-clear-linked-camera"
-                  className="inline-flex min-h-9 items-center rounded-lg border border-amber-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer"
-                  onClick={() => selectCamera(active[0]!.id)}
-                >
-                  {trMonitor('monitor.clearLinkedCamera')}
-                </button>
+              {(canOfferSetupRecovery || active.length > 0) && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {canOfferSetupRecovery && (
+                    <Link
+                      data-testid="monitor-linked-camera-setup-link"
+                      className="inline-flex min-h-9 items-center rounded-lg border border-amber-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-900"
+                      to={linkedCameraSetupHref}
+                    >
+                      {trMonitor('monitor.openCameraSetup')}
+                    </Link>
+                  )}
+                  {active.length > 0 && (
+                    <button
+                      type="button"
+                      data-testid="monitor-clear-linked-camera"
+                      className="inline-flex min-h-9 items-center rounded-lg border border-amber-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-900 cursor-pointer"
+                      onClick={() => selectCamera(active[0]!.id)}
+                    >
+                      {trMonitor('monitor.clearLinkedCamera')}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -800,10 +864,10 @@ function CameraScope({
               <p className="text-xs sm:text-sm text-slate-600">
                 {trMonitor('monitor.emptyOfficerHint')}
               </p>
-              {canManageCameras && (
+              {canOfferSetupRecovery && (
                 <Link
                   data-testid="monitor-inspect-camera-setup"
-                  className="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100"
+                  className="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
                   to={`/camera-setup?siteId=${encodeURIComponent(site.id)}`}
                 >
                   {trMonitor('monitor.openCameraSetup')}
@@ -812,7 +876,7 @@ function CameraScope({
             </div>
           </div>
         )}
-        {cameras.hasNextPage && (
+        {!cameraAuthDenied && cameras.hasNextPage && (
           <button
             type="button"
             className="inline-flex min-h-9 items-center rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
