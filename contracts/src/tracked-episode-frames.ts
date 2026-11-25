@@ -1,4 +1,5 @@
 import type { SafetyAlertStatus, SafetyAlertType } from './management-api.js';
+import { PPE_FAMILY_CATALOG, type PpeFamily } from './ppe-items.js';
 import {
   parseObservationIdentitySubjectRef,
   parseObservationIdentityDecisionResponse,
@@ -46,6 +47,8 @@ export interface TrackedEpisodeDetail {
 
 /** Additive transport contract. The internal tracked reader is not registered by this module. */
 export interface TrackedEpisodeObservationOptions {
+  /** Explicit opt-in preserves the response shape consumed by older strict clients. */
+  includeObservedPpe?: true;
   offset?: number;
   limit?: number;
   /** Keep the first page's exact upper fence for subsequent pages; never convert to Number. */
@@ -53,6 +56,8 @@ export interface TrackedEpisodeObservationOptions {
   alertId?: string;
 }
 export interface TrackedEpisodeOriginalObservation {
+  /** Technical evidence only; presence does not prove fit, compliance or anchorage. */
+  observedPpe?: { ppeItem: PpeFamily; status: 'PRESENT' | 'MISSING' }[];
   alertId: string;
   eventId: string;
   personObservationIndex: number;
@@ -114,9 +119,19 @@ export function parseTrackedEpisodeObservationQuery(
   input: unknown,
 ): TrackedEpisodeObservationOptions | null {
   try {
-    const value = fields(input, ['offset', 'limit', 'throughSequence', 'alertId']);
+    const value = fields(input, [
+      'offset',
+      'limit',
+      'throughSequence',
+      'alertId',
+      'includeObservedPpe',
+    ]);
     if (!value) return null;
     const result: TrackedEpisodeObservationOptions = {};
+    if (value.includeObservedPpe !== undefined) {
+      if (value.includeObservedPpe !== 'true') return null;
+      result.includeObservedPpe = true;
+    }
     if (value.offset !== undefined) {
       const n = integer(value.offset, Number.MAX_SAFE_INTEGER);
       if (n === null) return null;
@@ -170,7 +185,11 @@ export function parseTrackedEpisodeMediaQuery(input: unknown): TrackedEpisodeMed
   }
 }
 
-function objectFields(input: unknown, keys: readonly string[]): Record<string, unknown> | null {
+function objectFields(
+  input: unknown,
+  keys: readonly string[],
+  optional: readonly string[] = [],
+): Record<string, unknown> | null {
   if (
     !input ||
     typeof input !== 'object' ||
@@ -179,15 +198,15 @@ function objectFields(input: unknown, keys: readonly string[]): Record<string, u
   )
     return null;
   const own = Reflect.ownKeys(input);
-  if (own.length !== keys.length) return null;
+  if (own.length < keys.length || own.length > keys.length + optional.length) return null;
   const result: Record<string, unknown> = {};
   for (const key of own) {
-    if (typeof key !== 'string' || !keys.includes(key)) return null;
+    if (typeof key !== 'string' || (!keys.includes(key) && !optional.includes(key))) return null;
     const field = Object.getOwnPropertyDescriptor(input, key);
     if (!field?.enumerable || !('value' in field)) return null;
     result[key] = field.value;
   }
-  return result;
+  return keys.every((key) => Object.hasOwn(result, key)) ? result : null;
 }
 function arrayValues(input: unknown, max: number): unknown[] | null {
   if (
@@ -494,16 +513,20 @@ export function parseTrackedEpisodeObservationPage(
     const eventHeaders = new Map<string, string>();
     let previous: bigint | null = null;
     for (const raw of rawItems) {
-      const item = objectFields(raw, [
-        'alertId',
-        'eventId',
-        'personObservationIndex',
-        'payloadHash',
-        'sourceSequence',
-        'capturedAt',
-        'observationIndexes',
-        'frames',
-      ]);
+      const item = objectFields(
+        raw,
+        [
+          'alertId',
+          'eventId',
+          'personObservationIndex',
+          'payloadHash',
+          'sourceSequence',
+          'capturedAt',
+          'observationIndexes',
+          'frames',
+        ],
+        options.includeObservedPpe === true ? ['observedPpe'] : [],
+      );
       if (
         !item ||
         !id(item.alertId) ||
@@ -517,6 +540,31 @@ export function parseTrackedEpisodeObservationPage(
       )
         return null;
       const current = BigInt(item.sourceSequence);
+      let observedPpe: TrackedEpisodeOriginalObservation['observedPpe'];
+      if (Object.hasOwn(item, 'observedPpe')) {
+        const values = arrayValues(item.observedPpe, 16);
+        if (!values) return null;
+        observedPpe = [];
+        const seenPpe = new Set<string>();
+        for (const value of values) {
+          const evidence = objectFields(value, ['ppeItem', 'status']);
+          const family = PPE_FAMILY_CATALOG.find((entry) => entry.item === evidence?.ppeItem);
+          if (
+            !evidence ||
+            !family ||
+            !['PRESENT', 'MISSING'].includes(evidence.status as string) ||
+            (family.observationSemantics === 'PRESENT_ONLY' && evidence.status !== 'PRESENT')
+          )
+            return null;
+          const key = `${family.item}:${evidence.status}`;
+          if (seenPpe.has(key)) return null;
+          seenPpe.add(key);
+          observedPpe.push({
+            ppeItem: family.item,
+            status: evidence.status as 'PRESENT' | 'MISSING',
+          });
+        }
+      }
       if (previous !== null && current > previous) return null;
       previous = current;
       const key = `${item.alertId}:${item.eventId}:${item.personObservationIndex}`;
@@ -562,6 +610,7 @@ export function parseTrackedEpisodeObservationPage(
         capturedAt: item.capturedAt,
         observationIndexes: indexes as number[],
         frames,
+        ...(observedPpe === undefined ? {} : { observedPpe }),
       });
     }
     return {
