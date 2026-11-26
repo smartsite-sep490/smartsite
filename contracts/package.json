@@ -11,6 +11,7 @@
     "./ai-frame-evidence": "./dist/ai-frame-evidence.js",
     "./camera-preview": "./dist/camera-preview.js",
     "./camera-policy-configuration-bundle": "./dist/camera-policy-configuration-bundle.js",
+    "./camera-policy-configuration-bundle-v21": "./dist/camera-policy-configuration-bundle-v21.js",
     "./camera-ppe-policy-command": "./dist/camera-ppe-policy-command.js",
     "./leave-notice": "./dist/leave-notice.js",
     "./scheduled-shift": "./dist/scheduled-shift.js",
