@@ -733,6 +733,11 @@ function SetupWorkspace({ apiUrl, session }: { apiUrl: string; session: SharedSe
                 setupKey={key}
                 canWrite={canManageCameras}
                 resumeController={sharedResumeController}
+                onOpenRegions={
+                  canManageCameras && catalogSelectedCamera.status === 'ACTIVE'
+                    ? () => handleSelectWorkspaceTask('regions')
+                    : undefined
+                }
                 onUnauthorized={() => handleStatusUnauthorized(site.id)}
               />
             ) : undefined

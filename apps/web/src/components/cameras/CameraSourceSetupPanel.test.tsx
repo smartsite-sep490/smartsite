@@ -1284,5 +1284,205 @@ describe('source-specific camera setup', () => {
       expect(remountPillVi.textContent).not.toMatch(/Chưa kết nối|Ngoại tuyến|Đã kết nối/i);
       expect(apply).not.toHaveBeenCalled();
     });
+
+    it('groups live vs secondary sources, shows conditional fields per source, enforces redacted RTSP boundary validation with private-LAN reachability note, never calls getUserMedia for browser camera, and hides internal host labels from primary text (EN/VI)', async () => {
+      const user = userEvent.setup();
+      const getUserMedia = vi.fn();
+      const origMediaDevices = navigator.mediaDevices;
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: { getUserMedia },
+      });
+
+      try {
+        const probe = vi.fn<CameraSourceClient['probe']>();
+        const testOnlyEmptyHost: SourceHost = {
+          id: 'edge-internal-99',
+          label: 'Edge-Internal-Box-99',
+          available: true,
+          capabilities: {
+            sourceKinds: ['WEBCAM', 'RTSP', 'VIDEO'],
+            webcams: [],
+            videos: [],
+            browserCameraSupported: false,
+            applySupported: false,
+            sourceRevision: 7,
+          },
+        };
+
+        setup({ hosts: async () => [testOnlyEmptyHost], probe });
+
+        // Primary WEBCAM scope note explains site processing PC vs browser webcam; internal host name does NOT leak into primary notes
+        const webcamScope = await screen.findByTestId('camera-source-webcam-scope');
+        expect(webcamScope.textContent).toMatch(/processing computer/i);
+        expect(webcamScope.textContent).toMatch(/not this browser/i);
+        expect(screen.getByTestId('camera-source-test-only-note').textContent).not.toContain(
+          'Edge-Internal-Box-99',
+        );
+        expect(screen.getByTestId('camera-source-empty-devices').textContent).not.toContain(
+          'Edge-Internal-Box-99',
+        );
+
+        // Internal host label, host ID, and source revision stay inside collapsed Connection details
+        const details = screen.getByTestId(
+          'camera-source-connection-details',
+        ) as HTMLDetailsElement;
+        expect(details.open).toBe(false);
+        expect(details.textContent).toContain('Edge-Internal-Box-99');
+        expect(details.textContent).toContain('edge-internal-99');
+        expect(details.textContent).toContain('7');
+
+        // Live vs secondary grouping badges are explicit
+        expect(screen.getByTestId('camera-source-group-live')).toBeTruthy();
+        expect(screen.getByTestId('camera-source-group-secondary')).toBeTruthy();
+
+        // Switch to RTSP -> ONLY RTSP fields render (no Device/Video select), concise private-LAN reachability note shown
+        await user.click(screen.getByRole('radio', { name: /IP camera \/ RTSP/i }));
+        expect(screen.queryByLabelText(/^Device$/i)).toBeNull();
+        expect(screen.queryByLabelText(/^Video$/i)).toBeNull();
+        const reachability = screen.getByTestId('camera-source-rtsp-reachability');
+        expect(reachability.textContent).toMatch(/private LAN/i);
+        expect(reachability.textContent).toMatch(/cloud/i);
+
+        // Embedded credentials in RTSP URL are rejected at boundary without calling probe or leaking secret in DOM
+        const endpointInput = screen.getByLabelText('RTSP URL') as HTMLInputElement;
+        const pwInput = screen.getByLabelText('Camera password') as HTMLInputElement;
+        expect(pwInput.type).toBe('password');
+        await user.type(endpointInput, 'rtsp://admin:UltraSecretPass99@192.168.1.50:554/stream1');
+        const rtspError = await screen.findByTestId('camera-source-rtsp-error');
+        expect(endpointInput.getAttribute('aria-invalid')).toBe('true');
+        expect(rtspError.textContent).not.toContain('UltraSecretPass99');
+        expect(rtspError.textContent).not.toContain('admin:UltraSecretPass99');
+        const testBtn = screen.getByRole('button', {
+          name: 'Test connection',
+        }) as HTMLButtonElement;
+        expect(testBtn.disabled).toBe(true);
+        expect(probe).not.toHaveBeenCalled();
+
+        // Non-RTSP scheme also rejected cleanly
+        await user.clear(endpointInput);
+        await user.type(endpointInput, 'http://192.168.1.50/live');
+        expect(screen.getByTestId('camera-source-rtsp-error')).toBeTruthy();
+        expect(testBtn.disabled).toBe(true);
+
+        // Valid RTSP URL clears boundary error and enables Test connection
+        await user.clear(endpointInput);
+        await user.type(endpointInput, 'rtsp://192.168.1.50:554/stream1');
+        await user.type(pwInput, 'HiddenPw123');
+        expect(screen.queryByTestId('camera-source-rtsp-error')).toBeNull();
+        expect(testBtn.disabled).toBe(false);
+
+        // Switch to Recorded video -> secondary testing scope shown, no file upload input, no internal host name leak, RTSP password cleared
+        await user.click(screen.getByRole('radio', { name: /Recorded video/i }));
+        expect(screen.queryByLabelText('RTSP URL')).toBeNull();
+        expect(document.querySelector('input[type="file"]')).toBeNull();
+        expect(screen.getByTestId('camera-source-video-scope').textContent).toMatch(
+          /Secondary testing option|recorded playback/i,
+        );
+        expect(screen.getByTestId('camera-source-empty-videos').textContent).not.toContain(
+          'Edge-Internal-Box-99',
+        );
+
+        // Switch back to RTSP -> password was cleared on source switch
+        await user.click(screen.getByRole('radio', { name: /IP camera \/ RTSP/i }));
+        expect((screen.getByLabelText('Camera password') as HTMLInputElement).value).toBe('');
+
+        // Switch to Browser camera -> explicit unavailable notice, ZERO getUserMedia call, ZERO Test/Apply buttons
+        await user.click(screen.getByRole('radio', { name: /This browser camera/i }));
+        expect(getUserMedia).not.toHaveBeenCalled();
+        const browserBox = screen.getByTestId('camera-source-browser-unavailable');
+        expect(browserBox.textContent).toMatch(/not supported yet/i);
+        expect(browserBox.textContent).toMatch(/camera permission/i);
+        expect(
+          screen.queryByRole('button', { name: /Test connection|Save and activate/i }),
+        ).toBeNull();
+
+        // Vietnamese parity across RTSP reachability, browser notice, and recorded demo framing
+        await i18n.changeLanguage('vi');
+        await waitFor(() => {
+          expect(screen.getByTestId('camera-source-browser-unavailable').textContent).toMatch(
+            /không xin quyền camera/i,
+          );
+        });
+        await user.click(screen.getByRole('radio', { name: /Camera IP \/ RTSP/i }));
+        expect(screen.getByTestId('camera-source-rtsp-reachability').textContent).toMatch(
+          /LAN nội bộ/i,
+        );
+        await user.click(screen.getByRole('radio', { name: /Video đã ghi/i }));
+        expect(screen.getByTestId('camera-source-video-scope').textContent).toMatch(
+          /Tùy chọn kiểm tra phụ/i,
+        );
+      } finally {
+        Object.defineProperty(navigator, 'mediaDevices', {
+          configurable: true,
+          value: origMediaDevices,
+        });
+      }
+    });
+
+    it('keeps one primary action per state during live test -> confirm -> connect and surfaces Configure monitoring areas next action when provided', async () => {
+      const user = userEvent.setup();
+      const onOpenRegions = vi.fn();
+      const applyHost: SourceHost = {
+        ...host,
+        capabilities: { ...host.capabilities, applySupported: true, sourceRevision: 1 },
+      };
+      const probe = vi.fn<CameraSourceClient['probe']>().mockResolvedValue({
+        state: 'TESTED',
+        receiptId: 'live-rec-next',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        sourceKind: 'LIVE',
+        frame: {
+          width: 640,
+          height: 360,
+          capturedAt: new Date().toISOString(),
+          imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+        },
+      });
+      const apply = vi.fn<NonNullable<CameraSourceClient['apply']>>().mockResolvedValue({
+        state: 'RUNNING',
+        commandId: 'cmd-next',
+        sourceKind: 'LIVE',
+        sourceRevision: 2,
+        currentGenerationId: 'gen-next',
+      });
+
+      const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={cache}>
+          <CameraSourceSetupPanel
+            embedded
+            apiUrl="http://localhost"
+            token="tok"
+            siteId="site-a"
+            camera={{ id: 'cam-a', name: 'Gate camera', configurationVersion: 2, status: 'ACTIVE' }}
+            setupKey={['one-primary-cta']}
+            canWrite
+            onUnauthorized={vi.fn()}
+            onOpenRegions={onOpenRegions}
+            client={{ hosts: async () => [applyHost], probe, apply }}
+          />
+        </QueryClientProvider>,
+      );
+
+      await user.selectOptions(await screen.findByLabelText('Device'), 'usb0');
+      const testBtnBefore = screen.getByRole('button', { name: 'Test connection' });
+      expect(testBtnBefore.className).toContain('bg-[#0F172A]');
+
+      await user.click(testBtnBefore);
+      const activateBtn = await screen.findByRole('button', { name: 'Save and activate source' });
+      // After LIVE test succeeds, Save and activate source is primary while Test connection demotes to secondary
+      expect(activateBtn.className).toContain('bg-[#0F172A]');
+      expect(screen.getByRole('button', { name: 'Test connection' }).className).not.toContain(
+        'bg-[#0F172A]',
+      );
+
+      await user.click(activateBtn);
+      await user.click(screen.getByRole('button', { name: 'Confirm source replacement' }));
+      const nextRegionsBtn = await screen.findByTestId('camera-source-next-regions');
+      expect(nextRegionsBtn.textContent).toMatch(/Configure monitoring areas/i);
+      await user.click(nextRegionsBtn);
+      expect(onOpenRegions).toHaveBeenCalledTimes(1);
+    });
   });
 });

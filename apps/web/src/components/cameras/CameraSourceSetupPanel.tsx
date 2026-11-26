@@ -30,10 +30,21 @@ export interface CameraSourceSetupProps {
   setupKey: readonly unknown[];
   canWrite: boolean;
   onUnauthorized: () => void;
+  onOpenRegions?: () => void;
   client?: CameraSourceClient;
   embedded?: boolean;
   resumeController?: CameraSourceResumeController;
 }
+
+function isValidRtspEndpoint(raw: string): boolean {
+  if (!raw || /[\s\p{Cc}]/u.test(raw)) return false;
+  const match = /^rtsps?:\/\/([^/?#]+)/i.exec(raw);
+  if (!match) return false;
+  const authority = match[1] ?? '';
+  if (!authority || authority.includes('@')) return false;
+  return true;
+}
+
 export function CameraSourceSetupPanel(props: CameraSourceSetupProps) {
   // Scope replacement unmounts the old draft and aborts any secret-bearing request.
   return (
@@ -51,6 +62,7 @@ function SourceWorkspace({
   setupKey,
   canWrite,
   onUnauthorized,
+  onOpenRegions,
   client = cameraSourceClient,
   embedded = false,
   resumeController: externalController,
@@ -195,15 +207,18 @@ function SourceWorkspace({
     applying.reset();
     update();
   };
+  const trimmedEndpoint = endpoint.trim();
+  const rtspInvalid =
+    kind === 'RTSP' && trimmedEndpoint.length > 0 && !isValidRtspEndpoint(trimmedEndpoint);
   const draft: CameraSourceDraft | null =
     kind === 'WEBCAM' && device
       ? { kind, deviceId: device }
       : kind === 'VIDEO' && asset
         ? { kind, assetId: asset }
-        : kind === 'RTSP' && endpoint.trim()
+        : kind === 'RTSP' && trimmedEndpoint && !rtspInvalid
           ? {
               kind,
-              endpoint: endpoint.trim(),
+              endpoint: trimmedEndpoint,
               ...(username || password ? { username, password } : {}),
             }
           : null;
@@ -435,12 +450,76 @@ function SourceWorkspace({
               key: 'cameraSource.statusNotConnected' as const,
             };
 
+  const hasLiveApplyCta = Boolean(
+    activeResult &&
+    !isExpired &&
+    activeResult.sourceKind === 'LIVE' &&
+    !isCameraInactive &&
+    !hosts.isError &&
+    caps?.applySupported &&
+    canWrite &&
+    !applying.isSuccess,
+  );
+
   const openConnectionDetailsAndFocus = () => {
     if (detailsRef.current) {
       detailsRef.current.open = true;
     }
     hostSelectRef.current?.focus();
   };
+
+  const renderSourceOption = (
+    option: CameraSourceKind | 'BROWSER',
+    secondary = false,
+    badgeKey?: 'cameraSource.badgeUnavailable' | 'cameraSource.badgeReplay',
+  ) => (
+    <label
+      key={option}
+      className={`min-w-0 cursor-pointer rounded-lg border px-2.5 py-1.5 transition-colors focus-within:ring-2 focus-within:ring-[#0F172A] ${
+        kind === option
+          ? 'border-[#0F172A] bg-slate-50 ring-1 ring-[#0F172A]/10'
+          : secondary
+            ? 'border-slate-200/90 bg-slate-50/45 hover:border-slate-300 hover:bg-white'
+            : 'border-slate-200 bg-white hover:border-slate-400'
+      }`}
+    >
+      <span className="flex items-start gap-2">
+        <input
+          className="mt-0.5 shrink-0 accent-[#0F172A]"
+          type="radio"
+          name={`${id}-kind`}
+          checked={kind === option}
+          onChange={() =>
+            change(() => {
+              setKind(option);
+              setPassword('');
+            })
+          }
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs sm:text-sm font-semibold leading-snug text-slate-950">
+              {t(`cameraSource.${option}`)}
+            </span>
+            {badgeKey && (
+              <span
+                className={`inline-flex items-center rounded-md border px-1.5 text-[11px] leading-4 font-medium ${
+                  option === 'BROWSER'
+                    ? 'border-amber-200 bg-amber-50/90 text-amber-900'
+                    : 'border-slate-200 bg-white text-slate-600'
+                }`}
+              >
+                {t(badgeKey)}
+              </span>
+            )}
+          </span>
+          <span className="block text-xs leading-snug text-slate-600">
+            {t(`cameraSource.${option}Help`)}
+          </span>
+        </span>
+      </span>
+    </label>
+  );
 
   return (
     <section
@@ -451,7 +530,7 @@ function SourceWorkspace({
       <header
         className={
           embedded
-            ? 'border-b border-slate-200 px-3.5 py-2.5'
+            ? 'border-b border-slate-200/80 px-4 py-2.5'
             : 'border-b border-slate-200 px-4 py-3.5 sm:px-5'
         }
       >
@@ -494,17 +573,22 @@ function SourceWorkspace({
                 )}
               </span>
             )}
+            {embedded && hasUsableHost && (
+              <span className="hidden md:inline text-xs text-slate-500">
+                {t('cameraSource.stepFlowHint')}
+              </span>
+            )}
           </div>
           {embedded && (
             <details
               data-testid="camera-source-stages-disclosure"
               className="group min-w-0 text-xs text-slate-600"
             >
-              <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/70 px-2 py-0.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+              <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
                 <span>{t('cameraSetup.sourceStageSummaryDisclosure')}</span>
                 <span
                   aria-hidden="true"
-                  className="text-xs text-slate-500 transition-transform duration-150 group-open:rotate-180"
+                  className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
                 >
                   ▾
                 </span>
@@ -519,7 +603,7 @@ function SourceWorkspace({
           </p>
         )}
       </header>
-      <div className={embedded ? 'space-y-3 p-3.5' : 'space-y-4 p-4 sm:p-5'}>
+      <div className={embedded ? 'space-y-2.5 px-3.5 py-2.5' : 'space-y-4 p-4 sm:p-5'}>
         {isCameraInactive && !embedded && (
           <p
             role="status"
@@ -678,52 +762,40 @@ function SourceWorkspace({
           </div>
         ) : (
           <>
-            <fieldset
-              className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4"
-              disabled={blocked}
-            >
+            <fieldset className="min-w-0 space-y-2" disabled={blocked}>
               <legend className="sr-only">{t('cameraSource.title')}</legend>
-              {(['WEBCAM', 'RTSP', 'VIDEO', 'BROWSER'] as const).map((option) => (
-                <label
-                  key={option}
-                  className={`min-w-0 cursor-pointer rounded-xl border px-3 py-2.5 transition-colors focus-within:ring-2 focus-within:ring-[#0F172A] ${
-                    kind === option
-                      ? 'border-[#0F172A] bg-slate-50 ring-1 ring-[#0F172A]/10'
-                      : 'border-slate-200 bg-white hover:border-slate-400'
-                  }`}
-                >
-                  <span className="flex items-start gap-2">
-                    <input
-                      className="mt-0.5 shrink-0 accent-[#0F172A]"
-                      type="radio"
-                      name={`${id}-kind`}
-                      checked={kind === option}
-                      onChange={() =>
-                        change(() => {
-                          setKind(option);
-                          setPassword('');
-                        })
-                      }
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold leading-tight text-slate-950">
-                        {t(`cameraSource.${option}`)}
-                      </span>
-                      <span className="mt-0.5 block text-xs leading-snug text-slate-600">
-                        {t(`cameraSource.${option}Help`)}
-                      </span>
-                    </span>
-                  </span>
-                </label>
-              ))}
+              <div data-testid="camera-source-group-live" className="space-y-1">
+                <p className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+                  {t('cameraSource.groupLive')}
+                </p>
+                <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {renderSourceOption('WEBCAM')}
+                  {renderSourceOption('RTSP')}
+                </div>
+              </div>
+              <div data-testid="camera-source-group-secondary" className="space-y-1">
+                <p className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+                  {t('cameraSource.groupSecondary')}
+                </p>
+                <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {renderSourceOption('BROWSER', true, 'cameraSource.badgeUnavailable')}
+                  {renderSourceOption('VIDEO', true, 'cameraSource.badgeReplay')}
+                </div>
+              </div>
             </fieldset>
             {kind === 'BROWSER' ? (
-              <p
+              <div
                 role="status"
-                className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+                data-testid="camera-source-browser-unavailable"
+                className="space-y-1 rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50/70 px-3.5 py-2.5 text-sm text-amber-950"
               >
-                {t('cameraSource.browserUnavailable')}
-              </p>
+                <p className="font-semibold text-slate-950">
+                  {t('cameraSource.browserUnavailableHeading')}
+                </p>
+                <p className="max-w-[70ch] text-xs sm:text-sm leading-relaxed text-slate-700">
+                  {t('cameraSource.browserUnavailable')}
+                </p>
+              </div>
             ) : (
               <>
                 {needsHostSelection && (
@@ -754,9 +826,9 @@ function SourceWorkspace({
                   <p
                     role="status"
                     data-testid="camera-source-test-only-note"
-                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-700"
+                    className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs leading-relaxed text-slate-700"
                   >
-                    {t('cameraSource.testOnlyNote', { host: host.label })}
+                    {t('cameraSource.testOnlyNote')}
                   </p>
                 )}
                 {host?.available && !supported && (
@@ -765,9 +837,15 @@ function SourceWorkspace({
                   </p>
                 )}
                 {supported && (
-                  <div className="max-w-3xl space-y-3">
+                  <div className="max-w-3xl space-y-2.5 border-t border-slate-200/80 pt-3">
                     {kind === 'WEBCAM' && (
                       <div className="space-y-1.5">
+                        <p
+                          data-testid="camera-source-webcam-scope"
+                          className="text-xs leading-relaxed text-slate-600"
+                        >
+                          {t('cameraSource.webcamScope')}
+                        </p>
                         <label htmlFor={`${id}-device`} className={CAMERA_FIELD_STYLES.label}>
                           {t('cameraSource.device')}
                         </label>
@@ -789,15 +867,21 @@ function SourceWorkspace({
                           <p
                             role="status"
                             data-testid="camera-source-empty-devices"
-                            className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950"
+                            className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950"
                           >
-                            {t('cameraSource.emptyWebcams', { host: host.label })}
+                            {t('cameraSource.emptyWebcams')}
                           </p>
                         )}
                       </div>
                     )}
                     {kind === 'VIDEO' && (
                       <div className="space-y-1.5">
+                        <p
+                          data-testid="camera-source-video-scope"
+                          className="text-xs leading-relaxed text-slate-600"
+                        >
+                          {t('cameraSource.videoScope')}
+                        </p>
                         <label htmlFor={`${id}-asset`} className={CAMERA_FIELD_STYLES.label}>
                           {t('cameraSource.video')}
                         </label>
@@ -819,16 +903,16 @@ function SourceWorkspace({
                           <p
                             role="status"
                             data-testid="camera-source-empty-videos"
-                            className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950"
+                            className="rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-relaxed text-amber-950"
                           >
-                            {t('cameraSource.emptyVideos', { host: host.label })}
+                            {t('cameraSource.emptyVideos')}
                           </p>
                         )}
                       </div>
                     )}
                     {kind === 'RTSP' && (
-                      <fieldset className="space-y-3" disabled={blocked}>
-                        <div className="space-y-1.5">
+                      <fieldset className="space-y-2.5" disabled={blocked}>
+                        <div className="space-y-1">
                           <label htmlFor={`${id}-endpoint`} className={CAMERA_FIELD_STYLES.label}>
                             {t('cameraSource.endpoint')}
                           </label>
@@ -836,13 +920,29 @@ function SourceWorkspace({
                             id={`${id}-endpoint`}
                             value={endpoint}
                             autoComplete="off"
+                            aria-invalid={rtspInvalid}
+                            aria-describedby={
+                              rtspInvalid
+                                ? `${id}-rtsp-error ${id}-rtsp-reachability`
+                                : `${id}-rtsp-reachability`
+                            }
                             placeholder={t('cameraSource.endpointExample')}
                             className={CAMERA_FIELD_STYLES.input}
                             onChange={(e) => change(() => setEndpoint(e.target.value))}
                           />
+                          {rtspInvalid && (
+                            <p
+                              id={`${id}-rtsp-error`}
+                              role="alert"
+                              data-testid="camera-source-rtsp-error"
+                              className={CAMERA_FIELD_STYLES.error}
+                            >
+                              {t('cameraSource.rtspValidationError')}
+                            </p>
+                          )}
                         </div>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <div className="space-y-1.5">
+                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                          <div className="space-y-1">
                             <label htmlFor={`${id}-username`} className={CAMERA_FIELD_STYLES.label}>
                               {t('cameraSource.username')}
                             </label>
@@ -854,7 +954,7 @@ function SourceWorkspace({
                               onChange={(e) => change(() => setUsername(e.target.value))}
                             />
                           </div>
-                          <div className="space-y-1.5">
+                          <div className="space-y-1">
                             <label htmlFor={`${id}-password`} className={CAMERA_FIELD_STYLES.label}>
                               {t('cameraSource.password')}
                             </label>
@@ -868,15 +968,23 @@ function SourceWorkspace({
                             />
                           </div>
                         </div>
-                        <p className="text-sm leading-relaxed text-slate-600">
+                        <p
+                          id={`${id}-rtsp-reachability`}
+                          data-testid="camera-source-rtsp-reachability"
+                          className="text-xs leading-relaxed text-slate-600"
+                        >
                           {t('cameraSource.credentialHelp')}
                         </p>
                       </fieldset>
                     )}
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 pt-0.5">
                       <button
                         type="button"
-                        className={CAMERA_BUTTON_STYLES.primary}
+                        className={
+                          hasLiveApplyCta
+                            ? CAMERA_BUTTON_STYLES.secondary
+                            : CAMERA_BUTTON_STYLES.primary
+                        }
                         disabled={!canTest}
                         onClick={() => void test()}
                       >
@@ -897,17 +1005,15 @@ function SourceWorkspace({
                 <details
                   ref={detailsRef}
                   data-testid="camera-source-connection-details"
-                  className="group min-w-0 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-700"
+                  className="group min-w-0 border-t border-slate-200/80 pt-2.5 text-sm text-slate-700"
                 >
-                  <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 rounded-md py-0.5 text-xs font-semibold text-slate-700 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
-                    <span className="inline-flex items-center gap-2">
-                      <span>{t('cameraSource.connectionDetailsToggle')}</span>
-                      {needsHostSelection && (
-                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-                          {t('cameraSource.connectionDetailsNeeded')}
-                        </span>
-                      )}
-                    </span>
+                  <summary className="inline-flex cursor-pointer list-none flex-wrap items-center gap-1.5 rounded-md py-0.5 text-xs font-medium text-slate-600 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                    <span>{t('cameraSource.connectionDetailsToggle')}</span>
+                    {needsHostSelection && (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                        {t('cameraSource.connectionDetailsNeeded')}
+                      </span>
+                    )}
                     <span
                       aria-hidden="true"
                       className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
@@ -915,21 +1021,29 @@ function SourceWorkspace({
                       ▾
                     </span>
                   </summary>
-                  <div className="mt-2.5 space-y-2.5 border-t border-slate-200 pt-2.5">
+                  <div className="mt-2 space-y-2.5 rounded-lg border border-slate-200/90 bg-slate-50/50 px-3 py-2.5">
                     <p className="max-w-[65ch] text-xs leading-relaxed text-slate-600">
                       {t('cameraSource.hostHelp')}
                     </p>
                     {!hasMultipleHosts && host ? (
                       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                        <p
-                          data-testid="camera-source-bound-host"
-                          className="min-w-0 break-words text-xs text-slate-700"
-                        >
-                          <span className="font-medium text-slate-600">
-                            {t('cameraSource.host')}:{' '}
-                          </span>
-                          <span className="font-semibold text-slate-950">{host.label}</span>
-                        </p>
+                        <div className="min-w-0 space-y-0.5">
+                          <p
+                            data-testid="camera-source-bound-host"
+                            className="min-w-0 break-words text-xs text-slate-700"
+                          >
+                            <span className="font-medium text-slate-600">
+                              {t('cameraSource.host')}:{' '}
+                            </span>
+                            <span className="font-semibold text-slate-950">{host.label}</span>
+                          </p>
+                          <p className="font-mono text-[11px] text-slate-500 tabular-nums">
+                            {t('cameraSource.technicalHostId', { id: host.id })}
+                            {caps?.sourceRevision !== undefined
+                              ? ` · ${t('cameraSource.technicalRevision', { revision: caps.sourceRevision })}`
+                              : ''}
+                          </p>
+                        </div>
                         <button
                           type="button"
                           className={CAMERA_BUTTON_STYLES.compactSecondary}
@@ -1066,12 +1180,22 @@ function SourceWorkspace({
           </p>
         )}
         {applying.isSuccess && (
-          <p
+          <div
             role="status"
-            className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-sm font-medium text-emerald-950"
+            className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-sm font-medium text-emerald-950"
           >
-            {t('cameraSource.running')}
-          </p>
+            <p className="min-w-0 flex-1 leading-relaxed">{t('cameraSource.running')}</p>
+            {onOpenRegions && (
+              <button
+                type="button"
+                data-testid="camera-source-next-regions"
+                className={CAMERA_BUTTON_STYLES.primary}
+                onClick={onOpenRegions}
+              >
+                {t('cameraSource.nextConfigureRegions')}
+              </button>
+            )}
+          </div>
         )}
         {activeResult && (
           <figure className="max-w-3xl space-y-3 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/50 p-4">
@@ -1196,7 +1320,7 @@ function SourceWorkspace({
               )}
           </figure>
         )}
-        {hasUsableHost && (
+        {hasUsableHost && !embedded && (
           <p className="border-t border-slate-200 pt-3 text-sm leading-relaxed text-slate-600">
             {t('cameraSource.next')}
           </p>

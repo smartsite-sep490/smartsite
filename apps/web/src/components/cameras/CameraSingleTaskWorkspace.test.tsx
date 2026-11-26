@@ -866,4 +866,127 @@ describe('Camera Setup progressive single-task workspace & sticky Apply bar', ()
     });
     expect(freshCmd?.commandId).not.toBe(failedCmd?.commandId);
   });
+
+  it('hides internal host labels from primary CameraApplySavedBar and keeps multi-host disambiguation inside collapsed details', async () => {
+    const user = userEvent.setup();
+    const resume = vi.fn().mockResolvedValue({
+      state: 'STARTED',
+      commandId: 'multi-host-cmd',
+      sourceRevision: 4,
+      configurationVersion: 5,
+      currentGenerationId: '99999999-9999-4999-8999-999999999921',
+      viewRevision: 1,
+      bundleSha256: 'c'.repeat(64),
+    });
+    const singleHostClient: CameraSourceClient = {
+      hosts: async () => [
+        {
+          id: 'edge-internal-1',
+          label: 'Hidden Edge Box Alpha',
+          available: true,
+          capabilities: {
+            sourceKinds: ['WEBCAM', 'RTSP'],
+            webcams: [],
+            videos: [],
+            browserCameraSupported: false,
+            applySupported: true,
+            configurationResumeSupported: true,
+            sourceRevision: 4,
+          },
+        },
+      ],
+      probe: vi.fn(),
+      resume,
+    };
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { rerender } = render(
+      <QueryClientProvider client={queryClient}>
+        <CameraApplySavedBar
+          apiUrl={API_URL}
+          token="tok"
+          siteId={SITE_ID}
+          camera={CAM_ACTIVE}
+          setupKey={['hide-host-single']}
+          canWrite
+          alwaysShowWhenSupported
+          onUnauthorized={vi.fn()}
+          client={singleHostClient}
+        />
+      </QueryClientProvider>,
+    );
+
+    const bar = await screen.findByTestId('camera-sticky-apply-bar');
+    expect(bar.textContent).not.toContain('Hidden Edge Box Alpha');
+    expect(bar.textContent).not.toContain('edge-internal-1');
+    expect(within(bar).queryByRole('combobox')).toBeNull();
+
+    // Multiple hosts -> selector lives strictly inside collapsed <details>, never a top-level combobox
+    const multiHostClient: CameraSourceClient = {
+      hosts: async () => [
+        {
+          id: 'edge-a',
+          label: 'North Edge Host',
+          available: true,
+          capabilities: {
+            sourceKinds: ['WEBCAM', 'RTSP'],
+            webcams: [],
+            videos: [],
+            browserCameraSupported: false,
+            applySupported: true,
+            configurationResumeSupported: true,
+            sourceRevision: 4,
+          },
+        },
+        {
+          id: 'edge-b',
+          label: 'South Edge Host',
+          available: true,
+          capabilities: {
+            sourceKinds: ['WEBCAM', 'RTSP'],
+            webcams: [],
+            videos: [],
+            browserCameraSupported: false,
+            applySupported: true,
+            configurationResumeSupported: true,
+            sourceRevision: 5,
+          },
+        },
+      ],
+      probe: vi.fn(),
+      resume,
+    };
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <CameraApplySavedBar
+          apiUrl={API_URL}
+          token="tok"
+          siteId={SITE_ID}
+          camera={CAM_ACTIVE}
+          setupKey={['hide-host-multi']}
+          canWrite
+          alwaysShowWhenSupported
+          onUnauthorized={vi.fn()}
+          client={multiHostClient}
+        />
+      </QueryClientProvider>,
+    );
+
+    const multiBar = await screen.findByTestId('camera-sticky-apply-bar');
+    const hostDetails = (await within(multiBar).findByTestId(
+      'camera-apply-host-details',
+    )) as HTMLDetailsElement;
+    expect(hostDetails.tagName).toBe('DETAILS');
+    expect(hostDetails.open).toBe(false);
+    const applyBtn = within(multiBar).getByTestId('camera-sticky-apply-btn') as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(true);
+
+    hostDetails.open = true;
+    await user.selectOptions(within(hostDetails).getByRole('combobox'), 'edge-a');
+    expect(applyBtn.disabled).toBe(false);
+    await user.click(applyBtn);
+    await waitFor(() => expect(resume).toHaveBeenCalledTimes(1));
+    expect(resume.mock.calls[0]?.[4]).toBe('edge-a');
+  });
 });
