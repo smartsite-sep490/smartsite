@@ -375,11 +375,36 @@ function SourceWorkspace({
   const hasMultipleHosts = (hosts.data?.length ?? 0) > 1;
   const hasMultipleUsableHosts = availableHosts.length > 1;
   const needsHostSelection = hasMultipleUsableHosts && !hostId;
-  const offlineHostNames =
-    hosts.data
-      ?.filter((entry) => !entry.available)
-      .map((entry) => entry.label)
-      .join(', ') ?? '';
+  const unavailableHosts = hosts.data?.filter((entry) => !entry.available) ?? [];
+  const allCameraUnbound =
+    unavailableHosts.length > 0 &&
+    unavailableHosts.every((entry) => entry.reason === 'CAMERA_UNBOUND');
+  const allAgentUnavailable =
+    unavailableHosts.length > 0 &&
+    unavailableHosts.every((entry) => entry.reason === 'AGENT_UNAVAILABLE');
+  const unavailableGate = allCameraUnbound
+    ? {
+        state: 'unbound' as const,
+        headingKey: 'cameraSource.unboundHeading' as const,
+        bodyKey: 'cameraSource.unboundBody' as const,
+      }
+    : allAgentUnavailable
+      ? {
+          state: 'agent-unavailable' as const,
+          headingKey: 'cameraSource.agentUnavailableHeading' as const,
+          bodyKey: 'cameraSource.agentUnavailableBody' as const,
+        }
+      : {
+          state: 'unavailable' as const,
+          headingKey: 'cameraSource.allHostsOfflineHeading' as const,
+          bodyKey: 'cameraSource.allHostsOffline' as const,
+        };
+  const selectedUnavailableKey =
+    host?.reason === 'CAMERA_UNBOUND'
+      ? ('cameraSource.unboundSelected' as const)
+      : host?.reason === 'AGENT_UNAVAILABLE'
+        ? ('cameraSource.agentUnavailableSelected' as const)
+        : ('cameraSource.unavailable' as const);
 
   const connectionStatus =
     hosts.isPending || pending || applying.isPending
@@ -588,7 +613,7 @@ function SourceWorkspace({
           <div
             role="status"
             data-testid="camera-source-host-prerequisite"
-            data-host-state="unavailable"
+            data-host-state={unavailableGate.state}
             className="min-w-0 space-y-3 rounded-xl border border-amber-200/90 border-l-[3px] border-l-amber-600 bg-amber-50/60 p-4 text-amber-950"
           >
             <div className="space-y-1">
@@ -596,13 +621,16 @@ function SourceWorkspace({
                 {t('cameraSource.prerequisiteLabel')}
               </p>
               <h3 className="text-sm font-semibold tracking-tight text-slate-950">
-                {t('cameraSource.allHostsOfflineHeading')}
+                {t(unavailableGate.headingKey)}
               </h3>
-              <p className="max-w-[65ch] text-sm leading-relaxed text-slate-700 break-words">
-                {t('cameraSource.allHostsOffline', { hosts: offlineHostNames })}
+              <p
+                data-testid="camera-source-prerequisite-message"
+                className="max-w-[65ch] text-sm leading-relaxed text-slate-700 break-words"
+              >
+                {t(unavailableGate.bodyKey)}
               </p>
             </div>
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 className={CAMERA_BUTTON_STYLES.secondary}
@@ -615,6 +643,38 @@ function SourceWorkspace({
                 {t(hosts.isFetching ? 'cameraSource.refreshing' : 'cameraSource.refresh')}
               </button>
             </div>
+            <details
+              data-testid="camera-source-unavailable-details"
+              className="group min-w-0 rounded-lg border border-amber-200/80 bg-white/80 px-3 py-2 text-xs text-slate-700"
+            >
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md py-0.5 font-medium text-slate-700 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                <span>{t('cameraSource.technicalDetailsToggle')}</span>
+                <span
+                  aria-hidden="true"
+                  className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
+                >
+                  ▾
+                </span>
+              </summary>
+              <ul className="mt-2 space-y-1.5 border-t border-slate-200 pt-2">
+                {unavailableHosts.map((entry) => (
+                  <li key={entry.id} className="min-w-0 break-words leading-relaxed">
+                    <span className="font-semibold text-slate-900">{entry.label}</span>{' '}
+                    <span className="font-mono text-[11px] text-slate-500">({entry.id})</span>
+                    {' — '}
+                    <span>
+                      {t(
+                        entry.reason === 'CAMERA_UNBOUND'
+                          ? 'cameraSource.reasonDetail.CAMERA_UNBOUND'
+                          : entry.reason === 'AGENT_UNAVAILABLE'
+                            ? 'cameraSource.reasonDetail.AGENT_UNAVAILABLE'
+                            : 'cameraSource.reasonDetail.UNKNOWN',
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </details>
           </div>
         ) : (
           <>
@@ -687,7 +747,7 @@ function SourceWorkspace({
                 )}
                 {host && !host.available && !allHostsOffline && (
                   <p role="status" className="text-sm text-amber-900">
-                    {t('cameraSource.unavailable')}
+                    {t(selectedUnavailableKey)}
                   </p>
                 )}
                 {host?.available && caps && caps.applySupported === false && (
@@ -907,7 +967,15 @@ function SourceWorkspace({
                             {hosts.data?.map((h) => (
                               <option key={h.id} value={h.id}>
                                 {h.label}
-                                {h.available ? '' : ` — ${t('cameraSource.offline')}`}
+                                {h.available
+                                  ? ''
+                                  : ` — ${t(
+                                      h.reason === 'CAMERA_UNBOUND'
+                                        ? 'cameraSource.reasonShort.CAMERA_UNBOUND'
+                                        : h.reason === 'AGENT_UNAVAILABLE'
+                                          ? 'cameraSource.reasonShort.AGENT_UNAVAILABLE'
+                                          : 'cameraSource.offline',
+                                    )}`}
                               </option>
                             ))}
                           </select>
