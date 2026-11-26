@@ -119,6 +119,7 @@ const validateTrackedFrameSchema: CompiledSchemaValidator = ajv.compile(
 
 let validateTrackedEntryOriginSchema: CompiledSchemaValidator | undefined;
 let validateTrackedCameraPpeSchema: CompiledSchemaValidator | undefined;
+let validateTrackedMaskPpeSchema: CompiledSchemaValidator | undefined;
 
 function schemaValidationIssues(
   validateSchema: CompiledSchemaValidator,
@@ -274,7 +275,24 @@ export function validateTrackedCameraPpeEvent(data: unknown): ValidationResult {
       ),
     ) as unknown,
   );
-  const validation = validateTrackedFrame(data, validateTrackedCameraPpeSchema, true);
+  return validateCameraPpeFrame(data, validateTrackedCameraPpeSchema);
+}
+
+/** Explicit v1.8 consumer only; existing intake and v1.7 admission remain unchanged. */
+export function validateTrackedMaskPpeEvent(data: unknown): ValidationResult {
+  validateTrackedMaskPpeSchema ??= ajv.compile(
+    JSON.parse(
+      readFileSync(
+        new URL('../../schemas/v1.8/technical-observation-event.json', import.meta.url),
+        'utf8',
+      ),
+    ) as unknown,
+  );
+  return validateCameraPpeFrame(data, validateTrackedMaskPpeSchema);
+}
+
+function validateCameraPpeFrame(data: unknown, schema: CompiledSchemaValidator): ValidationResult {
+  const validation = validateTrackedFrame(data, schema, true);
   if (!validation.isValid) return validation;
   const { observations } = data as {
     observations: Array<{ type: string; trackId: number; scope?: string; boundingBox?: unknown }>;

@@ -13,6 +13,20 @@ validation alone does not prove same-person ownership, geometry, continuity,
 bundle hashing, model capability or Backend admission. Do not register an
 Ajv-only validator as a replacement for the semantic admission checks.
 
+An explicit shared decoder, `parseCameraPolicyConfigurationBundleV21Payload`,
+is available from `@smartsite/contracts/camera-policy-configuration-bundle-v21`.
+It checks the original content hash, six-item policies and existing metadata/
+geometry bounds while returning the original2.1 content. Its separate versioned
+types do not widen the old five-item policy constants or2.0 decoder. Backend
+issuance, history readers, event1.8 admission and AI configuration consumers are
+still unregistered; the callable decoder does not enable an API, picker or model.
+
+`validateTrackedMaskPpeEvent` is the explicit semantic validator for event1.8.
+It retains the tracked-frame, geometry, original PERSON ownership and continuity
+checks used by event1.7. Existing validators remain version-closed. Exporting this
+validator does not register Backend ingestion, apply a policy, or establish an
+identity or authorization decision.
+
 Released event schemas through1.7 and configuration schemas1.0/2.0 are unchanged.
 Old readers must reject the new versions; changing `PPE_ITEMS` globally at this
 stage would silently widen old policy decoders and is deliberately avoided.
