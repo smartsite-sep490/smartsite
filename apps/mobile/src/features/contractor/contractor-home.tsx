@@ -10,7 +10,6 @@ import {
   IconUsers,
 } from '../../components/common/Icons';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
-import { CreateWorkerModal } from '../../components/modals/CreateWorkerModal';
 import { ScheduleAssignModal } from '../../components/modals/ScheduleAssignModal';
 import { useTranslation } from '../../i18n';
 import { colors } from '../../theme/colors';
@@ -20,7 +19,6 @@ import { useWorkspace } from '../workspace/workspace-context';
 export function ContractorHome({ navigate }: { navigate: (target: NavigationTarget) => void }) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
-  const [creating, setCreating] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const dashboard = useQuery({
     queryKey: [...queryKey, 'dashboard'],
@@ -79,7 +77,10 @@ export function ContractorHome({ navigate }: { navigate: (target: NavigationTarg
       <Text style={styles.sectionTitle}>{t('contractorUi.quickActions')}</Text>
       <View style={styles.actions}>
         <View style={styles.action}>
-          <Button label={t('contractorHome.addWorker')} onPress={() => setCreating(true)} />
+          <Button
+            label={t('contractorHome.addWorker')}
+            onPress={() => navigate({ route: 'workforce', kind: 'onboarding' })}
+          />
         </View>
         <View style={styles.action}>
           <Button
@@ -122,13 +123,6 @@ export function ContractorHome({ navigate }: { navigate: (target: NavigationTarg
           onPress={() => navigate({ route: 'schedule' })}
         />
       </Disclosure>
-      {creating && (
-        <CreateWorkerModal
-          visible
-          onClose={() => setCreating(false)}
-          onSuccess={() => void dashboard.refetch()}
-        />
-      )}
       {assigning && <ScheduleAssignModal visible onClose={() => setAssigning(false)} />}
     </Page>
   );

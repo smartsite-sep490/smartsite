@@ -280,7 +280,7 @@ it('keeps Safety navigation scoped and opens the password action from main', asy
     'PPE Monitoring',
     'Restricted Zones',
     'Safety Operations',
-    'Worker documents',
+    'Review worker documents',
   ]) {
     expect(navigation.getByRole('button', { name })).toBeTruthy();
   }

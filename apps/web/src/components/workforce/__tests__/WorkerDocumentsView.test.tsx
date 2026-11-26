@@ -43,7 +43,6 @@ const compliance: WorkerComplianceResponse = {
       originalName: 'card.jpg',
       mediaType: 'image/jpeg',
       size: 100,
-      ocr: { status: 'READ', issuedOn: '2026-10-17', expiresOn: '2028-10-17', warnings: [] },
       issuedOn: null,
       expiresOn: null,
       uploadedAt: '2026-10-17T00:00:00Z',
@@ -129,15 +128,23 @@ it('shows a safe request error and retries document prerequisites', async () => 
   await screen.findByText(/Nguyễn Văn An/);
 });
 
-it('refreshes the selected document detail for analysis that finished during review', async () => {
+it('refreshes the selected document detail without exposing any analysis control to Safety', async () => {
   mount('/worker-documents?siteId=site-a&workerId=worker-1&tab=documents');
   await screen.findByText('card.jpg');
   vi.mocked(SmartSiteManagementClient.prototype.workerCompliance).mockResolvedValue({
     ...compliance,
-    documents: [{ ...compliance.documents[0]!, aiAnalysis: { status: 'UNAVAILABLE' } }],
+    documents: [
+      {
+        ...compliance.documents[0]!,
+        originalName: 'replacement.jpg',
+        aiAnalysis: { status: 'UNAVAILABLE' },
+      },
+    ],
   });
   fireEvent.click(screen.getByRole('button', { name: tr('documents.refresh') }));
-  await screen.findByText(tr('documents.aiUnavailable'));
+  await screen.findByText('replacement.jpg');
+  expect(screen.queryByText(tr('documents.aiUnavailable'))).toBeNull();
+  expect(screen.queryByRole('button', { name: tr('documents.aiRun') })).toBeNull();
 });
 
 it('searches and filters the whole queue through the API and resets pagination', async () => {
@@ -164,22 +171,19 @@ it('searches and filters the whole queue through the API and resets pagination',
       offset: 0,
       limit: 20,
       search: 'outside',
-      submissionStatus: undefined,
-      needsSupplement: undefined,
+      submissionStatus: 'PENDING_REVIEW',
     }),
   );
   fireEvent.change(screen.getByLabelText(tr('documents.submissionFilter')), {
-    target: { value: 'PENDING_REVIEW' },
+    target: { value: 'REVIEWED' },
   });
-  fireEvent.click(screen.getByLabelText(tr('documents.onlyNeedsSupplement')));
   await waitFor(() =>
     expect(list).toHaveBeenLastCalledWith(
       'synthetic-token',
       'site-a',
       expect.objectContaining({
         offset: 0,
-        submissionStatus: 'PENDING_REVIEW',
-        needsSupplement: true,
+        submissionStatus: 'REVIEWED',
         search: 'outside',
       }),
     ),
@@ -216,7 +220,7 @@ it('shows submission separately from the supplement tag, including partially sub
 
 it('Safety Officer opens review queue and pre-selects the worker from notification query params', async () => {
   mount('/worker-documents?siteId=site-a&workerId=worker-1&tab=documents');
-  await screen.findByRole('heading', { name: tr('documents.reviewQueue') });
+  await screen.findByRole('heading', { name: tr('documents.workspaceTitle') });
   expect(screen.queryByRole('heading', { name: tr('documents.title') })).toBeNull();
   expect((screen.getByLabelText(tr('common.site_fa7955')) as HTMLSelectElement).value).toBe(
     'site-a',
@@ -226,7 +230,7 @@ it('Safety Officer opens review queue and pre-selects the worker from notificati
   expect(screen.getByRole('button', { name: tr('documents.approve') })).toBeTruthy();
 });
 
-it('Worker role opens their own read-only document panel directly', async () => {
+it('Worker can edit personal information without an active contractor team', async () => {
   user = {
     id: 'user-worker',
     username: 'worker01',
@@ -235,14 +239,10 @@ it('Worker role opens their own read-only document panel directly', async () => 
     isActive: true,
     mustChangePassword: false,
   };
-  vi.spyOn(SmartSiteManagementClient.prototype, 'myContractorTeam').mockResolvedValue({
-    workerId: 'worker-1',
-    displayName: 'Nguyễn Văn Worker',
-    membershipId: null,
-    teamId: 'team-1',
-    teamName: 'Synthetic team',
-    zones: [],
-  });
+  const team = vi.spyOn(SmartSiteManagementClient.prototype, 'myContractorTeam');
+  const self = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'myWorkerCompliance')
+    .mockResolvedValue(compliance);
 
   mount('/worker-documents?siteId=site-a');
   await screen.findByText(/card\.jpg/);
@@ -252,11 +252,14 @@ it('Worker role opens their own read-only document panel directly', async () => 
   );
   expect(screen.queryByRole('heading', { name: tr('documents.reviewQueue') })).toBeNull();
   expect(await screen.findByText(/card\.jpg/)).toBeTruthy();
+  expect(self).toHaveBeenCalledWith('synthetic-token', 'site-a');
+  expect(team).not.toHaveBeenCalled();
   expect(
     screen.queryByLabelText(`${tr('documents.upload')} — ${tr('documents.SAFETY_CARD')}`),
   ).toBeNull();
   expect(screen.queryByRole('button', { name: tr('documents.sendBundle') })).toBeNull();
-  expect(screen.getByText(tr('documents.readOnly'))).toBeTruthy();
+  fireEvent.click(screen.getByText(tr('documents.personalDetails')));
+  expect(screen.getByRole('button', { name: tr('workerIntake.editIdentity') })).toBeTruthy();
   expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
 });
 
@@ -265,6 +268,47 @@ it('does not open another site when a legacy document link requests an unavailab
   expect((await screen.findByRole('alert')).textContent).toContain(tr('safetyUi.siteUnavailable'));
   expect(SmartSiteManagementClient.prototype.listWorkerCompliance).not.toHaveBeenCalled();
   expect(SmartSiteManagementClient.prototype.workerCompliance).not.toHaveBeenCalled();
+});
+
+it('opens a rep record, filters expiring certificates and enrolls the selected worker in context', async () => {
+  user.roleAssignments = [{ role: 'CONTRACTOR_REPRESENTATIVE', siteId: 'site-a' }];
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listWorkers').mockResolvedValue({
+    items: [
+      {
+        id: 'worker-1',
+        siteId: 'site-a',
+        contractorId: 'contractor-1',
+        userId: 'worker-account',
+        externalId: 'W001',
+        displayName: compliance.displayName,
+        isActive: true,
+        createdAt: '',
+      },
+    ],
+    total: 1,
+  });
+  const face = vi
+    .spyOn(SmartSiteManagementClient.prototype, 'getFaceProfile')
+    .mockResolvedValue(null as never);
+  mount('/worker-documents?siteId=site-a');
+  await screen.findByRole('heading', { name: tr('workerIntake.recordTitle') });
+  fireEvent.change(screen.getByRole('combobox', { name: tr('documents.submissionFilter') }), {
+    target: { value: 'expiring' },
+  });
+  await waitFor(() =>
+    expect(SmartSiteManagementClient.prototype.listWorkerCompliance).toHaveBeenLastCalledWith(
+      'synthetic-token',
+      'site-a',
+      expect.objectContaining({ expiringOnly: true }),
+    ),
+  );
+  fireEvent.click(await screen.findByRole('button', { name: /Nguyễn Văn An/ }));
+  await screen.findByText('card.jpg');
+  fireEvent.click(screen.getByRole('button', { name: tr('workerIntake.face') }));
+  await waitFor(() => expect(face).toHaveBeenCalledWith('synthetic-token', 'worker-1'));
+  expect(
+    screen.queryByLabelText(tr('worker_enrollment_view.existing_worker_profile_account_optional')),
+  ).toBeNull();
 });
 
 it('keeps the new Safety header while switching sites through URL history', async () => {

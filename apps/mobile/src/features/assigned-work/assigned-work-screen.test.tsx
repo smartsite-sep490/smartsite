@@ -99,6 +99,7 @@ async function mount(
   initialId = 'checklist-a',
   initialActionId?: string,
   onBack: () => void = () => {},
+  onScopeChange?: () => void,
 ) {
   await act(async () => {
     root = create(
@@ -110,6 +111,7 @@ async function mount(
           initialKind,
           initialActionId,
           onBack,
+          onScopeChange,
         }),
       ),
     );
@@ -571,8 +573,11 @@ it.each(['checklist', 'incident'])(
       total: 1,
     });
     const leave = vi.fn();
-    await mount(kind, kind === 'checklist' ? detail.id : incident.id, undefined, leave);
+    const switchSite = vi.fn();
+    await mount(kind, kind === 'checklist' ? detail.id : incident.id, undefined, leave, switchSite);
     expect(root.root.findAllByType(ScreenHeader)).toHaveLength(1);
+    await click(`${t('header.switchScopeTooltip')}: Site · Synthetic Contractor`);
+    expect(switchSite).toHaveBeenCalledOnce();
     expect(buttons(t('common.back'))).toHaveLength(1);
     await click(t('common.back'));
     expect(leave).not.toHaveBeenCalled();

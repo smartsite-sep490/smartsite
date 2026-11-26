@@ -1,56 +1,24 @@
 /** Dates are ISO calendar dates; expiry is inclusive in Asia/Ho_Chi_Minh. */
 export type WorkerDocumentKind = 'SAFETY_CARD' | 'HEALTH_CERTIFICATE' | 'PERSONAL_INSURANCE';
-export interface DocumentImageQuality {
-  ocr?: DocumentOcrResult;
-  status: 'ACCEPTED' | 'RETAKE' | 'UNAVAILABLE';
-  reason:
-    | 'IMAGE_ACCEPTED'
-    | 'IMAGE_BLURRY'
-    | 'IMAGE_TOO_SMALL'
-    | 'IMAGE_TOO_LARGE'
-    | 'IMAGE_EXPOSURE'
-    | 'IMAGE_INVALID'
-    | 'PDF_TOO_MANY_PAGES'
-    | 'OCR_ENGINE_UNAVAILABLE';
-}
 export interface WorkerIdentityImageResponse {
   id: string;
   side: 'FRONT' | 'BACK';
   mediaType: 'image/jpeg' | 'image/png';
   originalName: string;
   uploadedAt: string;
-  identityCheck?: WorkerDocumentIdentityCheck;
 }
-export type WorkerDocumentStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUPERSEDED';
+export type WorkerDocumentStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUPERSEDED';
 export type WorkerDocumentNotificationEvent =
   | 'DOCUMENT_SUBMITTED'
   | 'DOCUMENT_APPROVED'
   | 'DOCUMENT_REJECTED'
   | 'DOCUMENT_EXPIRING'
   | 'DOCUMENT_EXPIRED';
-export interface DocumentOcrResult {
-  status: 'READ' | 'UNREADABLE' | 'UNAVAILABLE';
-  issuedOn: string | null;
-  expiresOn: string | null;
-  /** Optional for compatibility with an OCR service deployed before ID extraction. */
-  nationalIds?: string[];
-  /** Technical hints only. A Safety Officer confirms dates against the original. */
-  warnings: string[];
-}
-export interface WorkerDocumentIdentityCheck {
-  status: 'MATCH' | 'MISMATCH' | 'NOT_DETECTED' | 'UNAVAILABLE' | 'NO_REFERENCE';
-  detectedNationalIds: string[];
-}
 export interface WorkerDocumentDateCheck {
   status: 'MATCH' | 'MISMATCH' | 'UNAVAILABLE' | 'NO_REFERENCE';
   field: 'ISSUED_ON' | 'EXPIRES_ON';
   submittedDate: string | null;
   detectedDate: string | null;
-}
-export interface WorkerDocumentCheckResponse {
-  quality: DocumentImageQuality;
-  ocr: DocumentOcrResult | null;
-  dateCheck: WorkerDocumentDateCheck;
 }
 export type WorkerDocumentAnalysisResult =
   | {
@@ -58,7 +26,6 @@ export type WorkerDocumentAnalysisResult =
       detectedKind: WorkerDocumentKind | 'OTHER' | null;
       issuedOn: string | null;
       expiresOn: string | null;
-      nationalId: string | null;
     }
   | { status: 'UNAVAILABLE' };
 
@@ -66,7 +33,7 @@ export type WorkerDocumentAiAnalysis =
   | (Extract<WorkerDocumentAnalysisResult, { status: 'COMPLETE' }> & {
       kindMismatch: boolean;
       dateCheck: WorkerDocumentDateCheck;
-      identityCheck: WorkerDocumentIdentityCheck['status'];
+      startDateCheck?: WorkerDocumentDateCheck;
       validity?: 'CURRENT' | 'EXPIRED' | 'NOT_YET_VALID' | 'UNKNOWN';
     })
   | { status: 'UNAVAILABLE' }
@@ -84,18 +51,66 @@ export interface SubmitWorkerDocumentsCommand {
   expectedVersion: number;
   safetyCardRequired: boolean;
   documents: Partial<Record<WorkerDocumentKind, UploadWorkerDocumentCommand>>;
-  identity?: {
-    nationalId: string;
-    phoneNumber: string;
-    gender: 'MALE' | 'FEMALE' | 'OTHER';
-    address: string;
-  };
 }
 
 export interface WorkerDocumentSubmissionResponse {
   requestId: string;
   version: number;
   documentIds: string[];
+}
+
+export interface WorkerIdentityUpdateCommand {
+  expectedVersion: number;
+  nationalId: string;
+  phoneNumber: string;
+  gender: 'MALE' | 'FEMALE' | 'OTHER';
+  address: string;
+}
+
+export interface SaveWorkerOnboardingDraftCommand {
+  expectedVersion: number;
+  displayName: string;
+  username: string;
+  email: string;
+  safetyCardRequired: boolean | null;
+  language?: 'vi' | 'en';
+  documents: Partial<Record<WorkerDocumentKind, UploadWorkerDocumentCommand>>;
+}
+
+export interface WorkerOnboardingDraft extends Omit<
+  SaveWorkerOnboardingDraftCommand,
+  'expectedVersion' | 'documents'
+> {
+  id: string;
+  version: number;
+  documents: Partial<
+    Record<
+      WorkerDocumentKind,
+      UploadWorkerDocumentCommand & {
+        originalName?: string;
+        mediaType?: WorkerDocumentResponse['mediaType'];
+      }
+    >
+  >;
+  workerId: string | null;
+  workerCode: string | null;
+  workerVersion: number | null;
+  canProvision: boolean;
+  canSubmit: boolean;
+  missingKinds: WorkerDocumentKind[];
+  submissionStatus: WorkerDocumentSubmissionStatus;
+}
+
+export interface WorkerOnboardingBatchItem {
+  id: string;
+  version: number;
+}
+
+export interface WorkerOnboardingBatchResult {
+  id: string;
+  status: 'SUCCEEDED' | 'FAILED';
+  workerId?: string;
+  error?: { code: string; message: string };
 }
 
 export interface WorkerDocumentResponse {
@@ -106,22 +121,17 @@ export interface WorkerDocumentResponse {
   originalName: string;
   mediaType: 'image/jpeg' | 'image/png' | 'application/pdf';
   size: number;
-  ocr: DocumentOcrResult;
   issuedOn: string | null;
   expiresOn: string | null;
   uploadedAt: string;
   /** Worker/Representative proposal only; does not grant or extend approved validity. */
   submittedExpiresOn?: string | null;
-  /** Health certificate issue/examination date supplied for Safety confirmation. */
+  /** Examination, issue or coverage start date supplied for Safety confirmation. */
   submittedIssuedOn?: string | null;
   reviewedAt: string | null;
   reviewNote: string | null;
   version: number;
-  /** Advisory only: never blocks submission or Safety approval. */
-  identityCheck?: WorkerDocumentIdentityCheck;
-  /** Technical comparison only; Safety still confirms the original and approved dates. */
-  dateCheck?: WorkerDocumentDateCheck;
-  /** Advisory AI output exposed only to Safety Officers assigned to the Site. */
+  /** Advisory AI output exposed to the scoped Contractor Representative. */
   aiAnalysis?: WorkerDocumentAiAnalysis;
 }
 export type WorkerComplianceStatus = 'NOT_REQUIRED' | 'PENDING' | 'ACTIVE' | 'EXPIRED';
@@ -133,10 +143,15 @@ export interface WorkerComplianceListQuery {
   pendingOnly?: boolean;
   submissionStatus?: WorkerDocumentSubmissionStatus;
   needsSupplement?: boolean;
+  contractorId?: string;
+  expiringOnly?: boolean;
 }
 export interface WorkerComplianceResponse {
   version?: number;
+  identityVersion?: number;
   safetyCardRequired?: boolean;
+  draftSafetyCardRequired?: boolean | null;
+  canSubmit?: boolean;
   aiSummary?: WorkerDocumentAiSummary;
   workerId: string;
   contractorId: string | null;
@@ -159,7 +174,7 @@ export interface ReviewWorkerDocumentCommand {
   approve: boolean;
   issuedOn?: string;
   expiresOn?: string;
-  reviewNote: string;
+  reviewNote?: string;
 }
 export interface UploadWorkerDocumentCommand {
   submittedExpiresOn?: string;

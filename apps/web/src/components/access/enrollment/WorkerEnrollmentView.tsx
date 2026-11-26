@@ -6,7 +6,7 @@ import { translate as tr } from '../../../i18n';
 import { useTranslation } from 'react-i18next';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError } from '@smartsite/api-client';
+import { ApiError, type WorkerResponse } from '@smartsite/api-client';
 import { IconCamera, IconCheck, IconShield, IconUsers } from '../../icons';
 import { captureFrameBlob, createSafePreviewUrl, revokeSafePreviewUrl } from './faceGateUtils';
 import { GateCameraSession } from './gateCameraSession';
@@ -18,6 +18,7 @@ export interface WorkerEnrollmentViewProps {
   siteId: string;
   sessionScope: string;
   canManageAccounts?: boolean;
+  worker?: WorkerResponse;
 }
 
 type EnrollmentStep = 'consent' | 'capture-front' | 'capture-left' | 'capture-right' | 'review';
@@ -136,6 +137,7 @@ export function WorkerEnrollmentView({
   siteId,
   sessionScope,
   canManageAccounts = true,
+  worker,
 }: WorkerEnrollmentViewProps) {
   useTranslation();
 
@@ -148,7 +150,7 @@ export function WorkerEnrollmentView({
   );
   const workerChoices = useQuery({
     queryKey: ['access-control', apiUrl, sessionScope, siteId, 'enrollment-worker-choices'],
-    enabled: !!token && !!siteId,
+    enabled: !worker && !!token && !!siteId,
     queryFn: () => client.listWorkers(token!, siteId, { limit: 100 }),
   });
   const [accountSearch, setAccountSearch] = useState('');
@@ -186,7 +188,7 @@ export function WorkerEnrollmentView({
   ];
   const linkedWorker = useQuery({
     queryKey: linkedWorkerKey,
-    enabled: !!token && !!siteId && (!!accountId || !!directWorkerId),
+    enabled: !worker && !!token && !!siteId && (!!accountId || !!directWorkerId),
     queryFn: async () => {
       for (let offset = 0; ; offset += 100) {
         const page = await client.listWorkers(token!, siteId, { offset, limit: 100 });
@@ -198,7 +200,8 @@ export function WorkerEnrollmentView({
       }
     },
   });
-  const selectedWorkerId = linkedWorker.data?.id ?? '';
+  const selectedWorker = worker ?? linkedWorker.data;
+  const selectedWorkerId = selectedWorker?.id ?? '';
   const linkAccount = useMutation({
     mutationFn: (userId: string) => client.prepareFaceAccount(token!, siteId, userId),
     onSuccess: async (worker, userId) => {
@@ -569,8 +572,6 @@ export function WorkerEnrollmentView({
     setQualityMessage(null);
   };
 
-  const selectedWorker = linkedWorker.data;
-
   return (
     <div className="space-y-6">
       {submissionError && currentStep === 'consent' && (
@@ -745,7 +746,11 @@ export function WorkerEnrollmentView({
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs">
         <div className="flex flex-wrap items-center gap-3.5">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-slate-900 to-slate-800 text-sm font-bold text-white shadow-xs">
-            {(accounts.data?.find((user) => user.id === accountId)?.displayName ?? 'WS')
+            {(
+              selectedWorker?.displayName ??
+              accounts.data?.find((user) => user.id === accountId)?.displayName ??
+              'WS'
+            )
               .slice(0, 2)
               .toUpperCase()}
           </div>
@@ -755,7 +760,8 @@ export function WorkerEnrollmentView({
                 {tr('common.enrolling_account')}
               </span>
               <span className="font-mono text-xs font-bold text-slate-900">
-                {accounts.data?.find((user) => user.id === accountId)?.username ??
+                {worker?.externalId ??
+                  accounts.data?.find((user) => user.id === accountId)?.username ??
                   tr('common.no_account_selected')}
               </span>
             </div>
@@ -933,27 +939,29 @@ export function WorkerEnrollmentView({
       {/* STEP 1: Consent Acknowledgment */}
       {currentStep === 'consent' && (
         <section className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xs">
-          <label className="mb-4 block text-xs font-semibold">
-            {tr('worker_enrollment_view.existing_worker_profile_account_optional')}
-            <SmartNativeSelect
-              className="mt-1 block w-full rounded border p-2"
-              value={directWorkerId}
-              onChange={(e) => {
-                handleResetWorkflow();
-                setAccountId('');
-                setDirectWorkerId(e.target.value);
-              }}
-            >
-              <option value="">{tr('common.use_selected_account')}</option>
-              {workerChoices.data?.items
-                .filter((w) => w.isActive)
-                .map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.displayName} · {w.externalId}
-                  </option>
-                ))}
-            </SmartNativeSelect>
-          </label>
+          {!worker && (
+            <label className="mb-4 block text-xs font-semibold">
+              {tr('worker_enrollment_view.existing_worker_profile_account_optional')}
+              <SmartNativeSelect
+                className="mt-1 block w-full rounded border p-2"
+                value={directWorkerId}
+                onChange={(e) => {
+                  handleResetWorkflow();
+                  setAccountId('');
+                  setDirectWorkerId(e.target.value);
+                }}
+              >
+                <option value="">{tr('common.use_selected_account')}</option>
+                {workerChoices.data?.items
+                  .filter((w) => w.isActive)
+                  .map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.displayName} · {w.externalId}
+                    </option>
+                  ))}
+              </SmartNativeSelect>
+            </label>
+          )}
           {workerChoices.error && <p role="alert">{userErrorMessage(workerChoices.error)}</p>}
           <p className="mb-3 text-xs text-slate-600">
             {tr(
@@ -1021,7 +1029,7 @@ export function WorkerEnrollmentView({
               type="button"
               disabled={
                 !consentAcknowledged ||
-                !selectedWorker ||
+                !selectedWorker?.isActive ||
                 isSubmitting ||
                 !linkedWorker.data?.isActive ||
                 linkedWorker.isPending ||

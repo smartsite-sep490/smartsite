@@ -16,13 +16,12 @@ pnpm dev:api
 
 API: `http://localhost:3000/api/v1`; Swagger chỉ trong development tại `http://localhost:3000/api/docs`. `pnpm dev` chạy cả Web và Backend. Dùng `pnpm --filter @smartsite/backend build` rồi `pnpm --filter @smartsite/backend start` để chạy bản đã build.
 
-## Worker document OCR
+## Worker document validation
 
-Document OCR is packaged with the Backend under `ocr/`, using a private Python subprocess
-and Tesseract/Poppler. Install the engines and run `pnpm ocr:setup` once. Normal runtime uses
-only `pnpm dev:api` or `pnpm dev`; no separate AI/OCR server is needed. The Backend image
-includes the engines and Vietnamese/English language data. See
-[Worker documents](../../contracts/worker-documents.md) for executable settings and tests.
+The Backend validates protected images and PDFs before storage. Put Poppler's `pdfinfo` and
+`pdftoppm` on PATH for local PDF uploads. The Backend container includes them. Representatives
+can explicitly request AI analysis for draft certificates. See
+[Worker documents](../../contracts/worker-documents.md) for permissions and testing.
 
 ## Ranh giới module
 
@@ -185,9 +184,9 @@ Web gửi `clientType=WEB`: access token trả trong JSON, refresh token chỉ �
 
 `GET /api/v1/auth/me` trả account cùng `roleAssignments`. Admin cấp tài khoản qua `POST /api/v1/users`, thay nguyên tử toàn bộ role bằng `PUT /api/v1/users/:id/role-assignments`, xem danh sách/chi tiết, khóa/mở và đặt lại mật khẩu tạm. `ADMIN` có `siteId=null`; các role còn lại, gồm `CONTRACTOR_REPRESENTATIVE` và `WORKER`, bắt buộc có Site tồn tại. Một user có thể có role khác nhau ở nhiều Site; backend không có “active role”.
 
-MF01 bổ sung `POST /api/v1/contractors/:contractorId/worker-accounts`: Representative đúng Site và Contractor grant, với participation còn hiệu lực, tạo đồng thời tài khoản `WORKER`, hồ sơ và liên kết. Mật khẩu tạm được hash trước transaction ghi; người dùng đăng nhập được ngay và có thể đổi mật khẩu theo chính sách hiện hành. Transaction kiểm tra lại quyền và ghi audit người tạo, không lưu mật khẩu trong audit/response. Trùng username hoặc mã Worker trả `CONFLICT` và rollback cả tài khoản/role/hồ sơ. `GET /api/v1/sites/:siteId/contractor-worker-account-options` chỉ liệt kê nhà thầu đang hoạt động mà Representative được gán tại Site đó. `PUT /api/v1/sites/:siteId/contractors/:contractorId/workers/:workerId` cho phép đại diện cùng nhà thầu sửa mã/tên và tạm dừng/khôi phục Worker, kiểm tra snapshot để tránh ghi đè thay đổi, giữ lịch sử và ghi audit người sửa. Thao tác này không thay đổi tài khoản đăng nhập hay tự cấp quyền vào cổng. Xem [MF01 Worker onboarding](../../contracts/mf01-worker-onboarding.md).
+MF01 lưu bản nháp trong phạm vi Site và nhà thầu. Khi đại diện gửi lệnh tạo hàng loạt, mỗi dòng hợp lệ tạo đồng thời tài khoản `WORKER`, hồ sơ, chứng từ nháp và yêu cầu gửi email. Trùng username hoặc email trả lỗi theo dòng và rollback giao dịch của dòng đó. `GET /api/v1/sites/:siteId/contractor-worker-account-options` liệt kê nhà thầu đang hoạt động mà đại diện được gán tại Site. `PUT /api/v1/sites/:siteId/contractors/:contractorId/workers/:workerId` dùng snapshot để sửa, tạm dừng hoặc khôi phục công nhân. Xem [MF01 Worker onboarding](../../contracts/mf01-worker-onboarding.md).
 
-UI mới không yêu cầu nhập mã Worker: khi bỏ `externalId`, Backend cấp mã dạng `W000001` bằng PostgreSQL sequence, không trùng giữa các lần tạo đồng thời. Migration WorkerCodeSequence giữ nguyên mã cũ và bắt đầu sau các mã số đã có. `externalId` vẫn được chấp nhận cho client cũ nhưng không chấp nhận null/rỗng; UI quản lý chỉ hiển thị mã. Sequence có thể có khoảng trống khi transaction rollback, không tái sử dụng mã đã cấp.
+Backend cấp mã công nhân dạng `W000001` bằng PostgreSQL sequence. UI hiển thị mã ở chế độ chỉ đọc. Mã hiện có được giữ lại và sequence có thể có khoảng trống khi transaction rollback.
 
 AI đọc `GET /api/v1/integrations/ai/cameras/:cameraId/configuration` bằng service token hiện có. Biến `AI_CONFIGURATION_CAMERA_IDS` chứa danh sách UUID camera phân cách dấu phẩy; để rỗng thì từ chối mọi camera. Camera không được cấp hoặc không tồn tại trả 404, inactive trả 409, active không có Region trả `regions: []`. Endpoint này không đưa Zone policy, Worker hoặc RTSP credentials cho AI. Allowlist chỉ áp dụng cho việc tải cấu hình; ingestion event hiện giữ semantics cũ.
 

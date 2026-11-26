@@ -1,18 +1,46 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SmartSiteManagementClient } from '@smartsite/api-client';
+import {
+  ApiError,
+  SmartSiteManagementClient,
+  type WorkerComplianceResponse,
+} from '@smartsite/api-client';
 import type { useWorkspace } from './workspace-context';
 import { ProfileScreen } from './home-profile';
 import { translate as t, setLanguage } from '../../i18n';
+import { Button } from '../shared/ui';
+import { SingleDocumentAttachment } from '../shared/uploads';
 
 const { logout } = vi.hoisted(() => ({ logout: vi.fn(async () => {}) }));
 vi.mock('../auth/auth-context', () => ({ useAuth: () => ({ session: { logout } }) }));
 vi.mock('./workspace-context', () => ({ useWorkspace: () => workspace }));
-vi.mock('../shared/uploads', () => ({ Attachments: () => null, EvidenceButton: () => null }));
+vi.mock('../shared/uploads', () => ({
+  Attachments: () => null,
+  EvidenceButton: () => null,
+  SingleDocumentAttachment: () => null,
+}));
 let workspace: ReturnType<typeof useWorkspace>;
 let root: ReactTestRenderer;
 let cache: QueryClient;
+
+const ownProfile: WorkerComplianceResponse = {
+  workerId: 'worker',
+  contractorId: 'contractor',
+  externalId: 'W000001',
+  displayName: 'Synthetic Worker',
+  nationalId: null,
+  phoneNumber: null,
+  gender: null,
+  address: null,
+  identityImages: [],
+  documents: [],
+  missingKinds: [],
+  expiringKinds: [],
+  status: 'PENDING',
+  submissionStatus: 'NOT_SUBMITTED',
+  needsSupplement: false,
+};
 
 async function waitForFaceStatus(status: string) {
   await vi.waitFor(async () => {
@@ -28,21 +56,7 @@ async function waitForFaceStatus(status: string) {
 
 async function mountFaceStatus() {
   const client = new SmartSiteManagementClient('https://api.example.test');
-  vi.spyOn(client, 'listWorkers').mockResolvedValue({
-    items: [
-      {
-        id: 'worker',
-        siteId: 'site',
-        userId: 'user',
-        contractorId: 'contractor',
-        externalId: 'W000001',
-        displayName: 'Synthetic Worker',
-        isActive: true,
-        createdAt: '',
-      },
-    ],
-    total: 1,
-  });
+  vi.spyOn(client, 'myWorkerCompliance').mockResolvedValue(ownProfile);
   workspace = {
     client,
     token: 'token',
@@ -133,7 +147,9 @@ it.each(['worker', 'contractor'] as const)(
   'requires confirmation before signing out the %s and hides device notification settings',
   async (role) => {
     const client = new SmartSiteManagementClient('https://api.example.test');
-    vi.spyOn(client, 'listWorkers').mockResolvedValue({ items: [], total: 0 });
+    vi.spyOn(client, 'myWorkerCompliance').mockRejectedValue(
+      new ApiError('http', 'Not found', 404),
+    );
     workspace = {
       client,
       token: 'token',
@@ -203,30 +219,22 @@ it.each(['worker', 'contractor'] as const)(
   },
 );
 
-it('shows own face status without face enrollment controls or management API requests', async () => {
+it('edits own identity despite unavailable contractor access and only reads the face status', async () => {
   const client = new SmartSiteManagementClient('https://api.example.test');
   const ownFace = Promise.withResolvers<{ status: 'NOT_ENROLLED' }>();
   vi.mocked(client.myWorkerFaceStatus).mockReturnValue(ownFace.promise);
-  vi.spyOn(client, 'listWorkers').mockResolvedValue({
-    items: [
-      {
-        id: 'worker-a',
-        userId: 'user-a',
-        siteId: 'site-a',
-        contractorId: 'contractor-a',
-        externalId: 'W000001',
-        displayName: 'Synthetic Worker',
-        isActive: true,
-        createdAt: '',
-      },
-    ],
-    total: 1,
-  });
+  const directory = vi.spyOn(client, 'listWorkers').mockRejectedValue(new Error('Inactive worker'));
+  const team = vi
+    .spyOn(client, 'myContractorTeam')
+    .mockRejectedValue(new Error('Inactive contractor participation'));
   const face = vi
     .spyOn(client, 'getFaceProfile')
     .mockRejectedValue(new Error('Worker cannot read face management'));
   const enroll = vi.spyOn(client, 'startFaceEnrollment');
-  const personal = vi.spyOn(client, 'workerCompliance').mockResolvedValue({
+  const updateIdentity = vi
+    .spyOn(client, 'updateMyWorkerIdentity')
+    .mockResolvedValue({ version: 1 });
+  const personal = vi.spyOn(client, 'myWorkerCompliance').mockResolvedValue({
     workerId: 'worker-a',
     contractorId: 'contractor-a',
     externalId: 'W000001',
@@ -297,7 +305,13 @@ it('shows own face status without face enrollment controls or management API req
   expect(client.myWorkerFaceStatus).toHaveBeenCalledWith('token', 'site-a');
   expect(face).not.toHaveBeenCalled();
   expect(enroll).not.toHaveBeenCalled();
-  expect(personal).not.toHaveBeenCalled();
+  expect(personal).toHaveBeenCalledWith(
+    'token',
+    'site-a',
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  expect(directory).not.toHaveBeenCalled();
+  expect(team).not.toHaveBeenCalled();
   await act(async () =>
     pressables
       .find((n) => n.props.accessibilityLabel === t('profile.personalInfo'))!
@@ -306,10 +320,39 @@ it('shows own face status without face enrollment controls or management API req
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 40));
   });
-  expect(personal).toHaveBeenCalledWith('token', 'site-a', 'worker-a');
   for (const value of ['000000000001', '0900000000', 'Synthetic address', t('documents.MALE')])
     expect(JSON.stringify(root.toJSON())).toContain(value);
-  expect(JSON.stringify(root.toJSON())).not.toContain(t('documents.FRONT'));
+  const sides = root.root.findAllByType(SingleDocumentAttachment);
+  expect(sides.map((node) => node.props.label)).toEqual([
+    t('documents.FRONT'),
+    t('documents.BACK'),
+  ]);
+  const front = { uri: 'file:///front.jpg', name: 'front.jpg', type: 'image/jpeg' };
+  const back = { uri: 'file:///back.png', name: 'back.png', type: 'image/png' };
+  const save = () =>
+    root.root
+      .findAllByType(Button)
+      .find((node) => node.props.label === t('onboarding.saveIdentity'))!;
+  expect(save().props.disabled).toBe(true);
+  await act(async () => sides[0]!.props.onChange(front));
+  expect(save().props.disabled).toBe(true);
+  await act(async () => sides[1]!.props.onChange(back));
+  expect(save().props.disabled).toBe(false);
+  await act(async () => save().props.onPress());
+  await vi.waitFor(() =>
+    expect(updateIdentity).toHaveBeenCalledWith(
+      'token',
+      'site-a',
+      {
+        expectedVersion: 0,
+        nationalId: '000000000001',
+        phoneNumber: '0900000000',
+        gender: 'MALE',
+        address: 'Synthetic address',
+      },
+      { FRONT: front, BACK: back },
+    ),
+  );
   await act(async () =>
     root.root
       .findAll(
@@ -342,20 +385,12 @@ it('shows own face status without face enrollment controls or management API req
 
 it('uses the existing site row to switch scope without an extra menu item for multi-scope users', async () => {
   const client = new SmartSiteManagementClient('https://api.example.test');
-  vi.spyOn(client, 'listWorkers').mockResolvedValue({
-    items: [
-      {
-        id: 'worker-b',
-        userId: 'user-b',
-        siteId: 'site-b',
-        contractorId: 'contractor-b',
-        externalId: 'W000002',
-        displayName: 'Multi Site Worker',
-        isActive: true,
-        createdAt: '',
-      },
-    ],
-    total: 1,
+  vi.spyOn(client, 'myWorkerCompliance').mockResolvedValue({
+    ...ownProfile,
+    workerId: 'worker-b',
+    contractorId: 'contractor-b',
+    externalId: 'W000002',
+    displayName: 'Multi Site Worker',
   });
   workspace = {
     client,

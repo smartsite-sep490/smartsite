@@ -1,23 +1,25 @@
 import {
   isWorkerDocumentDate,
-  type DocumentOcrResult,
   type WorkerDocumentDateCheck,
   type WorkerDocumentKind,
 } from '@smartsite/contracts';
 
-/** OCR is technical evidence. A match never approves a document or extends its validity. */
+/** AI compares the worker certificate dates without modifying the original or approval. */
 export function compareDocumentDates(
   kind: WorkerDocumentKind,
   submitted: { submittedIssuedOn?: string | null; submittedExpiresOn?: string | null },
-  ocr: DocumentOcrResult | null | undefined,
+  evidence: { issuedOn: string | null; expiresOn: string | null } | null,
+  field: WorkerDocumentDateCheck['field'] = kind === 'HEALTH_CERTIFICATE'
+    ? 'ISSUED_ON'
+    : 'EXPIRES_ON',
 ): WorkerDocumentDateCheck {
-  const health = kind === 'HEALTH_CERTIFICATE';
+  const start = field === 'ISSUED_ON';
   const submittedDate =
-    (health ? submitted.submittedIssuedOn : submitted.submittedExpiresOn) ?? null;
-  const detected = health ? ocr?.issuedOn : ocr?.expiresOn;
-  const detectedDate = ocr?.status === 'READ' && isWorkerDocumentDate(detected) ? detected : null;
+    (start ? submitted.submittedIssuedOn : submitted.submittedExpiresOn) ?? null;
+  const detected = start ? evidence?.issuedOn : evidence?.expiresOn;
+  const detectedDate = isWorkerDocumentDate(detected) ? detected : null;
   return {
-    field: health ? 'ISSUED_ON' : 'EXPIRES_ON',
+    field,
     submittedDate,
     detectedDate,
     status: !isWorkerDocumentDate(submittedDate)

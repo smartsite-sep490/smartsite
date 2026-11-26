@@ -13,7 +13,6 @@ import {
 import { WorkerDocumentsService } from '../src/modules/workforce/documents/worker-documents.service.js';
 import type { ContractorOperationsService } from '../src/modules/workforce/directory/contractor-operations.service.js';
 import type { StorageService } from '../src/integrations/storage/storage.service.js';
-import type { DocumentOcrService } from '../src/modules/workforce/documents/document-ocr.service.js';
 import type { DocumentNotificationsService } from '../src/modules/workforce/documents/document-notifications.service.js';
 import { DocumentAnalysisService } from '../src/modules/workforce/documents/document-analysis.service.js';
 
@@ -30,7 +29,6 @@ const file = { buffer, size: buffer.length, mimetype: 'image/jpeg' };
 function fixture(
   options: { active?: boolean; role?: boolean; owner?: string; unavailable?: boolean } = {},
 ) {
-  let qualityCalls = 0;
   const source = {
     manager: {
       getRepository(entity: unknown) {
@@ -64,48 +62,49 @@ function fixture(
       },
     } as unknown as ContractorOperationsService,
     {} as StorageService,
-    {
-      quality: async () => {
-        qualityCalls++;
-        return { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' };
-      },
-      read: async () => ({
-        status: 'READ',
-        issuedOn: '2026-10-27',
-        expiresOn: '2030-10-27',
-        warnings: [],
-      }),
-    } as unknown as DocumentOcrService,
     {} as DocumentNotificationsService,
     new DocumentAnalysisService(createTestConfig()),
   );
-  return { service, qualityCalls: () => qualityCalls };
+  return service;
 }
-test('Workers cannot submit, preflight or edit documents, including their own profile', async () => {
-  const { service, qualityCalls } = fixture();
-  for (const operation of [
-    () => service.checkWorkerQuality(actor, siteId, workerId, file),
-    () => service.checkSubmission(actor, siteId, workerId, 'SAFETY_CARD', file),
-    () =>
-      service.submit(
-        actor,
-        siteId,
-        workerId,
-        { requestId: randomUUID(), expectedVersion: 0, safetyCardRequired: true, documents: {} },
-        {},
-      ),
-  ])
-    await assert.rejects(
-      operation,
-      (e) => e instanceof PublicHttpException && e.publicPayload.code === 'FORBIDDEN',
-    );
-  assert.equal(qualityCalls(), 0);
-});
-test('unavailable authorization fails before OCR or storage', async () => {
-  const { service, qualityCalls } = fixture({ unavailable: true });
+test('Workers cannot save certificate drafts or write another Worker identity', async () => {
+  const service = fixture();
   await assert.rejects(
-    service.checkWorkerQuality(actor, siteId, workerId, file),
+    service.submit(
+      actor,
+      siteId,
+      workerId,
+      { requestId: randomUUID(), expectedVersion: 0, safetyCardRequired: true, documents: {} },
+      {},
+    ),
+    (error) => error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+  );
+  await assert.rejects(
+    service.updateOwnIdentity(
+      { ...actor, roleAssignments: [] },
+      siteId,
+      {
+        expectedVersion: 0,
+        nationalId: '000000000001',
+        phoneNumber: '0900000000',
+        gender: 'OTHER',
+        address: 'Synthetic address',
+      },
+      { FRONT: file },
+    ),
+    (error) => error instanceof PublicHttpException && error.publicPayload.code === 'FORBIDDEN',
+  );
+});
+test('unavailable authorization fails before file validation or storage', async () => {
+  const service = fixture({ unavailable: true });
+  await assert.rejects(
+    service.submit(
+      actor,
+      siteId,
+      workerId,
+      { requestId: randomUUID(), expectedVersion: 0, safetyCardRequired: true, documents: {} },
+      {},
+    ),
     /Synthetic authorization unavailable/,
   );
-  assert.equal(qualityCalls(), 0);
 });

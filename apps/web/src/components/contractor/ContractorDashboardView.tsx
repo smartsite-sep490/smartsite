@@ -1,5 +1,6 @@
 import { localizedError, userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
+import { WorksitePickerFrame, worksiteControlClass } from '../shared/WorksitePicker';
 import { useTranslation } from 'react-i18next';
 import React, { useState, useMemo, useRef } from 'react';
 import { TeamZoneDialog } from './TeamZoneDialog';
@@ -714,10 +715,9 @@ export function ContractorDashboardView({
         </div>
 
         {/* Scope dropdown selector */}
-        <div className="w-full md:w-80">
+        <WorksitePickerFrame id="contractor-scope-select" label={tr('common.active_site_scope')}>
           <SmartSelect
             id="contractor-scope-select"
-            label={tr('common.active_site_scope')}
             value={
               selectedSiteId && selectedContractorId
                 ? `${selectedSiteId}:${selectedContractorId}`
@@ -740,9 +740,10 @@ export function ContractorDashboardView({
                 label: `${scope.siteName} — ${scope.contractorName}`,
               })),
             ]}
-            className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs"
+            size="sm"
+            className={worksiteControlClass}
           />
-        </div>
+        </WorksitePickerFrame>
       </div>
 
       {!activeScope ? (

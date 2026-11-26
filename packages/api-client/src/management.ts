@@ -183,8 +183,6 @@ import type {
   ReviewAttendanceCorrectionCommand,
   ReviewAttendanceTimeCommand,
   AccountResponse,
-  CreateContractorWorkerAccountCommand,
-  ContractorWorkerAccountResponse,
   ContractorWorkerAccountOptionsResponse,
   AuthClientType,
   CameraResponse,
@@ -2872,16 +2870,106 @@ export class SmartSiteManagementClient {
     );
   }
 
-  createContractorWorkerAccount(
-    token: string,
-    contractorId: string,
-    input: CreateContractorWorkerAccountCommand,
-  ) {
-    return this.request<ContractorWorkerAccountResponse>(
-      'POST',
-      `/contractors/${pathId(contractorId)}/worker-accounts`,
+  listWorkerOnboardingDrafts(token: string, siteId: string, contractorId: string) {
+    return this.request<{ items: WorkerOnboardingDraft[] }>(
+      'GET',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/worker-onboarding-drafts`,
       token,
-      input,
+    );
+  }
+
+  saveWorkerOnboardingDraft(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    id: string,
+    input: SaveWorkerOnboardingDraftCommand,
+    files: Partial<Record<WorkerDocumentKind, UploadFile>>,
+  ) {
+    const form = new FormData();
+    form.append('metadata', JSON.stringify(input));
+    for (const [kind, file] of Object.entries(files)) if (file) appendFile(form, kind, file);
+    return this.requestFormData<WorkerOnboardingDraft>(
+      'PUT',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/worker-onboarding-drafts/${pathId(id)}`,
+      token,
+      form,
+      { timeoutMs: 120_000 },
+    );
+  }
+
+  workerOnboardingDraftFile(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    id: string,
+    kind: WorkerDocumentKind,
+  ) {
+    return this.requestBlob(
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/worker-onboarding-drafts/${pathId(id)}/documents/${pathId(kind)}/file`,
+      token,
+      undefined,
+      ['image/jpeg', 'image/png', 'application/pdf'],
+    );
+  }
+
+  provisionWorkerOnboardingBatch(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    items: WorkerOnboardingBatchItem[],
+  ) {
+    return this.request<{ items: WorkerOnboardingBatchResult[] }>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/worker-onboarding-drafts/provision`,
+      token,
+      { items },
+      undefined,
+      { timeoutMs: 120_000 },
+    );
+  }
+
+  sendWorkerDocumentsBatch(
+    token: string,
+    siteId: string,
+    contractorId: string,
+    items: WorkerOnboardingBatchItem[],
+  ) {
+    return this.request<{ items: WorkerOnboardingBatchResult[] }>(
+      'POST',
+      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/worker-document-submissions/batch`,
+      token,
+      { items },
+      undefined,
+      { timeoutMs: 120_000 },
+    );
+  }
+
+  updateMyWorkerIdentity(
+    token: string,
+    siteId: string,
+    input: WorkerIdentityUpdateCommand,
+    files: Partial<Record<'FRONT' | 'BACK', UploadFile>>,
+  ) {
+    const form = new FormData();
+    form.append('metadata', JSON.stringify(input));
+    for (const [side, file] of Object.entries(files)) if (file) appendFile(form, side, file);
+    return this.requestFormData<{ version: number }>(
+      'PUT',
+      `/sites/${pathId(siteId)}/workers/me/identity`,
+      token,
+      form,
+    );
+  }
+
+  myWorkerCompliance(token: string, siteId: string, options?: RequestOptions) {
+    return this.request<WorkerComplianceResponse>(
+      'GET',
+      `/sites/${pathId(siteId)}/workers/me/compliance`,
+      token,
+      undefined,
+      undefined,
+      options,
     );
   }
 
@@ -2893,33 +2981,6 @@ export class SmartSiteManagementClient {
       undefined,
       undefined,
       options,
-    );
-  }
-  checkDocumentImageQuality(token: string, siteId: string, contractorId: string, file: UploadFile) {
-    const form = new FormData();
-    appendFile(form, 'file', file);
-    return this.requestFormData<import('@smartsite/contracts').DocumentImageQuality>(
-      'POST',
-      `/sites/${pathId(siteId)}/contractors/${pathId(contractorId)}/document-image-quality`,
-      token,
-      form,
-      { timeoutMs: 60_000 },
-    );
-  }
-  checkWorkerDocumentImageQuality(
-    token: string,
-    siteId: string,
-    workerId: string,
-    file: UploadFile,
-  ) {
-    const form = new FormData();
-    appendFile(form, 'file', file);
-    return this.requestFormData<import('@smartsite/contracts').DocumentImageQuality>(
-      'POST',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/document-image-quality`,
-      token,
-      form,
-      { timeoutMs: 60_000 },
     );
   }
   workerIdentityImageFile(token: string, siteId: string, workerId: string, id: string) {
@@ -2940,42 +3001,12 @@ export class SmartSiteManagementClient {
       this.listPath(`/sites/${pathId(siteId)}/worker-compliance`, {
         ...options,
         pendingOnly: options?.pendingOnly === undefined ? undefined : String(options.pendingOnly),
+        expiringOnly:
+          options?.expiringOnly === undefined ? undefined : String(options.expiringOnly),
         needsSupplement:
           options?.needsSupplement === undefined ? undefined : String(options.needsSupplement),
       }),
       token,
-    );
-  }
-  retryWorkerIdentityOcr(token: string, siteId: string, workerId: string, id: string) {
-    return this.request<{ id: string }>(
-      'POST',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/identity-images/${pathId(id)}/ocr`,
-      token,
-      {},
-      undefined,
-      { timeoutMs: 60_000 },
-    );
-  }
-  checkWorkerDocumentDates(
-    token: string,
-    siteId: string,
-    workerId: string,
-    kind: WorkerDocumentKind,
-    file: UploadFile,
-    input: import('@smartsite/contracts').UploadWorkerDocumentCommand,
-  ) {
-    const form = new FormData();
-    appendFile(form, 'file', file);
-    if (input.submittedExpiresOn !== undefined)
-      form.append('submittedExpiresOn', input.submittedExpiresOn);
-    if (input.submittedIssuedOn !== undefined)
-      form.append('submittedIssuedOn', input.submittedIssuedOn);
-    return this.requestFormData<import('@smartsite/contracts').WorkerDocumentCheckResponse>(
-      'POST',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(kind)}/check`,
-      token,
-      form,
-      { timeoutMs: 60_000 },
     );
   }
   workerDocumentFile(token: string, siteId: string, workerId: string, id: string) {
@@ -2986,24 +3017,12 @@ export class SmartSiteManagementClient {
       ['image/jpeg', 'image/png', 'application/pdf'],
     );
   }
-  retryWorkerDocumentOcr(token: string, siteId: string, workerId: string, id: string) {
-    return this.request<WorkerDocumentResponse>(
-      'POST',
-      `/sites/${pathId(siteId)}/workers/${pathId(workerId)}/documents/${pathId(id)}/ocr`,
-      token,
-      {},
-      undefined,
-      { timeoutMs: 60_000 },
-    );
-  }
   submitWorkerDocuments(
     token: string,
     siteId: string,
     workerId: string,
     input: import('@smartsite/contracts').SubmitWorkerDocumentsCommand,
-    files: Partial<
-      Record<import('@smartsite/contracts').WorkerDocumentKind | 'FRONT' | 'BACK', UploadFile>
-    >,
+    files: Partial<Record<WorkerDocumentKind, UploadFile>>,
   ) {
     const form = new FormData();
     form.append('metadata', JSON.stringify(input));
@@ -4736,6 +4755,11 @@ export class SmartSiteManagementClient {
 }
 import type {
   WorkerDocumentKind,
+  SaveWorkerOnboardingDraftCommand,
+  WorkerIdentityUpdateCommand,
+  WorkerOnboardingBatchItem,
+  WorkerOnboardingBatchResult,
+  WorkerOnboardingDraft,
   WorkerDocumentResponse,
   WorkerComplianceResponse,
   ReviewWorkerDocumentCommand,

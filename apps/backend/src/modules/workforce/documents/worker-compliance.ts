@@ -10,7 +10,6 @@ import type {
 import {
   WorkerComplianceProfileEntity,
   WorkerDocumentEntity,
-  WorkerIdentityImageEntity,
 } from '../../../database/entities/worker-document.entity.js';
 
 export const DOCUMENT_KINDS: readonly WorkerDocumentKind[] = [
@@ -64,58 +63,51 @@ export function documentReviewState(
     WorkerDocumentEntity,
     'id' | 'kind' | 'status' | 'issuedOn' | 'expiresOn' | 'uploadedAt'
   >[],
-  identityComplete: boolean,
   at = new Date(),
   safetyCardRequired = true,
 ): { submissionStatus: WorkerDocumentSubmissionStatus; needsSupplement: boolean } {
   const today = complianceDate(at);
   const submissionStatus = documents.some((doc) => doc.status === 'PENDING')
     ? 'PENDING_REVIEW'
-    : documents.length
+    : documents.some((doc) => doc.status !== 'DRAFT')
       ? 'REVIEWED'
       : 'NOT_SUBMITTED';
-  const needsSupplement =
-    !identityComplete ||
-    DOCUMENT_KINDS.filter((kind) => safetyCardRequired || kind !== 'SAFETY_CARD').some((kind) => {
-      const current = documents.filter((doc) => doc.kind === kind);
-      if (current.some((doc) => doc.status === 'PENDING')) return false;
-      const latest = [...current]
-        .filter((doc) => doc.status !== 'SUPERSEDED')
-        .sort(
-          (a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime() || b.id.localeCompare(a.id),
-        )[0];
-      return (
-        latest?.status === 'REJECTED' ||
-        !current.some(
-          (doc) =>
-            doc.status === 'APPROVED' &&
-            doc.issuedOn &&
-            doc.issuedOn <= today &&
-            doc.expiresOn &&
-            doc.expiresOn >= today,
-        )
-      );
-    });
+  const needsSupplement = DOCUMENT_KINDS.filter(
+    (kind) => safetyCardRequired || kind !== 'SAFETY_CARD',
+  ).some((kind) => {
+    const current = documents.filter((doc) => doc.kind === kind);
+    if (current.some((doc) => doc.status === 'PENDING')) return false;
+    const latest = [...current]
+      .filter((doc) => doc.status !== 'SUPERSEDED' && doc.status !== 'DRAFT')
+      .sort(
+        (a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime() || b.id.localeCompare(a.id),
+      )[0];
+    return (
+      latest?.status === 'REJECTED' ||
+      !current.some(
+        (doc) =>
+          doc.status === 'APPROVED' &&
+          doc.issuedOn &&
+          doc.issuedOn <= today &&
+          doc.expiresOn &&
+          doc.expiresOn >= today,
+      )
+    );
+  });
   return { submissionStatus, needsSupplement };
 }
-function documentStatus(
-  profile: WorkerComplianceProfileEntity | null | undefined,
-  documents: WorkerDocumentEntity[],
-  identityImages: number,
-  at: Date,
-): WorkerComplianceStatus {
-  const state = complianceState(true, documents, at, 30, profile?.safetyCardRequired ?? true);
-  if (
-    state.status === 'ACTIVE' &&
-    profile?.identityRequired &&
-    (!profile.nationalId ||
-      !profile.phoneNumber ||
-      !profile.gender ||
-      !profile.address ||
-      identityImages !== 2)
-  )
-    return 'PENDING';
-  return state.status;
+export function documentDraftMissingKinds(
+  documents: Pick<WorkerDocumentEntity, 'kind' | 'status' | 'issuedOn' | 'expiresOn'>[],
+  safetyCardRequired: boolean,
+  at = new Date(),
+): WorkerDocumentKind[] {
+  const { missingKinds } = complianceState(true, documents, at, 30, safetyCardRequired);
+  return missingKinds.filter(
+    (kind) =>
+      !documents.some(
+        (doc) => doc.kind === kind && (doc.status === 'PENDING' || doc.status === 'DRAFT'),
+      ),
+  );
 }
 
 export async function workerDocumentStatus(
@@ -126,13 +118,10 @@ export async function workerDocumentStatus(
   const profile = await manager
     .getRepository(WorkerComplianceProfileEntity)
     .findOneBy({ workerId });
-  const identityImages = profile?.identityRequired
-    ? await manager.getRepository(WorkerIdentityImageEntity).countBy({ workerId })
-    : 0;
   const documents = await manager
     .getRepository(WorkerDocumentEntity)
     .findBy({ workerId, status: 'APPROVED' });
-  return documentStatus(profile, documents, identityImages, at);
+  return complianceState(true, documents, at, 30, profile?.safetyCardRequired ?? true).status;
 }
 
 /** Batch only after the caller has authorized the Worker IDs; never includes private files. */
@@ -144,22 +133,20 @@ export async function workerDocumentStatuses(
   const result = new Map<string, WorkerComplianceStatus>();
   if (!workerIds.length) return result;
   const where = { workerId: In(workerIds) };
-  const [profiles, documents, images] = await Promise.all([
+  const [profiles, documents] = await Promise.all([
     manager.getRepository(WorkerComplianceProfileEntity).findBy(where),
     manager.getRepository(WorkerDocumentEntity).findBy({ ...where, status: 'APPROVED' }),
-    manager
-      .getRepository(WorkerIdentityImageEntity)
-      .find({ where, select: { workerId: true, side: true } }),
   ]);
   for (const workerId of workerIds)
     result.set(
       workerId,
-      documentStatus(
-        profiles.find((p) => p.workerId === workerId),
+      complianceState(
+        true,
         documents.filter((d) => d.workerId === workerId),
-        images.filter((i) => i.workerId === workerId).length,
         at,
-      ),
+        30,
+        profiles.find((p) => p.workerId === workerId)?.safetyCardRequired ?? true,
+      ).status,
     );
   return result;
 }

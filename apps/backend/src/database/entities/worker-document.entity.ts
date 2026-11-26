@@ -9,7 +9,6 @@ import {
   Unique,
 } from 'typeorm';
 import type {
-  DocumentOcrResult,
   WorkerDocumentAnalysisResult,
   WorkerDocumentKind,
   WorkerDocumentStatus,
@@ -20,6 +19,7 @@ import { UserEntity } from './user.entity.js';
 
 @Entity({ name: 'worker_compliance_profile' })
 @Check('chk_compliance_version', 'version>=1')
+@Check('chk_compliance_identity_version', 'identity_version>=0')
 @Check('chk_compliance_national_id', "national_id IS NULL OR national_id ~ '^[0-9]{12}$'")
 @Check('chk_compliance_phone', "phone_number IS NULL OR phone_number ~ '^\\+?[0-9]{9,15}$'")
 @Check('chk_compliance_gender', "gender IS NULL OR gender IN ('MALE','FEMALE','OTHER')")
@@ -38,6 +38,10 @@ export class WorkerComplianceProfileEntity {
   identityRequired!: boolean;
   @Column({ name: 'safety_card_required', type: 'boolean', default: true })
   safetyCardRequired!: boolean;
+  @Column({ name: 'draft_safety_card_required', type: 'boolean', nullable: true })
+  draftSafetyCardRequired!: boolean | null;
+  @Column({ name: 'identity_version', type: 'integer', default: 0 })
+  identityVersion!: number;
   @Column({ type: 'integer', default: 1 })
   version!: number;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
@@ -55,7 +59,7 @@ export class WorkerIdentityImageEntity {
   @Column({ type: 'varchar', length: 5 }) side!: 'FRONT' | 'BACK';
   @Column({ name: 'original_name', type: 'varchar', length: 255 }) originalName!: string;
   @Column({ type: 'jsonb', select: false }) file!: StoredObject;
-  @Column({ type: 'jsonb', nullable: true }) ocr!: DocumentOcrResult | null;
+  @Column({ type: 'jsonb', nullable: true, select: false }) ocr!: unknown;
   @CreateDateColumn({ name: 'uploaded_at', type: 'timestamptz' }) uploadedAt!: Date;
 }
 
@@ -76,11 +80,18 @@ export type WorkerDocumentAnalysisLease = {
   unique: true,
   where: "status='PENDING'",
 })
+@Index('uq_worker_document_draft', ['workerId', 'kind'], {
+  unique: true,
+  where: "status='DRAFT'",
+})
 @Check(
   'chk_worker_document_kind',
   "kind IN ('SAFETY_CARD','HEALTH_CERTIFICATE','PERSONAL_INSURANCE')",
 )
-@Check('chk_worker_document_status', "status IN ('PENDING','APPROVED','REJECTED','SUPERSEDED')")
+@Check(
+  'chk_worker_document_status',
+  "status IN ('DRAFT','PENDING','APPROVED','REJECTED','SUPERSEDED')",
+)
 @Check(
   'chk_worker_document_dates',
   "status<>'APPROVED' OR (issued_on IS NOT NULL AND expires_on IS NOT NULL AND expires_on>=issued_on AND reviewed_at IS NOT NULL AND reviewed_by IS NOT NULL)",
@@ -94,7 +105,7 @@ export class WorkerDocumentEntity {
   @Column({ type: 'varchar', length: 16 }) status!: WorkerDocumentStatus;
   @Column({ name: 'original_name', type: 'varchar', length: 255 }) originalName!: string;
   @Column({ type: 'jsonb', select: false }) file!: StoredObject;
-  @Column({ type: 'jsonb' }) ocr!: DocumentOcrResult;
+  @Column({ type: 'jsonb', nullable: true, select: false }) ocr!: unknown;
   @Column({ name: 'ai_analysis', type: 'jsonb', nullable: true, select: false })
   aiAnalysis!: WorkerDocumentAnalysisResult | WorkerDocumentAnalysisLease | null;
   @Column({ name: 'issued_on', type: 'date', nullable: true }) issuedOn!: string | null;

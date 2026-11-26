@@ -1,303 +1,210 @@
 import { useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import {
-  isWorkerDocumentDate,
   healthCertificateExpiry,
+  isWorkerDocumentDate,
   type NativeUploadFile,
-  type DocumentImageQuality,
   type SubmitWorkerDocumentsCommand,
   type WorkerComplianceResponse,
-  type WorkerDocumentCheckResponse,
   type WorkerDocumentKind,
 } from '@smartsite/api-client';
 import { useTranslation } from '../../i18n';
 import { colors } from '../../theme/colors';
 import { useWorkspace } from '../workspace/workspace-context';
-import { useCommand, useRequestId, localDate } from '../shared/data';
-import { Button, Choice, Disclosure, ErrorNotice, Hint } from '../shared/ui';
 import { CalendarDateField } from '../shared/calendar-date-field';
-import { Attachments } from '../shared/uploads';
+import { useCommand, useRequestId } from '../shared/data';
+import { Button, Choice, ErrorNotice, Hint } from '../shared/ui';
+import { EvidenceButton, SingleDocumentAttachment } from '../shared/uploads';
 
-const kinds: readonly WorkerDocumentKind[] = [
-  'SAFETY_CARD',
-  'HEALTH_CERTIFICATE',
-  'PERSONAL_INSURANCE',
-];
+const allKinds: WorkerDocumentKind[] = ['HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE', 'SAFETY_CARD'];
 
 export function WorkerDocumentBundleForm({
   profile,
-  onSubmitted,
+  kind: selectedKind,
+  onSaved,
+  onBusyChange,
 }: {
   profile: WorkerComplianceResponse;
-  onSubmitted: () => void;
+  kind?: WorkerDocumentKind;
+  onSaved: () => void;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const { t } = useTranslation();
   const { client, token, scope } = useWorkspace();
-  const command = useCommand();
-  const requestId = useRequestId();
-  const [baseVersion, setBaseVersion] = useState(profile.version ?? 0);
-  const [required, setRequired] = useState(profile.safetyCardRequired === false ? 'false' : 'true');
-  const [files, setFiles] = useState<
-    Partial<Record<WorkerDocumentKind | 'FRONT' | 'BACK', NativeUploadFile[]>>
-  >({});
-  const [dates, setDates] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
-  const [identityChecks, setIdentityChecks] = useState<
-    Partial<Record<'FRONT' | 'BACK', DocumentImageQuality>>
-  >({});
-  const [checks, setChecks] = useState<
-    Partial<Record<WorkerDocumentKind, WorkerDocumentCheckResponse>>
-  >({});
-  const [identity, setIdentity] = useState({
-    nationalId: profile.nationalId ?? '',
-    phoneNumber: profile.phoneNumber ?? '',
-    gender: profile.gender,
-    address: profile.address ?? '',
+  const [expectedVersion] = useState(profile.version ?? 0);
+  const [initialCard] = useState(
+    profile.draftSafetyCardRequired ?? profile.safetyCardRequired ?? true,
+  );
+  const [card, setCard] = useState(String(initialCard));
+  const drafts = Object.fromEntries(
+    profile.documents.filter((doc) => doc.status === 'DRAFT').map((doc) => [doc.kind, doc]),
+  );
+  const [files, setFiles] = useState<Partial<Record<WorkerDocumentKind, NativeUploadFile>>>({});
+  const [dates, setDates] = useState(
+    () =>
+      Object.fromEntries(
+        allKinds.map((kind) => [
+          kind,
+          (kind === 'HEALTH_CERTIFICATE'
+            ? drafts[kind]?.submittedIssuedOn
+            : drafts[kind]?.submittedExpiresOn) ?? '',
+        ]),
+      ) as Record<WorkerDocumentKind, string>,
+  );
+  const [startDates, setStartDates] = useState({
+    PERSONAL_INSURANCE: drafts.PERSONAL_INSURANCE?.submittedIssuedOn ?? '',
+    SAFETY_CARD: drafts.SAFETY_CARD?.submittedIssuedOn ?? '',
   });
-  const [identityChanged, setIdentityChanged] = useState(false);
+  const save = useCommand();
+  const [picking, setPicking] = useState(0);
+  const busy = save.isPending || picking > 0;
+  const requestId = useRequestId();
+  const kinds = selectedKind ? [selectedKind] : allKinds;
+  const changedKinds = kinds.filter(
+    (kind) =>
+      (kind !== 'SAFETY_CARD' || card === 'true' || kind === selectedKind) &&
+      (files[kind] ||
+        (drafts[kind] &&
+          (kind === 'HEALTH_CERTIFICATE'
+            ? dates[kind] !== (drafts[kind].submittedIssuedOn ?? '')
+            : dates[kind] !== (drafts[kind].submittedExpiresOn ?? '') ||
+              startDates[kind] !== (drafts[kind].submittedIssuedOn ?? '')))),
+  );
+  const stale = expectedVersion !== (profile.version ?? 0);
+  const invalid = changedKinds.some(
+    (kind) =>
+      !isWorkerDocumentDate(dates[kind]) ||
+      (kind !== 'HEALTH_CERTIFICATE' &&
+        !!startDates[kind] &&
+        (!isWorkerDocumentDate(startDates[kind]) || startDates[kind] > dates[kind])),
+  );
+  const changed = changedKinds.length > 0 || (card === 'true') !== initialCard;
+
   return (
-    <View style={{ gap: 16 }} pointerEvents={command.isPending ? 'none' : 'auto'}>
-      {(profile.version ?? 0) > baseVersion && (
-        <View style={{ gap: 8 }}>
-          <Hint>{t('documents.profileChanged')}</Hint>
-          <Button
-            label={t('documents.reloadDraft')}
-            secondary
-            onPress={() => {
-              setBaseVersion(profile.version ?? 0);
-              setRequired(profile.safetyCardRequired === false ? 'false' : 'true');
-              setFiles({});
-              setDates({});
-              setChecks({});
-              setIdentityChecks({});
-              setIdentityChanged(false);
-              setIdentity({
-                nationalId: profile.nationalId ?? '',
-                phoneNumber: profile.phoneNumber ?? '',
-                gender: profile.gender,
-                address: profile.address ?? '',
-              });
-            }}
-          />
-        </View>
-      )}
-      <Choice
-        label={t('documents.safetyCardRequired')}
-        value={required}
-        onChange={setRequired}
-        options={[
-          { value: 'true', label: t('documents.cardRequired') },
-          { value: 'false', label: t('documents.cardNotRequired') },
-        ]}
-      />
-      <Disclosure title={t('documents.identityHeading')}>
-        {(['nationalId', 'phoneNumber', 'address'] as const).map((field) => (
-          <View key={field} style={{ gap: 6 }}>
-            <Text style={{ color: colors.textPrimary, fontWeight: '600' }}>
-              {t('documents.' + field)}
-            </Text>
-            <TextInput
-              accessibilityLabel={t('documents.' + field)}
-              value={identity[field]}
-              editable={!command.isPending}
-              maxLength={field === 'nationalId' ? 12 : field === 'phoneNumber' ? 16 : 1000}
-              style={{
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: 12,
-                padding: 12,
-                color: colors.textPrimary,
-              }}
-              onChangeText={(value) => {
-                setIdentity((previous) => ({ ...previous, [field]: value }));
-                setIdentityChanged(true);
-              }}
-            />
-          </View>
-        ))}
+    <View style={styles.form}>
+      {!selectedKind && (
         <Choice
-          label={t('documents.gender')}
-          value={identity.gender ?? ''}
-          onChange={(value) => {
-            setIdentity((previous) => ({ ...previous, gender: value as typeof identity.gender }));
-            setIdentityChanged(true);
-          }}
-          options={(['MALE', 'FEMALE', 'OTHER'] as const).map((value) => ({
-            value,
-            label: t('documents.' + value),
-          }))}
+          label={t('documents.safetyCardRequired')}
+          value={card}
+          options={[
+            { value: 'true', label: t('documents.cardRequired') },
+            { value: 'false', label: t('documents.cardNotRequired') },
+          ]}
+          onChange={setCard}
+          disabled={busy}
         />
-        {(['FRONT', 'BACK'] as const).map((side) => (
-          <View key={side} style={{ gap: 6 }}>
-            <Text>{t('documents.' + side)}</Text>
-            <Attachments
-              files={files[side] ?? []}
-              maxFiles={1}
-              allowPdf={false}
-              disabled={command.isPending}
-              validateFile={async (file) => {
-                const result = await client.checkDocumentImageQuality(
-                  token,
-                  scope.siteId,
-                  profile.contractorId!,
-                  file,
-                );
-                setIdentityChecks((previous) => ({ ...previous, [side]: result }));
-              }}
-              onChange={(value) => setFiles((previous) => ({ ...previous, [side]: value }))}
-            />
-            {identityChecks[side] && (
-              <Hint>
-                {identityChecks[side]?.status !== 'ACCEPTED'
-                  ? t('documents.' + identityChecks[side]?.reason)
-                  : ''}
-                {identityChecks[side]?.ocr?.nationalIds?.some(
-                  (id) => identity.nationalId && id !== identity.nationalId,
+      )}
+      <Hint>{t('onboarding.documentLimits')}</Hint>
+      {kinds.map((kind) => {
+        const draft = drafts[kind];
+        const date = dates[kind];
+        return (
+          <View
+            style={[
+              styles.document,
+              kind === 'SAFETY_CARD' && card === 'false' && kind !== selectedKind && styles.hidden,
+            ]}
+            key={kind}
+          >
+            <SingleDocumentAttachment
+              label={t('documents.' + kind)}
+              file={files[kind]}
+              onChange={(file) => setFiles((current) => ({ ...current, [kind]: file }))}
+              savedName={draft?.originalName}
+              savedPreview={
+                draft && (
+                  <EvidenceButton
+                    label={t('documents.view')}
+                    mediaType={draft.mediaType}
+                    load={() =>
+                      client.workerDocumentFile(token, scope.siteId, profile.workerId, draft.id)
+                    }
+                  />
                 )
-                  ? ' · ' + t('documents.identityMismatch')
-                  : ''}
+              }
+              disabled={busy}
+              onPickingChange={(pending) => {
+                setPicking((count) => count + (pending ? 1 : -1));
+                onBusyChange(pending);
+              }}
+            />
+            {(files[kind] || draft) && kind !== 'HEALTH_CERTIFICATE' && (
+              <CalendarDateField
+                label={t(
+                  kind === 'PERSONAL_INSURANCE'
+                    ? 'documents.coverageStartsOn'
+                    : 'documents.cardIssuedOn',
+                )}
+                value={startDates[kind]}
+                onChange={(next) => setStartDates((current) => ({ ...current, [kind]: next }))}
+                disabled={busy}
+              />
+            )}
+            {(files[kind] || draft) && (
+              <CalendarDateField
+                label={t(
+                  kind === 'HEALTH_CERTIFICATE'
+                    ? 'documents.declaredIssuedOn'
+                    : 'documents.declaredExpiresOn',
+                )}
+                value={date}
+                onChange={(next) => setDates((current) => ({ ...current, [kind]: next }))}
+                disabled={busy}
+              />
+            )}
+            {!!date && kind === 'HEALTH_CERTIFICATE' && (
+              <Hint>
+                {t('documents.expiresOn')}: {healthCertificateExpiry(date)}
               </Hint>
             )}
           </View>
-        ))}
-      </Disclosure>
-      {kinds.map((kind) => {
-        const latest = profile.documents
-          .filter((doc) => doc.kind === kind && doc.status !== 'SUPERSEDED')
-          .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))[0];
-        return (
-          <Disclosure
-            key={kind}
-            title={
-              t('documents.' + kind) +
-              (kind === 'SAFETY_CARD' && required === 'false'
-                ? ' (' + t('documents.optional') + ')'
-                : '')
-            }
-          >
-            {(kind !== 'SAFETY_CARD' || required === 'true') &&
-              profile.missingKinds.includes(kind) &&
-              !profile.documents.some((doc) => doc.kind === kind && doc.status === 'PENDING') &&
-              !files[kind]?.length && <Hint>{t('documents.fileRequired')}</Hint>}
-            {latest?.status === 'REJECTED' && (
-              <Hint>
-                {t('documents.REJECTED')}: {latest?.reviewNote}
-              </Hint>
-            )}
-            <CalendarDateField
-              label={t(
-                kind === 'HEALTH_CERTIFICATE'
-                  ? 'documents.declaredIssuedOn'
-                  : 'documents.declaredExpiresOn',
-              )}
-              value={dates[kind] ?? ''}
-              onChange={(value) => setDates((previous) => ({ ...previous, [kind]: value }))}
-            />
-            <Attachments
-              files={files[kind] ?? []}
-              maxFiles={1}
-              disabled={command.isPending}
-              validateFile={async (file) => {
-                const result = await client.checkWorkerDocumentDates(
-                  token,
-                  scope.siteId,
-                  profile.workerId,
-                  kind,
-                  file,
-                  {},
-                );
-                setChecks((previous) => ({ ...previous, [kind]: result }));
-                if (result.dateCheck.detectedDate)
-                  setDates((previous) => ({
-                    ...previous,
-                    [kind]: previous[kind] || result.dateCheck.detectedDate!,
-                  }));
-              }}
-              onChange={(value) => setFiles((previous) => ({ ...previous, [kind]: value }))}
-            />
-            {!!files[kind]?.length && !isWorkerDocumentDate(dates[kind]) && (
-              <Hint>{t('documents.dateRequiredHint')}</Hint>
-            )}
-            {checks[kind] && (
-              <Hint>
-                {t('documents.dateDetected')}:{' '}
-                {checks[kind]?.dateCheck.detectedDate ?? t('documents.notDetermined')}
-                {checks[kind]?.quality.status !== 'ACCEPTED'
-                  ? ' · ' + t('documents.' + checks[kind]?.quality.reason)
-                  : ''}
-                {checks[kind]?.ocr?.nationalIds?.some(
-                  (id) => identity.nationalId && id !== identity.nationalId,
-                )
-                  ? ' · ' + t('documents.identityMismatch')
-                  : ''}
-                {dates[kind] &&
-                checks[kind]?.dateCheck.detectedDate &&
-                dates[kind] !== checks[kind]?.dateCheck.detectedDate
-                  ? ' · ' + t('documents.dateMismatch')
-                  : ''}
-              </Hint>
-            )}
-            {kind === 'HEALTH_CERTIFICATE' && dates[kind] && (
-              <Hint>
-                {t('documents.expiresOn')}: {healthCertificateExpiry(dates[kind])}
-              </Hint>
-            )}
-            {dates[kind] &&
-              (kind === 'HEALTH_CERTIFICATE'
-                ? (healthCertificateExpiry(dates[kind]) ?? '')
-                : dates[kind]!) < localDate(new Date(), 'Asia/Ho_Chi_Minh') && (
-                <Hint>{t('documents.expiredWarning')}</Hint>
-              )}
-          </Disclosure>
         );
       })}
-      <ErrorNotice error={command.error} />
+      {stale && <Hint>{t('documents.profileChanged')}</Hint>}
+      {invalid && <Hint>{t('documents.dateRequiredHint')}</Hint>}
+      <ErrorNotice error={save.error} />
       <Button
-        label={t('documents.sendBundle')}
-        disabled={
-          command.isPending ||
-          (!Object.values(files).some((value) => value?.length) &&
-            !identityChanged &&
-            (required === 'true') === (profile.safetyCardRequired ?? true))
-        }
-        onPress={() =>
-          command.mutate(async () => {
-            const documents: SubmitWorkerDocumentsCommand['documents'] = {};
-            const selected: Partial<
-              Record<WorkerDocumentKind | 'FRONT' | 'BACK', NativeUploadFile>
-            > = {};
-            for (const [key, value] of Object.entries(files))
-              if (value?.[0]) selected[key as keyof typeof selected] = value[0];
-            for (const kind of kinds)
-              if (selected[kind]) {
-                if (!isWorkerDocumentDate(dates[kind]))
-                  throw new Error(t('documents.dateRequiredHint'));
+        label={t(save.isPending ? 'common.saving' : 'onboarding.saveDocumentDraft')}
+        disabled={busy || stale || invalid || !changed}
+        onPress={() => {
+          onBusyChange(true);
+          save.mutate(
+            async () => {
+              const documents: SubmitWorkerDocumentsCommand['documents'] = {};
+              const selected: Partial<Record<WorkerDocumentKind, NativeUploadFile>> = {};
+              for (const kind of changedKinds) {
                 documents[kind] =
                   kind === 'HEALTH_CERTIFICATE'
                     ? { submittedIssuedOn: dates[kind] }
-                    : { submittedExpiresOn: dates[kind] };
+                    : {
+                        ...(startDates[kind] && { submittedIssuedOn: startDates[kind] }),
+                        submittedExpiresOn: dates[kind],
+                      };
+                if (files[kind]) selected[kind] = files[kind];
               }
-            let identityInput: SubmitWorkerDocumentsCommand['identity'];
-            if (identityChanged) {
-              if (!identity.gender) throw new Error(t('documents.required'));
-              identityInput = { ...identity, gender: identity.gender };
-            }
-            const value = {
-              expectedVersion: baseVersion,
-              safetyCardRequired: required === 'true',
-              documents,
-              ...(identityInput ? { identity: identityInput } : {}),
-            };
-            await client.submitWorkerDocuments(
-              token,
-              scope.siteId,
-              profile.workerId,
-              { ...value, requestId: requestId({ value, selected }) },
-              selected,
-            );
-            onSubmitted();
-          })
-        }
+              const input = { expectedVersion, documents, safetyCardRequired: card === 'true' };
+              await client.submitWorkerDocuments(
+                token,
+                scope.siteId,
+                profile.workerId,
+                {
+                  ...input,
+                  requestId: requestId({ input, selected }),
+                },
+                selected,
+              );
+              onSaved();
+            },
+            { onSettled: () => onBusyChange(false) },
+          );
+        }}
       />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  form: { gap: 12 },
+  document: { gap: 10, borderTopWidth: 1, borderColor: colors.border, paddingVertical: 9 },
+  hidden: { display: 'none' },
+});

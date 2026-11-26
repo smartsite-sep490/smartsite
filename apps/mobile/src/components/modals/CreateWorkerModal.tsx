@@ -1,501 +1,267 @@
-import { translate as tr } from '../../i18n';
-import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
-import { colors } from '../../theme/colors';
-import { useWorkspace } from '../../features/workspace/workspace-context';
-import {
-  useCommand,
-  useRequestId,
-  required,
-  validDates,
-  localDate,
-} from '../../features/shared/data';
-import { useTranslation, uiLanguage } from '../../i18n';
-import { IconUserPlus } from '../common/Icons';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import { randomUUID } from 'expo-crypto';
+import { useMutation } from '@tanstack/react-query';
 import type {
   NativeUploadFile,
-  DocumentImageQuality,
+  SaveWorkerOnboardingDraftCommand,
   WorkerDocumentKind,
-  ContractorWorkerAccountResponse,
+  WorkerOnboardingDraft,
 } from '@smartsite/api-client';
-import { healthCertificateExpiry } from '@smartsite/api-client';
-import { Attachments } from '../../features/shared/uploads';
-import { documentKinds } from '../../features/contractor/worker-documents';
-import { Choice, Disclosure, Hint, errorMessage } from '../../features/shared/ui';
+import { colors } from '../../theme/colors';
+import { useWorkspace } from '../../features/workspace/workspace-context';
+import { useTranslation, uiLanguage } from '../../i18n';
+import { IconUserPlus } from '../common/Icons';
+import { EvidenceButton, SingleDocumentAttachment } from '../../features/shared/uploads';
+import { Button, Choice, ErrorNotice, Field, Hint } from '../../features/shared/ui';
 import { CalendarDateField } from '../../features/shared/calendar-date-field';
-
 import { RequestSheet } from '../../features/shared/request-sheet';
-import { FormSection } from '../../features/shared/form-section';
 
 interface CreateWorkerModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  draft?: WorkerOnboardingDraft;
 }
 
-export function CreateWorkerModal({ visible, onClose, onSuccess }: CreateWorkerModalProps) {
+const documentKinds: WorkerDocumentKind[] = [
+  'HEALTH_CERTIFICATE',
+  'PERSONAL_INSURANCE',
+  'SAFETY_CARD',
+];
+
+export function CreateWorkerModal({ visible, onClose, onSuccess, draft }: CreateWorkerModalProps) {
   const { t } = useTranslation();
   const { scope, client, token } = useWorkspace();
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [nationalId, setNationalId] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
-  const [address, setAddress] = useState('');
-  const [identityFiles, setIdentityFiles] = useState<
-    Partial<Record<'FRONT' | 'BACK', NativeUploadFile[]>>
-  >({});
-  const [files, setFiles] = useState<Partial<Record<WorkerDocumentKind, NativeUploadFile[]>>>({});
-  const [expiries, setExpiries] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
-  const [identityChecks, setIdentityChecks] = useState<
-    Partial<Record<'FRONT' | 'BACK', DocumentImageQuality>>
-  >({});
-  const [checks, setChecks] = useState<Partial<Record<WorkerDocumentKind, DocumentImageQuality>>>(
-    {},
+  const [draftId, setDraftId] = useState(() => draft?.id ?? randomUUID());
+  const [displayName, setDisplayName] = useState(draft?.displayName ?? '');
+  const [username, setUsername] = useState(draft?.username ?? '');
+  const [email, setEmail] = useState(draft?.email ?? '');
+  const [card, setCard] = useState(
+    draft?.safetyCardRequired == null ? '' : String(draft.safetyCardRequired),
   );
-  const [pendingVersion, setPendingVersion] = useState<number | null>(null);
-  const [pendingAccount, setPendingAccount] = useState<ContractorWorkerAccountResponse | null>(
-    null,
+  const [files, setFiles] = useState<Partial<Record<WorkerDocumentKind, NativeUploadFile>>>({});
+  const [dates, setDates] = useState(
+    () =>
+      Object.fromEntries(
+        documentKinds.map((kind) => [
+          kind,
+          (kind === 'HEALTH_CERTIFICATE'
+            ? draft?.documents[kind]?.submittedIssuedOn
+            : draft?.documents[kind]?.submittedExpiresOn) ?? '',
+        ]),
+      ) as Record<WorkerDocumentKind, string>,
   );
-  const [localError, setLocalError] = useState<string | null>(null);
-  const command = useCommand();
-  const requestId = useRequestId();
-  const [safetyCardRequired, setSafetyCardRequired] = useState('');
-  const validateImage = async (file: NativeUploadFile) => {
-    const result = await client.checkDocumentImageQuality(
-      token,
-      scope.siteId,
-      scope.contractorId,
-      file,
-    );
-    return result;
-  };
+  const [startDates, setStartDates] = useState({
+    PERSONAL_INSURANCE: draft?.documents.PERSONAL_INSURANCE?.submittedIssuedOn ?? '',
+    SAFETY_CARD: draft?.documents.SAFETY_CARD?.submittedIssuedOn ?? '',
+  });
+  const [saved, setSaved] = useState(false);
+  const [picking, setPicking] = useState(0);
 
-  const handleCreate = async () => {
-    try {
-      setLocalError(null);
-      for (const kind of documentKinds)
-        if (files[kind]?.[0]) validDates(expiries[kind] ?? '', expiries[kind] ?? '');
-      const name = required(displayName, t('workforce.fullName'));
-      const user = required(username, t('workforce.username'));
-      const recipient = required(email, t('accountEmail.email')).toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))
-        throw new Error(t('accountEmail.invalidEmail'));
-      if (
-        !/^[0-9]{12}$/.test(nationalId) ||
-        !/^\+?[0-9]{9,15}$/.test(phoneNumber) ||
-        !gender ||
-        !address.trim() ||
-        !identityFiles.FRONT?.[0] ||
-        !identityFiles.BACK?.[0] ||
-        !safetyCardRequired ||
-        documentKinds.some(
-          (kind) => (kind !== 'SAFETY_CARD' || safetyCardRequired === 'true') && !files[kind]?.[0],
-        )
-      )
-        throw new Error(t('documents.required'));
-      await command.mutateAsync(async () => {
-        const account =
-          pendingAccount ??
-          (await client.createContractorWorkerAccount(token, scope.contractorId, {
-            siteId: scope.siteId,
-            displayName: name,
-            username: user,
-            email: recipient,
-            language: uiLanguage(),
-            nationalId,
-            phoneNumber,
-            gender,
-            address: address.trim(),
-          }));
-        setPendingAccount(account);
-        const current = await client.workerCompliance(token, scope.siteId, account.worker.id);
-        const expectedVersion = pendingVersion ?? current.version ?? 0;
-        setPendingVersion(expectedVersion);
-        const documents: import('@smartsite/api-client').SubmitWorkerDocumentsCommand['documents'] =
-          {};
-        const selected: Partial<Record<WorkerDocumentKind | 'FRONT' | 'BACK', NativeUploadFile>> =
-          {};
-        for (const kind of documentKinds)
-          if (files[kind]?.[0]) {
-            selected[kind] = files[kind]![0];
-            documents[kind] =
-              kind === 'HEALTH_CERTIFICATE'
-                ? { submittedIssuedOn: expiries[kind]! }
-                : { submittedExpiresOn: expiries[kind]! };
-          }
-        for (const side of ['FRONT', 'BACK'] as const) selected[side] = identityFiles[side]![0];
-        const input = {
-          expectedVersion,
-          safetyCardRequired: safetyCardRequired === 'true',
-          documents,
+  const save = useMutation({
+    mutationFn: async () => {
+      const documents: SaveWorkerOnboardingDraftCommand['documents'] = {};
+      for (const kind of documentKinds) {
+        const date = dates[kind];
+        const start = kind === 'HEALTH_CERTIFICATE' ? date : startDates[kind];
+        if (!date && !start && !files[kind] && !draft?.documents[kind]) continue;
+        documents[kind] = {
+          ...(start && { submittedIssuedOn: start }),
+          ...(kind !== 'HEALTH_CERTIFICATE' && date && { submittedExpiresOn: date }),
         };
-        await client.submitWorkerDocuments(
-          token,
-          scope.siteId,
-          account.worker.id,
-          { ...input, requestId: requestId({ input, selected }) },
-          selected,
-        );
-      });
+      }
+      return client.saveWorkerOnboardingDraft(
+        token,
+        scope.siteId,
+        scope.contractorId,
+        draftId,
+        {
+          expectedVersion: draft?.version ?? 0,
+          displayName: displayName.trim(),
+          username: username.trim(),
+          email: email.trim().toLowerCase(),
+          language: uiLanguage(),
+          safetyCardRequired: card ? card === 'true' : null,
+          documents,
+        },
+        files,
+      );
+    },
+    onSuccess: (_item, addAnother: boolean) => {
+      onSuccess?.();
+      if (!addAnother) {
+        onClose();
+        return;
+      }
+      setDraftId(randomUUID());
       setDisplayName('');
       setUsername('');
       setEmail('');
-      setNationalId('');
-      setPhoneNumber('');
+      setCard('');
       setFiles({});
-      setChecks({});
-      setExpiries({});
-      setPendingAccount(null);
-      setPendingVersion(null);
-      setSafetyCardRequired('');
-      setGender('');
-      setAddress('');
-      setIdentityFiles({});
-      setIdentityChecks({});
-      onSuccess?.();
-      onClose();
-    } catch (err) {
-      setLocalError(errorMessage(err));
-    }
-  };
+      setDates({ HEALTH_CERTIFICATE: '', SAFETY_CARD: '', PERSONAL_INSURANCE: '' });
+      setStartDates({ SAFETY_CARD: '', PERSONAL_INSURANCE: '' });
+      setSaved(true);
+    },
+  });
+  const busy = save.isPending || picking > 0;
+  const empty =
+    !displayName.trim() &&
+    !username.trim() &&
+    !email.trim() &&
+    !card &&
+    !Object.values(dates).some(Boolean) &&
+    !Object.values(startDates).some(Boolean) &&
+    !Object.values(files).some(Boolean);
 
   return (
     <RequestSheet
       visible={visible}
-      variant="form"
-      busy={command.isPending}
       onClose={onClose}
-      title={t('workforce.createTitle')}
-      subtitle={scope.contractorName + ' · ' + scope.siteName}
-      icon={<IconUserPlus size={23} color={colors.primary} />}
+      variant="form"
+      busy={busy}
+      icon={<IconUserPlus size={24} color={colors.primary} />}
+      title={t(draft ? 'onboarding.editDraft' : 'onboarding.addWorker')}
       footer={
-        <View style={styles.footerActions}>
-          {Boolean(localError || command.error) && (
-            <View style={styles.errorBox}>
-              <Text accessibilityRole="alert" style={styles.errorText}>
-                {localError ??
-                  (command.error instanceof Error
-                    ? command.error.message
-                    : t('common.unexpectedError'))}
-              </Text>
-            </View>
+        <View style={styles.actions}>
+          <ErrorNotice error={save.error} />
+          {saved && <Hint>{t('onboarding.draftSaved')}</Hint>}
+          <Button
+            label={t(save.isPending ? 'common.saving' : 'onboarding.saveDraft')}
+            disabled={busy || (!draft && empty)}
+            onPress={() => save.mutate(false)}
+          />
+          {!draft && (
+            <Button
+              secondary
+              label={t('onboarding.saveAndAdd')}
+              disabled={busy || empty}
+              onPress={() => save.mutate(true)}
+            />
           )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('documents.sendBundle')}
-            accessibilityState={{ disabled: command.isPending, busy: command.isPending }}
-            style={[styles.submitBtn, command.isPending && { opacity: 0.7 }]}
-            onPress={handleCreate}
-            disabled={command.isPending}
-          >
-            {command.isPending ? (
-              <ActivityIndicator size="small" color={colors.textWhite} />
-            ) : (
-              <Text style={styles.submitBtnText}>{t('documents.sendBundle')}</Text>
-            )}
-          </Pressable>
         </View>
       }
     >
-      <FormSection number="01" title={t('contractorUi.accountInfo')}>
-        {/* Field: Full Name */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>{t('workforce.fullName')}</Text>
-          <TextInput
-            accessibilityLabel={t('workforce.fullName')}
-            style={styles.input}
-            placeholder={tr('workforce.nameExample')}
-            placeholderTextColor={colors.textMuted}
-            value={displayName}
-            editable={!pendingAccount && !command.isPending}
-            onChangeText={(v) => {
-              setDisplayName(v);
-              if (localError) setLocalError(null);
-            }}
-            autoCapitalize="words"
-          />
-        </View>
-
-        {/* Field: Username */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>{t('workforce.username')}</Text>
-          <TextInput
-            accessibilityLabel={t('workforce.username')}
-            style={styles.input}
-            placeholder={tr('workforce.usernameExample')}
-            placeholderTextColor={colors.textMuted}
-            value={username}
-            editable={!pendingAccount && !command.isPending}
-            onChangeText={(v) => {
-              setUsername(v);
-              if (localError) setLocalError(null);
-            }}
-            autoCapitalize="none"
-          />
-        </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>{t('accountEmail.email')}</Text>
-          <TextInput
-            accessibilityLabel={t('accountEmail.email')}
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            editable={!pendingAccount && !command.isPending}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="email"
-          />
-          <Hint>{t('accountEmail.workerCreationHint')}</Hint>
-        </View>
-      </FormSection>
-      <FormSection number="02" title={t('contractorUi.requiredProfile')}>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>{t('documents.nationalId')}</Text>
-          <TextInput
-            accessibilityLabel={t('documents.nationalId')}
-            style={styles.input}
-            value={nationalId}
-            onChangeText={(v) => setNationalId(v.trim())}
-            keyboardType="number-pad"
-            maxLength={12}
-            editable={!pendingAccount && !command.isPending}
-          />
-        </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>{t('documents.phoneNumber')}</Text>
-          <TextInput
-            accessibilityLabel={t('documents.phoneNumber')}
-            style={styles.input}
-            value={phoneNumber}
-            onChangeText={(v) => setPhoneNumber(v.replace(/\s/g, ''))}
-            keyboardType="phone-pad"
-            maxLength={16}
-            editable={!pendingAccount && !command.isPending}
-          />
-        </View>
-        <View pointerEvents={pendingAccount || command.isPending ? 'none' : 'auto'}>
-          <Choice
-            label={t('documents.gender')}
-            value={gender}
-            onChange={(v) => setGender(v as typeof gender)}
-            options={(['MALE', 'FEMALE', 'OTHER'] as const).map((value) => ({
-              value,
-              label: t(`documents.${value}`),
-            }))}
-          />
-        </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>{t('documents.address')}</Text>
-          <TextInput
-            accessibilityLabel={t('documents.address')}
-            style={styles.input}
-            multiline
-            maxLength={1000}
-            value={address}
-            onChangeText={setAddress}
-            editable={!pendingAccount && !command.isPending}
-          />
-        </View>
-        <View pointerEvents={command.isPending ? 'none' : 'auto'}>
-          {(['FRONT', 'BACK'] as const).map((side) => (
-            <Disclosure
-              key={side}
-              title={`${t(`documents.${side}`)} · ${identityFiles[side]?.length ?? 0}/1`}
-            >
-              <Attachments
-                files={identityFiles[side] ?? []}
-                maxFiles={1}
-                allowPdf={false}
-                disabled={command.isPending}
-                validateFile={async (file) => {
-                  const result = await validateImage(file);
-                  setIdentityChecks((previous) => ({ ...previous, [side]: result }));
-                }}
-                onChange={(selected) =>
-                  setIdentityFiles((previous) => ({ ...previous, [side]: selected }))
-                }
-              />
-              {identityChecks[side] && (
-                <Hint>
-                  {identityChecks[side]?.status !== 'ACCEPTED'
-                    ? t('documents.' + identityChecks[side]?.reason)
-                    : ''}
-                  {identityChecks[side]?.ocr?.nationalIds?.some((id) => id !== nationalId)
-                    ? ' · ' + t('documents.identityMismatch')
-                    : ''}
-                </Hint>
-              )}
-            </Disclosure>
-          ))}
-        </View>
-      </FormSection>
-      <FormSection number="03" title={t('documents.title')}>
-        <Choice
-          label={t('documents.safetyCardRequired')}
-          value={safetyCardRequired}
-          onChange={setSafetyCardRequired}
-          options={[
-            { value: 'true', label: t('documents.cardRequired') },
-            { value: 'false', label: t('documents.cardNotRequired') },
-          ]}
-        />
-        <Text style={styles.hintText}>{t('documents.hint')}</Text>
-        <View pointerEvents={command.isPending ? 'none' : 'auto'}>
-          {documentKinds.map((kind) => (
-            <Disclosure
-              key={kind}
-              title={`${t(`documents.${kind}`)} · ${files[kind]?.length ?? 0}/1`}
-            >
-              <CalendarDateField
-                label={t(
-                  kind === 'HEALTH_CERTIFICATE'
-                    ? 'documents.submittedIssuedOn'
-                    : 'documents.submittedExpiresOn',
+      <Hint>{t('onboarding.draftHint')}</Hint>
+      <Field
+        label={t('workforce.fullName')}
+        value={displayName}
+        onChangeText={setDisplayName}
+        editable={!busy}
+        autoCapitalize="words"
+      />
+      <Field
+        label={t('workforce.username')}
+        value={username}
+        onChangeText={setUsername}
+        editable={!busy}
+        autoCorrect={false}
+      />
+      <Field
+        label={t('accountEmail.email')}
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        editable={!busy}
+      />
+      <Choice
+        label={t('documents.safetyCardRequired')}
+        value={card}
+        options={[
+          { value: 'true', label: t('documents.cardRequired') },
+          { value: 'false', label: t('documents.cardNotRequired') },
+        ]}
+        onChange={setCard}
+        disabled={busy}
+      />
+      <Hint>{t('onboarding.documentLimits')}</Hint>
+      {documentKinds.map((kind) => {
+        const previous = draft?.documents[kind];
+        if (
+          kind === 'SAFETY_CARD' &&
+          card === 'false' &&
+          !previous &&
+          !files[kind] &&
+          !dates[kind] &&
+          !startDates[kind]
+        )
+          return null;
+        const dateLabel = t(
+          kind === 'HEALTH_CERTIFICATE'
+            ? 'documents.declaredIssuedOn'
+            : 'documents.declaredExpiresOn',
+        );
+        const startDateLabel = t(
+          kind === 'PERSONAL_INSURANCE' ? 'documents.coverageStartsOn' : 'documents.cardIssuedOn',
+        );
+        return (
+          <View key={kind} style={styles.document}>
+            <SingleDocumentAttachment
+              label={t('documents.' + kind)}
+              file={files[kind]}
+              onChange={(file) => setFiles((current) => ({ ...current, [kind]: file }))}
+              savedName={previous?.originalName}
+              savedPreview={
+                draft && previous?.originalName && previous.mediaType ? (
+                  <EvidenceButton
+                    label={t('documents.view')}
+                    mediaType={previous.mediaType}
+                    load={() =>
+                      client.workerOnboardingDraftFile(
+                        token,
+                        scope.siteId,
+                        scope.contractorId,
+                        draft.id,
+                        kind,
+                      )
+                    }
+                  />
+                ) : undefined
+              }
+              disabled={busy}
+              onPickingChange={(pending) => setPicking((count) => count + (pending ? 1 : -1))}
+            />
+            {kind !== 'HEALTH_CERTIFICATE' && (
+              <>
+                <CalendarDateField
+                  label={startDateLabel}
+                  value={startDates[kind]}
+                  onChange={(date) => setStartDates((current) => ({ ...current, [kind]: date }))}
+                  disabled={busy}
+                />
+                {!!startDates[kind] && (
+                  <Button
+                    secondary
+                    label={t('onboarding.clearStartDate', { label: startDateLabel })}
+                    onPress={() => setStartDates((current) => ({ ...current, [kind]: '' }))}
+                    disabled={busy}
+                  />
                 )}
-                value={expiries[kind] ?? ''}
-                disabled={command.isPending}
-                onChange={(value) => setExpiries((previous) => ({ ...previous, [kind]: value }))}
+              </>
+            )}
+            <CalendarDateField
+              label={dateLabel}
+              value={dates[kind]}
+              onChange={(date) => setDates((current) => ({ ...current, [kind]: date }))}
+              disabled={busy}
+            />
+            {dates[kind] && (
+              <Button
+                secondary
+                label={t('onboarding.clearDate', { label: t('documents.' + kind) })}
+                onPress={() => setDates((current) => ({ ...current, [kind]: '' }))}
+                disabled={busy}
               />
-              <Hint>
-                {t(
-                  kind === 'HEALTH_CERTIFICATE'
-                    ? 'documents.healthExpiryRule'
-                    : 'documents.submittedExpiryHint',
-                )}{' '}
-                {kind === 'HEALTH_CERTIFICATE'
-                  ? (healthCertificateExpiry(expiries[kind]) ?? '')
-                  : ''}
-              </Hint>
-              <Attachments
-                files={files[kind] ?? []}
-                maxFiles={1}
-                disabled={command.isPending}
-                validateFile={async (file) => {
-                  const result = await validateImage(file);
-                  setChecks((previous) => ({ ...previous, [kind]: result }));
-                  const detected =
-                    kind === 'HEALTH_CERTIFICATE' ? result.ocr?.issuedOn : result.ocr?.expiresOn;
-                  if (detected)
-                    setExpiries((previous) => ({
-                      ...previous,
-                      [kind]: previous[kind] || detected,
-                    }));
-                }}
-                onChange={(selected) => setFiles((previous) => ({ ...previous, [kind]: selected }))}
-              />
-              {kind === 'SAFETY_CARD' && safetyCardRequired === 'false' && (
-                <Hint>{t('documents.optional')}</Hint>
-              )}
-              {expiries[kind] &&
-                (kind === 'HEALTH_CERTIFICATE'
-                  ? (healthCertificateExpiry(expiries[kind]) ?? '')
-                  : expiries[kind]!) < localDate(new Date(), 'Asia/Ho_Chi_Minh') && (
-                  <Hint>{t('documents.expiredWarning')}</Hint>
-                )}
-              {checks[kind] && (
-                <Hint>
-                  {t('documents.dateDetected')}:{' '}
-                  {(kind === 'HEALTH_CERTIFICATE'
-                    ? checks[kind]?.ocr?.issuedOn
-                    : checks[kind]?.ocr?.expiresOn) ?? t('documents.notDetermined')}
-                  {checks[kind]?.status !== 'ACCEPTED'
-                    ? ' · ' + t('documents.' + checks[kind]?.reason)
-                    : ''}
-                  {checks[kind]?.ocr?.nationalIds?.some((id) => id !== nationalId)
-                    ? ' · ' + t('documents.identityMismatch')
-                    : ''}
-                  {expiries[kind] &&
-                  (kind === 'HEALTH_CERTIFICATE'
-                    ? checks[kind]?.ocr?.issuedOn
-                    : checks[kind]?.ocr?.expiresOn) &&
-                  expiries[kind] !==
-                    (kind === 'HEALTH_CERTIFICATE'
-                      ? checks[kind]?.ocr?.issuedOn
-                      : checks[kind]?.ocr?.expiresOn)
-                    ? ' · ' + t('documents.dateMismatch')
-                    : ''}
-                </Hint>
-              )}
-            </Disclosure>
-          ))}
-        </View>
-        {pendingAccount && <Text style={styles.hintText}>{t('documents.accountPending')}</Text>}
-        {/* Hint Box */}
-        <View style={styles.hintBox}>
-          <Text style={styles.hintText}>{t('documents.accountHint')}</Text>
-        </View>
-      </FormSection>
+            )}
+          </View>
+        );
+      })}
     </RequestSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  footerActions: { gap: 10 },
-  fieldGroup: {
-    gap: 6,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: colors.surfaceSubtle,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.textPrimary,
-    minHeight: 48,
-  },
-  hintBox: {
-    backgroundColor: colors.warningLightBg,
-    borderWidth: 1,
-    borderColor: colors.warningBg,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  hintText: {
-    fontSize: 12,
-    color: colors.textMuted,
-    lineHeight: 18,
-  },
-  errorBox: {
-    backgroundColor: colors.dangerBg,
-    borderWidth: 1,
-    borderColor: colors.dangerBg,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  errorText: {
-    fontSize: 12,
-    color: colors.dangerText,
-    lineHeight: 18,
-  },
-  submitBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 152,
-    paddingHorizontal: 12,
-    minHeight: 48,
-  },
-  submitBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.textWhite,
-    textAlign: 'center',
-    lineHeight: 22,
-    flexShrink: 1,
-  },
+  actions: { gap: 8 },
+  document: { gap: 10, borderTopWidth: 1, borderColor: colors.border, paddingVertical: 9 },
 });

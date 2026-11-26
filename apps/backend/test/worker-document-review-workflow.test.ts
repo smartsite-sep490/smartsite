@@ -2,12 +2,10 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import sharp from 'sharp';
-import type { LocalDocumentOcr } from '../src/modules/workforce/documents/local-document-ocr.js';
-import { DocumentOcrService } from '../src/modules/workforce/documents/document-ocr.service.js';
 import { parseDocumentSubmission } from '../src/modules/workforce/documents/worker-document-submission.js';
 import {
   complianceState,
+  documentDraftMissingKinds,
   documentReviewState,
 } from '../src/modules/workforce/documents/worker-compliance.js';
 import { summarizeAnalysis } from '../src/modules/workforce/documents/worker-documents.service.js';
@@ -20,19 +18,68 @@ test('submission validates the complete envelope and declared dates before persi
     safetyCardRequired: false,
     documents: {
       HEALTH_CERTIFICATE: { submittedIssuedOn: '2026-11-01' },
-      PERSONAL_INSURANCE: { submittedExpiresOn: '2027-11-01' },
+      PERSONAL_INSURANCE: { submittedIssuedOn: '2026-11-01', submittedExpiresOn: '2027-11-01' },
     },
   };
   assert.deepEqual(parseDocumentSubmission(input), input);
   for (const bad of [
     { ...input, approve: true },
+    {
+      ...input,
+      identity: {
+        nationalId: '000000000001',
+        phoneNumber: '0900000000',
+        gender: 'OTHER',
+        address: 'Test',
+      },
+    },
     { ...input, requestId: 'invalid' },
     { ...input, expectedVersion: -1 },
     { ...input, safetyCardRequired: 'false' },
     { ...input, documents: { HEALTH_CERTIFICATE: { submittedIssuedOn: '2026-02-30' } } },
     { ...input, documents: { PERSONAL_INSURANCE: { submittedIssuedOn: '2026-11-01' } } },
+    {
+      ...input,
+      documents: {
+        SAFETY_CARD: { submittedIssuedOn: '2027-11-02', submittedExpiresOn: '2027-11-01' },
+      },
+    },
   ])
     assert.throws(() => parseDocumentSubmission(bad));
+});
+
+test('AI summary checks a declared start date but preserves older expiry-only drafts', () => {
+  const document = {
+    kind: 'PERSONAL_INSURANCE',
+    status: 'DRAFT',
+    submittedExpiresOn: '2099-01-01',
+    aiAnalysis: {
+      status: 'COMPLETE',
+      detectedKind: 'PERSONAL_INSURANCE',
+      issuedOn: '2020-01-02',
+      expiresOn: '2099-01-01',
+    },
+  } as WorkerDocumentEntity;
+  assert.equal(summarizeAnalysis([document]).status, 'NO_DISCREPANCY');
+  assert.equal(
+    summarizeAnalysis([{ ...document, submittedIssuedOn: '2020-01-01' }]).status,
+    'ATTENTION',
+  );
+  assert.equal(
+    summarizeAnalysis([
+      {
+        ...document,
+        submittedIssuedOn: '2020-01-02',
+        aiAnalysis: {
+          status: 'COMPLETE',
+          detectedKind: 'PERSONAL_INSURANCE',
+          issuedOn: null,
+          expiresOn: '2099-01-01',
+        },
+      },
+    ]).status,
+    'INSUFFICIENT',
+  );
 });
 
 test('optional safety card is applied consistently to eligibility and supplement flags', () => {
@@ -47,21 +94,20 @@ test('optional safety card is applied consistently to eligibility and supplement
   }));
   assert.equal(complianceState(true, documents, at, 30, false).status, 'ACTIVE');
   assert.deepEqual(complianceState(true, documents, at).missingKinds, ['SAFETY_CARD']);
-  assert.equal(documentReviewState(documents, true, at, false).needsSupplement, false);
-  assert.equal(documentReviewState(documents, true, at, true).needsSupplement, true);
+  assert.equal(documentReviewState(documents, at, false).needsSupplement, false);
+  assert.equal(documentReviewState(documents, at, true).needsSupplement, true);
 });
 
-test('AI summary gives pending discrepancies priority and retains unresolved counts', () => {
+test('AI summary gives draft discrepancies priority and retains unresolved counts', () => {
   const doc = {
     kind: 'SAFETY_CARD',
-    status: 'PENDING',
+    status: 'DRAFT',
     submittedExpiresOn: '2099-01-01',
     aiAnalysis: {
       status: 'COMPLETE',
       detectedKind: 'PERSONAL_INSURANCE',
       issuedOn: '2026-01-01',
       expiresOn: '2099-01-01',
-      nationalId: null,
     },
   } as WorkerDocumentEntity;
   const unknown = { ...doc, aiAnalysis: null };
@@ -76,80 +122,38 @@ test('AI summary gives pending discrepancies priority and retains unresolved cou
   );
 });
 
-test('combined OCR cache is scoped, expires, and never stores original bytes', async (t) => {
-  const image = await sharp({
-    create: { width: 640, height: 480, channels: 3, background: 'white' },
-  })
-    .png()
-    .toBuffer();
-  let calls = 0;
-  const local = {
-    run: async () => {
-      calls++;
-      return {
-        quality: { status: 'RETAKE', reason: 'IMAGE_BLURRY' },
-        ocr: { status: 'READ', issuedOn: '2026-11-01', expiresOn: '2027-11-01', warnings: [] },
-      };
-    },
-  } as unknown as LocalDocumentOcr;
-  const service = new DocumentOcrService(local);
-  const checked = await service.inspect(image, 'image/png', 'actor:site:contractor');
-  assert.equal(checked.quality.status, 'RETAKE');
-  await service.inspect(image, 'image/png', 'actor:site:contractor');
-  assert.equal(calls, 1);
-  await service.inspect(image, 'image/png', 'other-actor:site:contractor');
-  assert.equal(calls, 2);
-  const now = Date.now();
-  t.mock.method(Date, 'now', () => now + 300001);
-  await service.inspect(image, 'image/png', 'actor:site:contractor');
-  assert.equal(calls, 3);
+test('unsubmitted drafts are not a Safety submission', () => {
+  const document = {
+    id: randomUUID(),
+    kind: 'HEALTH_CERTIFICATE',
+    status: 'DRAFT',
+    issuedOn: null,
+    expiresOn: null,
+    uploadedAt: new Date(),
+  } as unknown as WorkerDocumentEntity;
+  assert.equal(documentReviewState([document]).submissionStatus, 'NOT_SUBMITTED');
 });
 
-test('unavailable OCR remains advisory after a real image is decoded; malformed files fail', async () => {
-  const image = await sharp({
-    create: { width: 640, height: 480, channels: 3, background: 'white' },
-  })
-    .jpeg()
-    .toBuffer();
-  const service = new DocumentOcrService({ run: async () => null } as unknown as LocalDocumentOcr);
-  assert.equal((await service.inspect(image, 'image/jpeg')).ocr.status, 'UNAVAILABLE');
-  await assert.rejects(service.inspect(Buffer.from('invalid'), 'image/jpeg'));
+test('sender can combine drafts, pending certificates and current approvals', () => {
+  const at = new Date('2026-11-21T03:00:00Z');
+  const drafts = [
+    { kind: 'HEALTH_CERTIFICATE', status: 'DRAFT', issuedOn: null, expiresOn: null },
+    { kind: 'PERSONAL_INSURANCE', status: 'PENDING', issuedOn: null, expiresOn: null },
+  ] as const;
+  const card = {
+    kind: 'SAFETY_CARD',
+    status: 'APPROVED',
+    issuedOn: '2026-01-01',
+    expiresOn: '2026-11-20',
+  } as const;
+  assert.deepEqual(documentDraftMissingKinds([...drafts, card], true, at), ['SAFETY_CARD']);
+  assert.deepEqual(documentDraftMissingKinds([...drafts, card], false, at), []);
+  assert.deepEqual(
+    documentDraftMissingKinds([...drafts, { ...card, expiresOn: '2026-11-21' }], true, at),
+    [],
+  );
 });
 
-test('PDF inspection shares decoding and enforces file validation when OCR is busy', async () => {
-  const operations: string[] = [];
-  let output: Record<string, unknown> | null = {
-    valid: true,
-    quality: { status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' },
-    ocr: { status: 'UNREADABLE', issuedOn: null, expiresOn: null, warnings: [] },
-  };
-  let validation: boolean | null = true;
-  const local = {
-    run: async (_bytes: Buffer, _mime: string, operation: string) => {
-      operations.push(operation);
-      return operation === 'validate' ? { valid: validation } : output;
-    },
-  } as unknown as LocalDocumentOcr;
-  const inspect = () =>
-    new DocumentOcrService(local).inspect(
-      Buffer.from('%PDF-fixture'),
-      'application/pdf',
-      'actor:site',
-    );
-  assert.equal((await inspect()).ocr.status, 'UNREADABLE');
-  assert.deepEqual(operations, ['inspect']);
-  output = null;
-  operations.length = 0;
-  assert.equal((await inspect()).ocr.status, 'UNAVAILABLE');
-  assert.deepEqual(operations, ['inspect', 'validate']);
-  validation = false;
-  await assert.rejects(inspect(), { status: 422 });
-  validation = null;
-  await assert.rejects(inspect(), { status: 503 });
-  output = { valid: false };
-  validation = true;
-  await assert.rejects(inspect(), { status: 422 });
-});
 test('expired AI leases become retryable and optional expired cards do not mislabel missing required papers', () => {
   const at = new Date('2026-11-21T03:00:00Z');
   const card = {
@@ -161,7 +165,7 @@ test('expired AI leases become retryable and optional expired cards do not misla
   assert.equal(complianceState(true, [card], at, 30, false).status, 'PENDING');
   const doc = {
     ...card,
-    status: 'PENDING',
+    status: 'DRAFT',
     aiAnalysis: { status: 'ANALYZING', token: 'private', expiresAt: 0 },
   } as WorkerDocumentEntity;
   assert.equal(summarizeAnalysis([doc]).status, 'INSUFFICIENT');

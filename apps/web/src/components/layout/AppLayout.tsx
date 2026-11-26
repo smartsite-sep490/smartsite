@@ -121,7 +121,17 @@ export function AppLayout({ currentTab: propCurrentTab, onSelectTab, children }:
         { id: 'dashboard', label: t('shell.dashboard'), icon: IconDashboard },
         { id: 'contractor-teams', label: t('shell.contractorTeams'), icon: IconUsers },
         { id: 'worker-onboarding', label: t('shell.workerOnboarding'), icon: IconUsers },
-        { id: 'worker-documents', label: t('documents.title'), icon: IconUsers },
+        {
+          id: 'worker-documents',
+          label: t(
+            roles.includes('SAFETY_OFFICER')
+              ? 'documents.workspaceTitle'
+              : roles.includes('CONTRACTOR_REPRESENTATIVE')
+                ? 'workerIntake.recordTitle'
+                : 'documents.title',
+          ),
+          icon: IconUsers,
+        },
         { id: 'assigned-work', label: t('shell.assignedWork'), icon: IconAlertTriangle },
         {
           id: 'workforce',

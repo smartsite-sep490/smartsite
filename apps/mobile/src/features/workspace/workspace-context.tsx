@@ -16,6 +16,7 @@ import {
 import { API_URL, useAuth } from '../auth/auth-context';
 import { useQuery } from '@tanstack/react-query';
 import { QueryState, Page, Hint, Button } from '../shared/ui';
+import { ownWorkerComplianceOptions } from './own-worker-compliance';
 export type MobileScope = {
   role: 'worker' | 'contractor';
   siteId: string;
@@ -71,15 +72,9 @@ export function WorkspaceProvider({
     scope.role,
     scope.contractorId,
   ] as const;
-  const self = useQuery({
-    queryKey: [...queryKey, 'self'],
-    queryFn: () => client.myContractorTeam(token, scope.siteId),
-    enabled: scope.role === 'worker',
-  });
   const compliance = useQuery({
-    queryKey: [...queryKey, 'worker-documents', self.data?.workerId],
-    queryFn: () => client.workerCompliance(token, scope.siteId, self.data!.workerId),
-    enabled: scope.role === 'worker' && !!self.data?.workerId,
+    ...ownWorkerComplianceOptions(client, token, scope.siteId, queryKey),
+    enabled: scope.role === 'worker',
     refetchInterval: 60_000,
   });
   const content = (
@@ -90,7 +85,7 @@ export function WorkspaceProvider({
         client,
         token,
         queryKey,
-        workerId: self.data?.workerId ?? '',
+        workerId: compliance.data?.workerId ?? '',
         workerDocumentStatus: compliance.data?.status,
         canSwitchScope: canSwitchScope || (user.roleAssignments?.length ?? 0) > 1,
       }}
@@ -98,18 +93,18 @@ export function WorkspaceProvider({
       {children}
     </WorkspaceContext.Provider>
   );
-  if (scope.role === 'worker' && !self.isSuccess)
+  if (scope.role === 'worker' && compliance.data === undefined)
     return (
       <Page title={tr('workforce.workerProfile')}>
-        <QueryState query={self}>{() => null}</QueryState>
+        <QueryState query={compliance}>{() => null}</QueryState>
         <Button secondary label={tr('scope.chooseAgain')} onPress={onScopeChange} />
       </Page>
     );
   if (scope.role === 'worker')
     return (
-      <QueryState query={self}>
+      <QueryState query={compliance}>
         {(data) =>
-          data.workerId ? (
+          data?.workerId ? (
             content
           ) : (
             <Page title={tr('scope.noWorkerProfile')}>

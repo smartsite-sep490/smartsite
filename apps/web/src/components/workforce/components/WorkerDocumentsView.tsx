@@ -1,4 +1,3 @@
-import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -6,9 +5,11 @@ import { useAuth, useCurrentUser, useManagementClient } from '../../../features/
 import { translate as tr } from '../../../i18n';
 import { userErrorMessage } from '../../../i18n/messages';
 import { WorkerDocumentsPanel } from './WorkerDocumentsPanel';
+import { WorkerRoster } from './WorkerRoster';
 import { WorkerDocumentReviewView } from '../../safety/WorkerDocumentReviewView';
 import { loadAllPages } from '../load-all-pages';
-import { IconBuilding2, IconLoader, IconAlertTriangle } from '../../icons';
+import { IconLoader, IconAlertTriangle } from '../../icons';
+import { WorksitePicker } from '../../shared/WorksitePicker';
 
 export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   useTranslation();
@@ -55,8 +56,8 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
 
   const own = useQuery({
     queryKey: ['worker-document-self', apiUrl, user.data?.id, siteId],
-    enabled: !!siteId && !safety && !rep,
-    queryFn: () => client.myContractorTeam(accessToken!, siteId),
+    enabled: !!accessToken && !!siteId && !safety && !rep,
+    queryFn: () => client.myWorkerCompliance(accessToken!, siteId),
   });
 
   if (user.isError || sites.isError || own.isError) {
@@ -80,45 +81,33 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
   }
 
   if (siteUnavailable) return <p role="alert">{tr('safetyUi.siteUnavailable')}</p>;
+  const scope = apiUrl + ':' + (user.data?.id ?? '');
+  const selectedWorker = params.get('workerId') ?? '';
   return (
     <div className="mx-auto max-w-7xl space-y-3 pb-8">
       {/* Site selector */}
       <div className="flex flex-col gap-4 py-2 sm:flex-row sm:items-center sm:justify-between">
-        {safety && (
-          <div className="min-w-0 space-y-1.5">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">
-              {tr('documents.workspaceTitle')}
-            </h1>
-            <p className="text-sm leading-6 text-slate-500">{tr('documents.workspaceHint')}</p>
-          </div>
-        )}
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          {tr(
+            safety
+              ? 'documents.workspaceTitle'
+              : rep
+                ? 'workerIntake.recordTitle'
+                : 'workerIntake.myRecord',
+          )}
+        </h1>
         {allowed.length > 0 && (
-          <div className="flex min-w-0 items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-3 py-2 sm:ml-auto sm:max-w-sm">
-            <IconBuilding2 className="w-4 h-4 text-[#F66B17] shrink-0" />
-            <label
-              htmlFor="worker-documents-site-select"
-              className="shrink-0 text-xs font-medium text-slate-500"
-            >
-              {tr('common.site_fa7955')}
-            </label>
-            <SmartNativeSelect
-              id="worker-documents-site-select"
-              value={siteId}
-              onChange={(e) => setParams({ siteId: e.target.value })}
-              className="min-w-0 border-0 bg-transparent py-1 pr-6 text-sm font-semibold text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-200"
-            >
-              {allowed.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </SmartNativeSelect>
-          </div>
+          <WorksitePicker
+            id="worker-documents-site-select"
+            value={siteId}
+            sites={allowed}
+            onChange={(siteId) => setParams({ siteId })}
+          />
         )}
       </div>
 
       {/* Loading state */}
-      {(user.isPending || sites.isPending) && (
+      {(user.isPending || sites.isPending || (!!siteId && !safety && !rep && own.isPending)) && (
         <div role="status" className="flex items-center justify-center p-12 text-slate-500 gap-3">
           <IconLoader className="w-5 h-5 animate-spin text-[#F66B17]" />
           <span className="text-sm font-semibold">{tr('common.loading')}</span>
@@ -129,16 +118,26 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
       {siteId &&
         user.data &&
         accessToken &&
-        (safety || rep ? (
+        (safety ? (
           <WorkerDocumentReviewView
-            key={siteId}
+            key={scope + ':' + siteId + ':' + selectedWorker}
             client={client}
             token={accessToken}
             siteId={siteId}
-            scope={apiUrl + ':' + user.data.id}
-            canReview={safety}
-            canUpload={rep}
-            initialWorkerId={params.get('workerId') ?? undefined}
+            scope={scope}
+            initialWorkerId={selectedWorker}
+          />
+        ) : rep ? (
+          <WorkerRoster
+            key={scope + ':' + siteId}
+            apiUrl={apiUrl}
+            client={client}
+            token={accessToken}
+            siteId={siteId}
+            scope={scope}
+            selected={selectedWorker}
+            tab={params.get('tab')}
+            onSelect={(workerId, tab) => setParams({ siteId, workerId, tab })}
           />
         ) : own.data?.workerId ? (
           <WorkerDocumentsPanel
@@ -147,7 +146,8 @@ export function WorkerDocumentsView({ apiUrl }: { apiUrl: string }) {
             token={accessToken}
             siteId={siteId}
             workerId={own.data.workerId}
-            scope={apiUrl + ':' + user.data.id}
+            scope={scope}
+            canEditIdentity
           />
         ) : null)}
     </div>

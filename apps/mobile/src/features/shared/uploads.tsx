@@ -1,5 +1,5 @@
 import { translate as tr } from '../../i18n';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Image, Modal, View, Text, Pressable, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -7,14 +7,9 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { NativeUploadFile } from '@smartsite/api-client';
 import { Card, ErrorNotice, Hint } from './ui';
-import {
-  IconCamera,
-  IconImage,
-  IconDocument,
-  IconTrash,
-  IconEye,
-} from '../../components/common/Icons';
+import { IconCamera, IconDocument, IconTrash, IconEye } from '../../components/common/Icons';
 import { useTranslation } from '../../i18n';
+import { colors } from '../../theme/colors';
 
 function uploadFile(uri: string, name: string, type: string): NativeUploadFile {
   const source = new File(uri);
@@ -70,110 +65,224 @@ export async function capturePhoto(
     if (original.exists) original.delete();
   }
 }
+
+async function pickDocumentPhoto() {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) throw new Error(tr('uploads.libraryPermission'));
+  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+  const asset = !result.canceled ? result.assets[0] : undefined;
+  if (!asset) return null;
+  const { ImageManipulator, SaveFormat } = await import('expo-image-manipulator');
+  const context = ImageManipulator.manipulate(asset.uri);
+  context.resize({ width: Math.min(1920, asset.width) });
+  const image = await context.renderAsync();
+  const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
+  const file = uploadFile(saved.uri, 'document-gallery.jpg', 'image/jpeg');
+  if (new File(saved.uri).size > 5 * 1024 * 1024) {
+    removeCached(file);
+    throw new Error(tr('uploads.imageSizeLimit'));
+  }
+  return file;
+}
+
+async function pickDocumentFile(jpegOnly: boolean) {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: jpegOnly ? 'image/jpeg' : ['image/jpeg', 'image/png', 'application/pdf'],
+    copyToCacheDirectory: true,
+  });
+  const asset = !result.canceled ? result.assets[0] : undefined;
+  if (!asset) return null;
+  const size = asset.size ?? new File(asset.uri).size;
+  const mime =
+    asset.mimeType ??
+    (asset.name.toLowerCase().endsWith('.pdf')
+      ? 'application/pdf'
+      : asset.name.toLowerCase().endsWith('.png')
+        ? 'image/png'
+        : 'image/jpeg');
+  const file = uploadFile(asset.uri, asset.name, mime);
+  if (size > (jpegOnly ? 1 : 5) * 1024 * 1024) {
+    removeCached(file);
+    throw new Error(jpegOnly ? tr('uploads.jpegSizeLimit') : tr('uploads.fileSizeLimit'));
+  }
+  return file;
+}
+
+export function SingleDocumentAttachment({
+  label,
+  file,
+  onChange,
+  savedName,
+  savedPreview,
+  identity = false,
+  disabled = false,
+  onPickingChange,
+}: {
+  label: string;
+  file?: NativeUploadFile;
+  onChange: (file: NativeUploadFile | undefined) => void;
+  savedName?: string;
+  savedPreview?: ReactNode;
+  identity?: boolean;
+  disabled?: boolean;
+  onPickingChange?: (busy: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [expanded, setExpanded] = useState(false);
+  const current = useRef<NativeUploadFile | undefined>(file);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (current.current) removeCached(current.current);
+    };
+  }, []);
+  useEffect(() => {
+    if (current.current && current.current.uri !== file?.uri) removeCached(current.current);
+    current.current = file;
+  }, [file]);
+  const add = async (source: 'gallery' | 'camera' | 'file') => {
+    if (pending || disabled) return;
+    setPending(true);
+    onPickingChange?.(true);
+    setError(null);
+    try {
+      const picked =
+        source === 'gallery'
+          ? await pickDocumentPhoto()
+          : source === 'camera'
+            ? await capturePhoto(false, true)
+            : await pickDocumentFile(false);
+      if (!picked) return;
+      if (!mounted.current) {
+        removeCached(picked);
+        return;
+      }
+      if (current.current && current.current.uri !== picked.uri) removeCached(current.current);
+      current.current = picked;
+      onChange(picked);
+      setExpanded(false);
+    } catch (e) {
+      if (mounted.current) setError(e);
+    } finally {
+      if (mounted.current) setPending(false);
+      onPickingChange?.(false);
+    }
+  };
+  const actions = [
+    {
+      key: 'gallery',
+      text: t(
+        identity && (file || savedName)
+          ? 'onboarding.chooseAnotherPhoto'
+          : 'onboarding.choosePhoto',
+      ),
+    },
+    {
+      key: 'camera',
+      text: t(identity && (file || savedName) ? 'onboarding.retakePhoto' : 'uploads.takePhoto'),
+    },
+    ...(!identity ? [{ key: 'file' as const, text: t('uploads.chooseAttachment') }] : []),
+  ] as const;
+  return (
+    <View style={uploadStyles.compactAttachment}>
+      <View style={uploadStyles.fileItemHeader}>
+        <View style={uploadStyles.compactCopy}>
+          <Text style={uploadStyles.compactTitle}>{label}</Text>
+          <Text numberOfLines={1} style={uploadStyles.compactName}>
+            {file?.name || savedName || t('documents.noFile')}
+          </Text>
+        </View>
+        {!identity && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${t(file || savedName ? 'onboarding.replaceFile' : 'onboarding.attachFile')}: ${label}`}
+            accessibilityState={{ expanded, disabled }}
+            disabled={disabled || pending}
+            style={uploadStyles.compactButton}
+            onPress={() => setExpanded(!expanded)}
+          >
+            <Text style={uploadStyles.compactAction}>
+              {t(file || savedName ? 'onboarding.replaceFile' : 'onboarding.attachFile')}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+      {file?.type.startsWith('image/') && (
+        <Image
+          source={{ uri: file.uri }}
+          style={uploadStyles.compactImage}
+          resizeMode="contain"
+          accessibilityLabel={label}
+        />
+      )}
+      {!file && savedPreview}
+      {(identity || expanded) && (
+        <View style={uploadStyles.compactActions}>
+          {actions.map(({ key, text }) => (
+            <Pressable
+              key={key}
+              accessibilityRole="button"
+              accessibilityLabel={`${text}: ${label}`}
+              disabled={disabled || pending}
+              style={uploadStyles.compactButton}
+              onPress={() => void add(key)}
+            >
+              <Text style={uploadStyles.compactAction}>{text}</Text>
+            </Pressable>
+          ))}
+          {!!file && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('uploads.removeFile', { name: file.name })}
+              disabled={disabled || pending}
+              style={uploadStyles.compactButton}
+              onPress={() => onChange(undefined)}
+            >
+              <Text style={uploadStyles.compactAction}>{t('common.cancel')}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+      {pending && <Hint>{t('onboarding.preparingFile')}</Hint>}
+      <ErrorNotice error={error} />
+    </View>
+  );
+}
+
 export function Attachments({
   files,
   onChange,
   jpegOnly = false,
   maxFiles = 3,
-  validateFile,
-  allowPdf = true,
   disabled = false,
 }: {
   files: NativeUploadFile[];
   onChange: (files: NativeUploadFile[]) => void;
   jpegOnly?: boolean;
   maxFiles?: number;
-  validateFile?: (file: NativeUploadFile) => Promise<void>;
-  allowPdf?: boolean;
   disabled?: boolean;
 }) {
-  const { t } = useTranslation();
+  useTranslation();
   const [error, setError] = useState<unknown>(null),
     [pending, setPending] = useState(false);
-  const managed = !!validateFile;
-  const owned = useRef(new Map<string, NativeUploadFile>());
-  const previous = useRef(files);
-  useEffect(() => {
-    if (managed)
-      for (const file of previous.current)
-        if (!files.some((next) => next.uri === file.uri)) removeCached(file);
-    previous.current = files;
-  }, [files, managed]);
-  useEffect(() => {
-    const tracked = owned.current;
-    return () => {
-      if (managed) for (const file of tracked.values()) removeCached(file);
-    };
-  }, [managed]);
-  const accept = async (file: NativeUploadFile) => {
-    if (managed) owned.current.set(file.uri, file);
-    try {
-      await validateFile?.(file);
-      onChange([...files, file]);
-    } catch (e) {
-      if (managed) removeCached(file);
-      throw e;
-    }
-  };
-  const add = async (source: 'camera' | 'gallery' | 'file') => {
+  const add = async (source: 'camera' | 'file') => {
     if (disabled || pending) return;
     setPending(true);
     setError(null);
     try {
-      if (source === 'camera') {
-        const file = await capturePhoto(false, !!validateFile);
-        if (file) await accept(file);
-      } else if (source === 'gallery') {
-        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) throw new Error(tr('uploads.libraryPermission'));
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: 1,
-        });
-        const asset = !result.canceled ? result.assets[0] : undefined;
-        if (asset) {
-          const { ImageManipulator, SaveFormat } = await import('expo-image-manipulator');
-          const context = ImageManipulator.manipulate(asset.uri);
-          context.resize({ width: Math.min(1920, asset.width) });
-          const image = await context.renderAsync();
-          const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
-          const file = uploadFile(saved.uri, 'document-gallery.jpg', 'image/jpeg');
-          if (new File(saved.uri).size > 5 * 1024 * 1024) {
-            removeCached(file);
-            throw new Error(tr('uploads.imageSizeLimit'));
-          }
-          await accept(file);
-        }
-      } else {
-        const result = await DocumentPicker.getDocumentAsync({
-          type: jpegOnly
-            ? 'image/jpeg'
-            : ['image/jpeg', 'image/png', ...(allowPdf ? ['application/pdf'] : [])],
-          copyToCacheDirectory: true,
-        });
-        const asset = !result.canceled ? result.assets[0] : undefined;
-        if (asset) {
-          const size = asset.size ?? new File(asset.uri).size;
-          if (size > (jpegOnly ? 1024 * 1024 : 5 * 1024 * 1024))
-            throw new Error(jpegOnly ? tr('uploads.jpegSizeLimit') : tr('uploads.fileSizeLimit'));
-          const mime =
-            asset.mimeType ??
-            (asset.name.toLowerCase().endsWith('.pdf')
-              ? 'application/pdf'
-              : asset.name.toLowerCase().endsWith('.png')
-                ? 'image/png'
-                : 'image/jpeg');
-          const file = uploadFile(asset.uri, asset.name, mime);
-          await accept(file);
-        }
-      }
+      const file = source === 'camera' ? await capturePhoto() : await pickDocumentFile(jpegOnly);
+      if (file) onChange([...files, file]);
     } catch (e) {
       setError(e);
     } finally {
       setPending(false);
     }
   };
-  const cameraLabel = validateFile ? t('documents.camera') : tr('uploads.takePhoto');
+  const cameraLabel = tr('uploads.takePhoto');
   return (
     <View style={{ gap: 10 }}>
       <Hint>{jpegOnly ? tr('uploads.jpegSizeLimit') : tr('uploads.attachmentsHint')}</Hint>
@@ -227,27 +336,6 @@ export function Attachments({
               {cameraLabel}
             </Text>
           </Pressable>
-
-          {validateFile && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('documents.gallery')}
-              disabled={disabled || pending || files.length >= maxFiles}
-              onPress={() => void add('gallery')}
-              style={({ pressed }) => [
-                uploadStyles.actionBtn,
-                (disabled || pending || files.length >= maxFiles) && uploadStyles.btnDisabled,
-                pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
-              ]}
-            >
-              <View style={[uploadStyles.iconBox, { backgroundColor: '#EFF6FF' }]}>
-                <IconImage size={18} color="#2563EB" />
-              </View>
-              <Text numberOfLines={2} style={uploadStyles.actionBtnText}>
-                {t('documents.gallery')}
-              </Text>
-            </Pressable>
-          )}
 
           <Pressable
             accessibilityRole="button"
@@ -364,6 +452,21 @@ export function EvidenceButton({
 }
 
 const uploadStyles = StyleSheet.create({
+  compactAttachment: { gap: 8 },
+  compactCopy: { flex: 1, minWidth: 0, gap: 4 },
+  compactTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
+  compactName: { color: colors.textMuted, fontSize: 12 },
+  compactActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  compactButton: {
+    minHeight: 44,
+    paddingHorizontal: 9,
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+  },
+  compactAction: { color: colors.primaryHover, fontSize: 12, fontWeight: '700' },
+  compactImage: { height: 130, borderRadius: 8, backgroundColor: colors.surfaceSubtle },
   fileName: { flex: 1, fontSize: 13, lineHeight: 20, color: '#334155', fontWeight: '600' },
   viewer: {
     flex: 1,
