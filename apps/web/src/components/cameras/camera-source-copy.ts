@@ -11,6 +11,11 @@ const en = {
   'cameraSource.resumeStarted':
     'Check configuration status and live frames in the camera panel. A started session alone does not confirm monitoring is ready.',
   'cameraSource.title': 'Connect camera',
+  'cameraSource.stepFlowHint': 'Choose source · Test · Connect',
+  'cameraSource.groupLive': 'Live video sources',
+  'cameraSource.groupSecondary': 'This device & demo testing',
+  'cameraSource.badgeUnavailable': 'Not supported',
+  'cameraSource.badgeReplay': 'Demo · Replay',
   'cameraSource.statusConnected': 'Activation acknowledged',
   'cameraSource.statusTested': 'Test preview ready',
   'cameraSource.statusNotConnected': 'Source not checked',
@@ -24,7 +29,8 @@ const en = {
   'cameraSource.confirmApplyBtn': 'Confirm source replacement',
   'cameraSource.cancelApplyConfirm': 'Cancel',
   'cameraSource.running':
-    'Source is running in a new session (activation alone does not prove ongoing live monitoring). Take a fresh reference image and confirm regions/PPE before monitoring.',
+    'Source is running in a new session (activation alone does not prove ongoing live monitoring or accurate detections). Take a fresh reference image and confirm regions/PPE before monitoring.',
+  'cameraSource.nextConfigureRegions': 'Configure monitoring areas',
   'cameraSource.applyError':
     'Activation was not confirmed. Check the current camera connection status before retrying; the previous source may have stopped.',
   'cameraSource.intro':
@@ -34,6 +40,8 @@ const en = {
   'cameraSource.chooseHost': 'Choose a camera processing computer',
   'cameraSource.connectionDetailsToggle': 'Connection details',
   'cameraSource.connectionDetailsNeeded': 'Selection needed',
+  'cameraSource.technicalHostId': 'Host ID: {{id}}',
+  'cameraSource.technicalRevision': 'Source rev {{revision}}',
   'cameraSource.multipleHostsPrompt':
     'More than one camera processing computer is available for this site. Choose one in Connection details before testing this camera.',
   'cameraSource.chooseConnectionAction': 'Choose connection',
@@ -41,16 +49,20 @@ const en = {
   'cameraSource.hostHelp':
     'The camera processing computer runs SmartSite to process connected cameras and must stay online. USB cameras and recorded videos are read on that computer, not on every device opening this website.',
   'cameraSource.WEBCAM': 'USB camera connected at site',
-  'cameraSource.WEBCAMHelp':
-    'USB camera plugged into the connected processing computer, not this browser.',
+  'cameraSource.WEBCAMHelp': 'Plugged into site processing PC, not this browser.',
   'cameraSource.RTSP': 'IP camera / RTSP',
-  'cameraSource.RTSPHelp': 'Network stream using an RTSP address.',
+  'cameraSource.RTSPHelp': 'Network stream via RTSP address and credentials.',
   'cameraSource.VIDEO': 'Recorded video',
-  'cameraSource.VIDEOHelp': 'Saved video file for preview and testing.',
+  'cameraSource.VIDEOHelp': 'Secondary demo playback only, never live.',
   'cameraSource.BROWSER': 'This browser camera',
-  'cameraSource.BROWSERHelp': 'Not supported yet.',
+  'cameraSource.BROWSERHelp': 'Local browser webcam — not supported yet.',
+  'cameraSource.webcamScope':
+    'Devices listed below are plugged directly into the site processing computer — not this browser webcam.',
+  'cameraSource.videoScope':
+    'Secondary testing option · Recorded playback of approved demo clips only. Cannot activate live monitoring or upload new files here.',
+  'cameraSource.browserUnavailableHeading': 'Camera on this device / browser is not supported yet',
   'cameraSource.browserUnavailable':
-    'Using the webcam on this viewing computer through the browser is not supported yet. Listed USB cameras (such as webcam0) currently belong to the connected processing machine at the site, not the computer you are viewing this page on. Use a USB camera connected at the site or an IP/RTSP camera instead.',
+    'Browser camera upload is not supported yet, so this page will not ask for camera permission or substitute a site USB device (such as webcam0) from the connected processing machine — not the computer you are viewing this page on. Use a USB camera connected at the site or an IP/RTSP camera instead.',
   'cameraSource.device': 'Device',
   'cameraSource.chooseDevice': 'Choose a connected camera',
   'cameraSource.video': 'Video',
@@ -59,8 +71,10 @@ const en = {
   'cameraSource.endpointExample': 'rtsp://192.168.1.50:554/stream1',
   'cameraSource.username': 'Camera username',
   'cameraSource.password': 'Camera password',
+  'cameraSource.rtspValidationError':
+    'Enter a valid rtsp:// or rtsps:// URL without embedded username or password. Put credentials in the separate fields below.',
   'cameraSource.credentialHelp':
-    'Enter credentials separately. They are sent only for the connection test and are not included in camera names or alerts.',
+    'The processing service must be able to reach this camera network — a private LAN camera is not automatically reachable from cloud. Credentials are sent only for testing and are never included in camera names or alerts.',
   'cameraSource.test': 'Test connection',
   'cameraSource.testing': 'Testing connection…',
   'cameraSource.cancel': 'Cancel test',
@@ -95,10 +109,11 @@ const en = {
     'This camera is not connected to a video source yet on the selected connection. Ask your operator to assign it, then check again.',
   'cameraSource.agentUnavailableSelected':
     'Camera processing service is currently unreachable on the selected connection. Try checking again in a moment.',
-  'cameraSource.testOnlyNote': '{{host}} is test-only (cannot activate live monitoring here).',
+  'cameraSource.testOnlyNote':
+    'This connection is test-only (cannot activate live monitoring here).',
   'cameraSource.emptyWebcams':
-    'No USB webcams found on {{host}}. Plug in a USB camera or use RTSP.',
-  'cameraSource.emptyVideos': 'No approved videos found on {{host}}.',
+    'No USB webcams found on the connected processing computer. Plug in a USB camera there or switch to IP camera / RTSP.',
+  'cameraSource.emptyVideos': 'No approved videos found on the connected processing computer.',
   'cameraSource.inactiveBadge': 'Disabled · Test only',
   'cameraSource.inactiveBadgeBlocked': 'Disabled',
   'cameraSource.inactivePrepNotice':
@@ -161,6 +176,11 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.resumeStarted':
     'Kiểm tra trạng thái cấu hình và ảnh trực tiếp tại bảng camera. Phiên đã bắt đầu chưa có nghĩa giám sát đã sẵn sàng.',
   'cameraSource.title': 'Kết nối camera',
+  'cameraSource.stepFlowHint': 'Chọn nguồn · Kiểm tra · Kết nối',
+  'cameraSource.groupLive': 'Nguồn hình trực tiếp',
+  'cameraSource.groupSecondary': 'Thiết bị này & chạy thử',
+  'cameraSource.badgeUnavailable': 'Chưa hỗ trợ',
+  'cameraSource.badgeReplay': 'Chạy thử · Phát lại',
   'cameraSource.statusConnected': 'Đã ghi nhận kích hoạt',
   'cameraSource.statusTested': 'Đã có ảnh kiểm tra',
   'cameraSource.statusNotConnected': 'Chưa kiểm tra nguồn',
@@ -174,7 +194,8 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.confirmApplyBtn': 'Xác nhận đổi nguồn',
   'cameraSource.cancelApplyConfirm': 'Hủy',
   'cameraSource.running':
-    'Nguồn đang chạy trong phiên mới (chưa tự chứng minh giám sát trực tiếp đang hoạt động ổn định). Hãy lấy ảnh tham chiếu mới và xác nhận vùng/PPE trước khi giám sát.',
+    'Nguồn đang chạy trong phiên mới (xác nhận kích hoạt chưa tự chứng minh video trực tiếp ổn định hay AI nhận diện chính xác). Hãy lấy ảnh tham chiếu mới và kiểm tra vùng/PPE trước khi giám sát.',
+  'cameraSource.nextConfigureRegions': 'Cấu hình vùng giám sát',
   'cameraSource.applyError':
     'Chưa xác nhận được kích hoạt. Kiểm tra trạng thái kết nối camera trước khi thử lại; nguồn cũ có thể đã dừng.',
   'cameraSource.intro':
@@ -184,6 +205,8 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.chooseHost': 'Chọn máy xử lý camera',
   'cameraSource.connectionDetailsToggle': 'Chi tiết kết nối',
   'cameraSource.connectionDetailsNeeded': 'Cần chọn',
+  'cameraSource.technicalHostId': 'Mã kết nối: {{id}}',
+  'cameraSource.technicalRevision': 'Phiên bản nguồn {{revision}}',
   'cameraSource.multipleHostsPrompt':
     'Công trường có nhiều máy xử lý camera khả dụng. Hãy chọn một máy trong Chi tiết kết nối trước khi kiểm tra camera này.',
   'cameraSource.chooseConnectionAction': 'Chọn kết nối',
@@ -191,25 +214,31 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.hostHelp':
     'Máy xử lý camera là máy chạy SmartSite để xử lý camera được kết nối và cần duy trì trực tuyến. Webcam USB và tệp video được đọc trên máy này, không phải trên mọi thiết bị mở website.',
   'cameraSource.WEBCAM': 'Camera USB đã kết nối',
-  'cameraSource.WEBCAMHelp':
-    'Camera USB đang cắm vào máy xử lý tại điểm lắp đặt, không phải webcam trên trình duyệt này.',
+  'cameraSource.WEBCAMHelp': 'Cắm vào máy xử lý tại điểm lắp đặt, không phải trình duyệt này.',
   'cameraSource.RTSP': 'Camera IP / RTSP',
-  'cameraSource.RTSPHelp': 'Luồng camera mạng qua địa chỉ RTSP.',
+  'cameraSource.RTSPHelp': 'Luồng mạng qua đường dẫn RTSP và tài khoản riêng.',
   'cameraSource.VIDEO': 'Video đã ghi',
-  'cameraSource.VIDEOHelp': 'Tệp video đã lưu để xem thử và kiểm tra.',
-  'cameraSource.BROWSER': 'Camera trình duyệt trên máy này',
-  'cameraSource.BROWSERHelp': 'Hiện chưa hỗ trợ.',
+  'cameraSource.VIDEOHelp': 'Chạy thử phát lại video mẫu, không phát trực tiếp.',
+  'cameraSource.BROWSER': 'Camera trên máy này',
+  'cameraSource.BROWSERHelp': 'Webcam từ trình duyệt hiện chưa hỗ trợ.',
+  'cameraSource.webcamScope':
+    'Các thiết bị bên dưới được cắm trực tiếp vào máy xử lý tại công trường — không phải webcam trên trình duyệt bạn đang mở.',
+  'cameraSource.videoScope':
+    'Tùy chọn kiểm tra phụ · Chỉ phát lại video mẫu có sẵn trên máy xử lý — không bật giám sát trực tiếp và chưa hỗ trợ tải tệp lên tại đây.',
+  'cameraSource.browserUnavailableHeading': 'Chưa hỗ trợ camera trên thiết bị / trình duyệt này',
   'cameraSource.browserUnavailable':
-    'Hiện chưa hỗ trợ dùng webcam trực tiếp từ trình duyệt trên máy bạn đang mở web. Danh sách camera USB (như webcam0) hiện thuộc về máy xử lý đang kết nối tại công trường, không phải máy bạn đang xem trang này. Hãy dùng Camera USB đã kết nối hoặc Camera IP / RTSP.',
+    'Hiện chưa hỗ trợ gửi webcam từ trình duyệt trên máy bạn đang mở web, nên trang sẽ không xin quyền camera hay tự thay bằng camera USB (như webcam0) của máy xử lý tại công trường — không phải máy bạn đang xem trang này. Hãy chọn Camera USB đã kết nối hoặc Camera IP / RTSP.',
   'cameraSource.device': 'Thiết bị',
   'cameraSource.chooseDevice': 'Chọn camera đang gắn',
   'cameraSource.video': 'Video',
-  'cameraSource.chooseVideo': 'Chọn video được cấp',
+  'cameraSource.chooseVideo': 'Chọn video mẫu',
   'cameraSource.endpoint': 'Địa chỉ RTSP',
   'cameraSource.username': 'Tài khoản camera',
   'cameraSource.password': 'Mật khẩu camera',
+  'cameraSource.rtspValidationError':
+    'Nhập địa chỉ rtsp:// hoặc rtsps:// hợp lệ và không gắn tài khoản/mật khẩu trong URL. Hãy nhập riêng vào hai ô bên dưới.',
   'cameraSource.credentialHelp':
-    'Nhập tài khoản riêng với địa chỉ luồng. Thông tin này chỉ gửi để thử kết nối, không đưa vào tên camera hoặc cảnh báo.',
+    'Dịch vụ xử lý phải truy cập được mạng của camera — camera trong mạng LAN nội bộ không tự kết nối được từ cloud. Tài khoản chỉ gửi khi kiểm tra, không đưa vào tên camera hay cảnh báo.',
   'cameraSource.test': 'Kiểm tra kết nối',
   'cameraSource.testing': 'Đang kiểm tra kết nối…',
   'cameraSource.cancel': 'Hủy kiểm tra',
@@ -245,10 +274,10 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.agentUnavailableSelected':
     'Hiện chưa truy cập được dịch vụ xử lý camera trên kết nối đã chọn. Hãy thử kiểm tra lại sau ít phút.',
   'cameraSource.testOnlyNote':
-    '{{host}} chỉ hỗ trợ kiểm tra (chưa kích hoạt giám sát trực tiếp tại đây).',
+    'Kết nối hiện tại chỉ hỗ trợ kiểm tra (chưa kích hoạt giám sát trực tiếp tại đây).',
   'cameraSource.emptyWebcams':
-    'Chưa thấy webcam USB trên {{host}}. Hãy cắm camera USB hoặc dùng RTSP.',
-  'cameraSource.emptyVideos': 'Chưa có video đã ghi trên {{host}}.',
+    'Chưa thấy camera USB trên máy xử lý đang kết nối. Hãy cắm camera USB vào máy đó hoặc chuyển sang Camera IP / RTSP.',
+  'cameraSource.emptyVideos': 'Chưa có video mẫu khả dụng trên máy xử lý đang kết nối.',
   'cameraSource.inactiveBadge': 'Đang tắt · Chỉ kiểm tra',
   'cameraSource.inactiveBadgeBlocked': 'Đang tắt',
   'cameraSource.inactivePrepNotice':

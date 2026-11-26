@@ -114,35 +114,50 @@ function CameraApplySavedBarView({
           <span className="font-mono font-semibold tabular-nums text-slate-600">
             v{camera.configurationVersion}
           </span>
-          {host && <span className="text-slate-600">{host.label}</span>}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {hasMultipleAvailableHosts && (
-            <label htmlFor={hostSelectId} className="sr-only">
-              {t('cameraSource.host')}
-            </label>
-          )}
-          {hasMultipleAvailableHosts && (
-            <select
-              id={hostSelectId}
-              aria-label={t('cameraSource.host')}
-              value={hostId}
-              disabled={blocked}
-              onChange={(event) => selectHostId(event.target.value)}
-              className={`${CAMERA_FIELD_STYLES.input} !w-auto min-h-8 py-1 text-xs`}
+            <details
+              data-testid="camera-apply-host-details"
+              className="group relative min-w-0 text-xs text-slate-700"
             >
-              <option value="">{t('cameraSource.chooseHost')}</option>
-              {availableHosts.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.label}
-                </option>
-              ))}
-            </select>
+              <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                <span>{t('cameraSource.connectionDetailsToggle')}</span>
+                {!hostId && (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.25 text-[11px] font-semibold text-amber-900">
+                    {t('cameraSource.connectionDetailsNeeded')}
+                  </span>
+                )}
+              </summary>
+              <div className="mt-1.5 min-w-[14rem] rounded-xl border border-slate-200 bg-white p-2.5 shadow-sm lg:absolute lg:right-0 lg:z-20">
+                <label
+                  htmlFor={hostSelectId}
+                  className="mb-1 block text-xs font-semibold text-slate-800"
+                >
+                  {t('cameraSource.host')}
+                </label>
+                <select
+                  id={hostSelectId}
+                  aria-label={t('cameraSource.host')}
+                  value={hostId}
+                  disabled={blocked}
+                  onChange={(event) => selectHostId(event.target.value)}
+                  className={`${CAMERA_FIELD_STYLES.input} min-h-8 py-1 text-xs`}
+                >
+                  <option value="">{t('cameraSource.chooseHost')}</option>
+                  {availableHosts.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </details>
           )}
           <button
             type="button"
             data-testid="camera-sticky-apply-btn"
-            className="inline-flex min-h-8 items-center justify-center rounded-lg bg-[#0F172A] px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            className="inline-flex min-h-8 items-center justify-center rounded-lg border border-teal-700/30 bg-white px-3 py-1 text-xs font-semibold text-teal-900 transition-colors hover:border-teal-700/60 hover:bg-teal-50/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A] disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             disabled={!supportsResumeOnSelected || blocked || resuming.isSuccess}
             onClick={triggerResume}
           >
