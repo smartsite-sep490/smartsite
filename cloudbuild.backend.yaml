@@ -1,12 +1,79 @@
 steps:
   - name: gcr.io/cloud-builders/docker
+    id: build
     args:
       - build
       - --file
       - infra/docker/backend.Dockerfile
       - --tag
       - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${BUILD_ID}
+      - --build-arg
+      - SOURCE_REVISION=${COMMIT_SHA}
       - .
+
+  - name: gcr.io/cloud-builders/docker
+    id: verify-reviewed-release
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        docker run --rm --network none --read-only --entrypoint node \
+          ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${BUILD_ID} \
+          --input-type=module -e '
+          import {readFileSync} from "node:fs";
+          import {verifyMainAuthorityCutoverRelease} from "./dist/modules/zones/main-authority-cutover-release.js";
+          const info=JSON.parse(readFileSync("/app/reviewed-release-info.json","utf8"));
+          await verifyMainAuthorityCutoverRelease(info,"production");
+          console.log(JSON.stringify(info));' > /workspace/.mf06-release-info.json
+
+  - name: gcr.io/cloud-builders/docker
+    id: push
+    args: [push, '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${BUILD_ID}']
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: prepare-candidate
+    entrypoint: bash
+    args: [infra/cloud-run-release.sh, prepare]
+    env:
+      - PROJECT_ID=${PROJECT_ID}
+      - REGION=${_REGION}
+      - SERVICE=${_SERVICE}
+      - GIT_SHA=${COMMIT_SHA}
+      - BUILD_ID=${BUILD_ID}
+      - IMAGE_TAG=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${BUILD_ID}
+
+  - name: gcr.io/cloud-builders/docker
+    id: verify-new-revision
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        candidate='${_SERVICE}-main-${SHORT_SHA}-'$$(printf '%s' '${BUILD_ID}' | cut -c1-8)
+        docker run --rm --network none --read-only --volume /workspace:/release:ro --entrypoint node \
+          ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${BUILD_ID} \
+          /release/scripts/verify-cloud-run-release.mjs revision "$$candidate" /release/.cloud-run-candidate.json '${COMMIT_SHA}'
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: promote-healthy-main
+    entrypoint: bash
+    args: [infra/cloud-run-release.sh, promote]
+    env:
+      - PROJECT_ID=${PROJECT_ID}
+      - REGION=${_REGION}
+      - SERVICE=${_SERVICE}
+      - GIT_SHA=${COMMIT_SHA}
+      - BUILD_ID=${BUILD_ID}
+
+  - name: gcr.io/cloud-builders/docker
+    id: verify-serving-main
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        candidate='${_SERVICE}-main-${SHORT_SHA}-'$$(printf '%s' '${BUILD_ID}' | cut -c1-8)
+        docker run --rm --network none --read-only --volume /workspace:/release:ro --entrypoint node \
+          ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${BUILD_ID} \
+          /release/scripts/verify-cloud-run-release.mjs traffic "$$candidate" /release/.cloud-run-serving.json
 
 images:
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_IMAGE}:${BUILD_ID}
@@ -15,6 +82,7 @@ substitutions:
   _REGION: asia-southeast1
   _REPOSITORY: smartsite
   _IMAGE: smartsite-backend
+  _SERVICE: smartsite-backend
 
 options:
   logging: CLOUD_LOGGING_ONLY
