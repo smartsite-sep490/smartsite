@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
@@ -6,12 +6,15 @@ import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-style
 import {
   cameraSourceClient,
   SourceSetupError,
+  type BrowserCameraUplinkClient,
   type CameraSourceClient,
   type CameraSourceDraft,
   type CameraSourceKind,
   type SourceTestResult,
 } from '@smartsite/api-client';
 import './camera-source-copy';
+import { BrowserCameraUplinkPanel } from './BrowserCameraUplinkPanel';
+import { useBrowserCameraUplink, type BrowserCameraFrameEncoder } from './useBrowserCameraUplink';
 import {
   useCameraSourceResumeController,
   type CameraSourceResumeController,
@@ -32,8 +35,14 @@ export interface CameraSourceSetupProps {
   onUnauthorized: () => void;
   onOpenRegions?: () => void;
   client?: CameraSourceClient;
+  browserUplinkClient?: BrowserCameraUplinkClient;
+  browserUplinkFrameEncoder?: BrowserCameraFrameEncoder;
   embedded?: boolean;
   resumeController?: CameraSourceResumeController;
+}
+
+function readNowMs(): number {
+  return Date.now();
 }
 
 function isValidRtspEndpoint(raw: string): boolean {
@@ -64,6 +73,8 @@ function SourceWorkspace({
   onUnauthorized,
   onOpenRegions,
   client = cameraSourceClient,
+  browserUplinkClient,
+  browserUplinkFrameEncoder,
   embedded = false,
   resumeController: externalController,
 }: CameraSourceSetupProps) {
@@ -116,6 +127,25 @@ function SourceWorkspace({
   } = controller;
 
   const isCameraInactive = camera.status === 'INACTIVE';
+  const browserUplinkSupported = caps?.browserCameraSupported === true;
+  const handleBrowserUplinkRevoked = useCallback(() => {
+    markRevoked();
+    setPassword('');
+    onUnauthorized();
+  }, [markRevoked, onUnauthorized]);
+
+  const browserUplink = useBrowserCameraUplink({
+    apiUrl,
+    token,
+    siteId,
+    cameraId: camera.id,
+    supported: browserUplinkSupported,
+    canWrite: canWrite && !revoked && !hostAccessDenied,
+    cameraInactive: isCameraInactive,
+    onRevoked: handleBrowserUplinkRevoked,
+    client: browserUplinkClient,
+    frameEncoder: browserUplinkFrameEncoder,
+  });
 
   const applying = useMutation({
     mutationFn: async () => {
@@ -252,7 +282,7 @@ function SourceWorkspace({
       );
       if (operation.current.version !== version || abort.signal.aborted) return;
       setResult(value);
-      setNow(Date.now());
+      setNow(readNowMs());
     } catch (e) {
       if (operation.current.version !== version || abort.signal.aborted) return;
       const status = e instanceof SourceSetupError ? e.status : undefined;
@@ -283,29 +313,44 @@ function SourceWorkspace({
     activeResult && !isExpired
       ? Math.max(1, Math.ceil((Date.parse(activeResult.expiresAt) - now) / 1000))
       : 0;
-  const stage2Tone = pending
-    ? { dot: 'bg-teal-600', text: 'text-teal-900', key: 'cameraSource.stage2Pending' as const }
-    : activeResult
-      ? isExpired
-        ? {
-            dot: 'bg-rose-600',
-            text: 'text-rose-800',
-            key: 'cameraSource.stage2Expired' as const,
-          }
-        : activeResult.sourceKind === 'REPLAY'
-          ? {
-              dot: 'bg-amber-600',
-              text: 'text-amber-900',
-              key: 'cameraSource.stage2Replay' as const,
-            }
-          : {
-              dot: 'bg-emerald-600',
-              text: 'text-emerald-800',
-              key: 'cameraSource.stage2Live' as const,
-            }
-      : error
-        ? { dot: 'bg-rose-600', text: 'text-rose-800', key: 'cameraSource.stage2Error' as const }
-        : { dot: 'bg-slate-400', text: 'text-slate-700', key: 'cameraSource.stage2Idle' as const };
+  const stage2Tone =
+    kind === 'BROWSER' && browserUplinkSupported && browserUplink.phase === 'uploading'
+      ? {
+          dot: 'bg-teal-600',
+          text: 'text-teal-900',
+          key: 'cameraSource.stage2BrowserUploading' as const,
+        }
+      : pending
+        ? { dot: 'bg-teal-600', text: 'text-teal-900', key: 'cameraSource.stage2Pending' as const }
+        : activeResult
+          ? isExpired
+            ? {
+                dot: 'bg-rose-600',
+                text: 'text-rose-800',
+                key: 'cameraSource.stage2Expired' as const,
+              }
+            : activeResult.sourceKind === 'REPLAY'
+              ? {
+                  dot: 'bg-amber-600',
+                  text: 'text-amber-900',
+                  key: 'cameraSource.stage2Replay' as const,
+                }
+              : {
+                  dot: 'bg-emerald-600',
+                  text: 'text-emerald-800',
+                  key: 'cameraSource.stage2Live' as const,
+                }
+          : error
+            ? {
+                dot: 'bg-rose-600',
+                text: 'text-rose-800',
+                key: 'cameraSource.stage2Error' as const,
+              }
+            : {
+                dot: 'bg-slate-400',
+                text: 'text-slate-700',
+                key: 'cameraSource.stage2Idle' as const,
+              };
   const stage4Status = applying.isSuccess
     ? {
         dot: 'bg-emerald-600',
@@ -352,7 +397,9 @@ function SourceWorkspace({
             aria-hidden="true"
             className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${stage2Tone.dot}`}
           />
-          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{t(stage2Tone.key)}</span>
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+            {t(stage2Tone.key, { count: browserUplink.framesUploaded })}
+          </span>
         </dd>
       </div>
       <div className="min-w-0 px-3.5 py-2.5 space-y-1">
@@ -422,33 +469,40 @@ function SourceWorkspace({
         : ('cameraSource.unavailable' as const);
 
   const connectionStatus =
-    hosts.isPending || pending || applying.isPending
+    hosts.isPending || pending || applying.isPending || browserUplink.phase === 'starting'
       ? {
           state: 'checking' as const,
           dot: 'bg-teal-600 animate-pulse',
           pill: 'border-teal-200 bg-teal-50 text-teal-900',
           key: 'cameraSource.statusChecking' as const,
         }
-      : applying.isSuccess
+      : browserUplinkSupported && browserUplink.phase === 'uploading'
         ? {
-            state: 'activation-acknowledged' as const,
+            state: 'browser-uploading' as const,
             dot: 'bg-teal-600',
             pill: 'border-teal-200 bg-teal-50 text-teal-900',
-            key: 'cameraSource.statusConnected' as const,
+            key: 'cameraSource.statusBrowserUploading' as const,
           }
-        : activeResult && !isExpired
+        : applying.isSuccess
           ? {
-              state: 'tested' as const,
-              dot: 'bg-sky-600',
-              pill: 'border-sky-200 bg-sky-50 text-sky-900',
-              key: 'cameraSource.statusTested' as const,
+              state: 'activation-acknowledged' as const,
+              dot: 'bg-teal-600',
+              pill: 'border-teal-200 bg-teal-50 text-teal-900',
+              key: 'cameraSource.statusConnected' as const,
             }
-          : {
-              state: 'not-checked' as const,
-              dot: 'bg-slate-400',
-              pill: 'border-slate-200 bg-slate-50 text-slate-700',
-              key: 'cameraSource.statusNotConnected' as const,
-            };
+          : activeResult && !isExpired
+            ? {
+                state: 'tested' as const,
+                dot: 'bg-sky-600',
+                pill: 'border-sky-200 bg-sky-50 text-sky-900',
+                key: 'cameraSource.statusTested' as const,
+              }
+            : {
+                state: 'not-checked' as const,
+                dot: 'bg-slate-400',
+                pill: 'border-slate-200 bg-slate-50 text-slate-700',
+                key: 'cameraSource.statusNotConnected' as const,
+              };
 
   const hasLiveApplyCta = Boolean(
     activeResult &&
@@ -471,7 +525,10 @@ function SourceWorkspace({
   const renderSourceOption = (
     option: CameraSourceKind | 'BROWSER',
     secondary = false,
-    badgeKey?: 'cameraSource.badgeUnavailable' | 'cameraSource.badgeReplay',
+    badgeKey?:
+      | 'cameraSource.badgeUnavailable'
+      | 'cameraSource.badgeBrowserReady'
+      | 'cameraSource.badgeReplay',
   ) => (
     <label
       key={option}
@@ -491,6 +548,9 @@ function SourceWorkspace({
           checked={kind === option}
           onChange={() =>
             change(() => {
+              if (kind === 'BROWSER' && option !== 'BROWSER') {
+                void browserUplink.stop('SOURCE_SWITCHED', false);
+              }
               setKind(option);
               setPassword('');
             })
@@ -504,9 +564,11 @@ function SourceWorkspace({
             {badgeKey && (
               <span
                 className={`inline-flex items-center rounded-md border px-1.5 text-[11px] leading-4 font-medium ${
-                  option === 'BROWSER'
-                    ? 'border-amber-200 bg-amber-50/90 text-amber-900'
-                    : 'border-slate-200 bg-white text-slate-600'
+                  badgeKey === 'cameraSource.badgeBrowserReady'
+                    ? 'border-teal-200 bg-teal-50/90 text-teal-900'
+                    : option === 'BROWSER'
+                      ? 'border-amber-200 bg-amber-50/90 text-amber-900'
+                      : 'border-slate-200 bg-white text-slate-600'
                 }`}
               >
                 {t(badgeKey)}
@@ -514,7 +576,11 @@ function SourceWorkspace({
             )}
           </span>
           <span className="block text-xs leading-snug text-slate-600">
-            {t(`cameraSource.${option}Help`)}
+            {t(
+              option === 'BROWSER' && browserUplinkSupported
+                ? 'cameraSource.BROWSERReadyHelp'
+                : `cameraSource.${option}Help`,
+            )}
           </span>
         </span>
       </span>
@@ -778,24 +844,41 @@ function SourceWorkspace({
                   {t('cameraSource.groupSecondary')}
                 </p>
                 <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2">
-                  {renderSourceOption('BROWSER', true, 'cameraSource.badgeUnavailable')}
+                  {renderSourceOption(
+                    'BROWSER',
+                    !browserUplinkSupported,
+                    browserUplinkSupported
+                      ? 'cameraSource.badgeBrowserReady'
+                      : 'cameraSource.badgeUnavailable',
+                  )}
                   {renderSourceOption('VIDEO', true, 'cameraSource.badgeReplay')}
                 </div>
               </div>
             </fieldset>
             {kind === 'BROWSER' ? (
-              <div
-                role="status"
-                data-testid="camera-source-browser-unavailable"
-                className="space-y-1 rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50/70 px-3.5 py-2.5 text-sm text-amber-950"
-              >
-                <p className="font-semibold text-slate-950">
-                  {t('cameraSource.browserUnavailableHeading')}
-                </p>
-                <p className="max-w-[70ch] text-xs sm:text-sm leading-relaxed text-slate-700">
-                  {t('cameraSource.browserUnavailable')}
-                </p>
-              </div>
+              browserUplinkSupported ? (
+                <BrowserCameraUplinkPanel
+                  cameraName={camera.name}
+                  canWrite={canWrite}
+                  cameraInactive={isCameraInactive}
+                  disabled={blocked}
+                  controller={browserUplink}
+                  onOpenRegions={onOpenRegions}
+                />
+              ) : (
+                <div
+                  role="status"
+                  data-testid="camera-source-browser-unavailable"
+                  className="space-y-1 rounded-xl border border-amber-200 border-l-[3px] border-l-amber-600 bg-amber-50/70 px-3.5 py-2.5 text-sm text-amber-950"
+                >
+                  <p className="font-semibold text-slate-950">
+                    {t('cameraSource.browserUnavailableHeading')}
+                  </p>
+                  <p className="max-w-[70ch] text-xs sm:text-sm leading-relaxed text-slate-700">
+                    {t('cameraSource.browserUnavailable')}
+                  </p>
+                </div>
+              )
             ) : (
               <>
                 {needsHostSelection && (

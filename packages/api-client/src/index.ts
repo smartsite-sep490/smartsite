@@ -238,6 +238,13 @@ export type { ContractorTeamCalendarItem, ContractorTeamCalendarQuery } from '@s
 export type { ContractorTeamCalendarResponse } from '@smartsite/contracts';
 
 export { cameraSourceClient, SourceSetupError } from './camera-source';
+export { browserCameraUplinkClient, BrowserCameraUplinkError } from './browser-camera-uplink';
+export type {
+  BrowserCameraUplinkClient,
+  BrowserCameraUplinkClientErrorCode,
+  BrowserCameraUplinkFrameUpload,
+  BrowserCameraUplinkStopOptions,
+} from './browser-camera-uplink';
 export type { SourceActivationResult } from '@smartsite/contracts';
 export type {
   CameraSourceClient,

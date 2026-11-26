@@ -28,7 +28,8 @@
     "./tracked-episode-frames": "./dist/tracked-episode-frames.js",
     "./camera-observation-zones": "./dist/camera-observation-zones.js",
     "./ppe-items": "./dist/ppe-items.js",
-    "./safety-identification": "./dist/safety-identification-api.js"
+    "./safety-identification": "./dist/safety-identification-api.js",
+    "./browser-camera-uplink": "./dist/browser-camera-uplink.js"
   },
   "types": "./dist/index.d.ts",
   "scripts": {
