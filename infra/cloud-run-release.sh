@@ -33,7 +33,7 @@ case "${1:-}" in
     trigger="$(gcloud builds describe "$BUILD_ID" --project="$PROJECT_ID" --region="$REGION" --format='value(buildTriggerId)')"
     [[ -n "$trigger" ]] || { echo 'Automatic promotion requires the Main trigger'; exit 1; }
     latest="$(gcloud builds list --project="$PROJECT_ID" --region="$REGION" \
-      --filter="buildTriggerId=$trigger" --sort-by='~createTime' --limit=1 --format='value(id)')"
+      --filter="trigger_id=$trigger" --sort-by='~createTime' --limit=1 --format='value(id)')"
     [[ "$latest" == "$BUILD_ID" ]] || { echo 'Superseded Main build: traffic was not changed'; exit 1; }
     url="$(gcloud run services describe "$SERVICE" "${common[@]}" --format='json(status.traffic)' |
       python3 -c 'import json,sys; rows=json.load(sys.stdin)["status"]["traffic"]; print(next(r["url"] for r in rows if r.get("tag")=="main-candidate" and r.get("revisionName")==sys.argv[1]))' "$candidate")"
