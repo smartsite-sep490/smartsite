@@ -10,6 +10,7 @@ COPY . .
 RUN pnpm --filter @smartsite/contracts --filter @smartsite/backend install --frozen-lockfile
 RUN pnpm --filter @smartsite/contracts build
 RUN pnpm --filter @smartsite/backend build
+RUN node scripts/package-mf06-release.mjs infra/releases/mf06-reviewed-manifest.json /tmp/mf06-reviewed-release
 
 FROM base AS dependencies
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -21,6 +22,8 @@ COPY contracts/package.json contracts/package.json
 RUN pnpm --filter @smartsite/contracts --filter @smartsite/backend install --prod --frozen-lockfile
 
 FROM node:24.19.0-bookworm-slim AS runtime
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace/apps/backend
@@ -31,6 +34,9 @@ COPY --from=build --chown=node:node /workspace/contracts/dist /workspace/contrac
 COPY --from=build --chown=node:node /workspace/contracts/schemas /workspace/contracts/schemas
 COPY --from=build --chown=node:node /workspace/apps/backend/dist ./dist
 COPY --from=build --chown=node:node /workspace/apps/backend/package.json ./package.json
+COPY --from=build --chown=node:node /tmp/mf06-reviewed-release/source /app/reviewed-source
+COPY --from=build --chown=node:node /tmp/mf06-reviewed-release/manifest.json /app/reviewed-manifest.json
+COPY --from=build --chown=node:node /tmp/mf06-reviewed-release/release-info.json /app/reviewed-release-info.json
 RUN mkdir -p /var/lib/smartsite && chown node:node /var/lib/smartsite && chmod 700 /var/lib/smartsite
 USER node
 EXPOSE 3000

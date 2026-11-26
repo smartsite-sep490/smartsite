@@ -1,0 +1,1921 @@
+{
+  "version": "MF06_REVIEWED_CUTOVER_RELEASE_V1",
+  "releaseCommit": "85abb863aad9d54c0021069804265f4f70ff6b87",
+  "captureProfile": "NAMED_V2_CONTROLLED_CUTOVER_V1",
+  "provenance": "OPERATIONAL_REVIEWED",
+  "sourceRegistryHash": "8fc61c6ffca5c3749859025a48ff25671d5693062afc97f16662c7775e114508",
+  "files": [
+    {
+      "path": "apps/backend/src/common/configuration/authority-storage-relations.ts",
+      "sha256": "3e622966b70a30118c0c4b7575f9d618ec6fe4a93516e84c6c8c36d527645528"
+    },
+    {
+      "path": "apps/backend/src/common/configuration/authorization-history-cutover-bodies-v1.ts",
+      "sha256": "77ff1111bfc8af2ae61b6aa4c4af22348abfa5c7c855fa7540d4b0fdfe0e722d"
+    },
+    {
+      "path": "apps/backend/src/common/configuration/authorization-history-cutover-predecessor-v1.ts",
+      "sha256": "5b1fad603e9699a02771543fe20d86b8c298d1dce920b3cd256ea849e4371d33"
+    },
+    {
+      "path": "apps/backend/src/common/configuration/main-authority-capture-preflight.ts",
+      "sha256": "8b4fe4a3b2707af19faa83b68dabaf53cb867a9e8ac389b6210c5c02416ecb13"
+    },
+    {
+      "path": "apps/backend/src/common/configuration/main-authority-sources.ts",
+      "sha256": "53c88af12cac1918d8c0d96cc514894055fda54696e7ce55e0fbe944c09bede4"
+    },
+    {
+      "path": "apps/backend/src/common/configuration/main-configuration-authority.ts",
+      "sha256": "18c8f0a3c2336eb9a4cdf2a1dabf134ec32532b70a0675d59311a64d1c3bafbf"
+    },
+    {
+      "path": "apps/backend/src/common/configuration/main-team-authority-sources.ts",
+      "sha256": "6d17daaad6ccdca98a684cdf4941a7ed919e7db8f8c056f87916a50d5fba35a5"
+    },
+    {
+      "path": "apps/backend/src/common/configuration/site-entry-assignment-authority-profile-v1.ts",
+      "sha256": "cc497a655109de0ee775e936baa879345e4b94866a4e4e82305ff4af5426360d"
+    },
+    {
+      "path": "apps/backend/src/common/configuration/zone-entry-storage-profile-v1.ts",
+      "sha256": "95048b51760d8d047db8e11957c52dba127fbc41c91d88fc3eb5d316d49a9e65"
+    },
+    {
+      "path": "apps/backend/src/config/cli-environment.ts",
+      "sha256": "c5f72daf3a0ecbcd473fa8f98a0ad1a88d006dce9c9aa05e62ab11ba094a2c95"
+    },
+    {
+      "path": "apps/backend/src/config/environment.ts",
+      "sha256": "f4b36851ac4f923b31a4b3f61bd521193b2314daf7bcfc79d4994844cc1e32bb"
+    },
+    {
+      "path": "apps/backend/src/config/mf06-worker-environment.ts",
+      "sha256": "867d897b4ec56dc2c723e3aa3be9142bdcf51a777c502f82423b306eb0aa3015"
+    },
+    {
+      "path": "apps/backend/src/database/migration-profile-names.ts",
+      "sha256": "b9f4188c312c600ee76a0d61d57264c3fb78eff092278d1cee5c43ec5edf728d"
+    },
+    {
+      "path": "apps/backend/src/database/migrations/1795046400012-InstallAuthorityJournal.ts",
+      "sha256": "3289b4f3acdf25b6ab99a17a3abafbe3b868eee6473192027e5e45dae0e12ed6"
+    },
+    {
+      "path": "apps/backend/src/database/migrations/1795046400013-InstallAuthorityCutover.ts",
+      "sha256": "06eb5d91bd4d48bf8e353479368591a9878d8a122b62cea7453c4079b275d478"
+    },
+    {
+      "path": "apps/backend/src/database/migrations/1795046400014-ExactMf06AuthorityTime.ts",
+      "sha256": "064c2df3a8d7548fda4364992706ae548468dd64a177325355da5fc601de6f77"
+    },
+    {
+      "path": "apps/backend/src/database/migrations/1795046400015-Mf06RetrospectiveBinding.ts",
+      "sha256": "62c06e96ad55cce31ffa8643e95d1b049f1b02ede2b2f1a8eacdbab7558c1d07"
+    },
+    {
+      "path": "apps/backend/src/database/migrations/1795046400016-Mf06RetrospectiveResult.ts",
+      "sha256": "7113a7f0cb7d011998e6773f070fed90f91687debe70d1198db8be484659d6a1"
+    },
+    {
+      "path": "apps/backend/src/database/migrations/extendAuthorityJournalToTeams.ts",
+      "sha256": "38afad2e0c1a300d7170adfc80b7952d5e024ef60b0de8c8697efe6faba7524e"
+    },
+    {
+      "path": "apps/backend/src/database/migrations/installAuthorityJournal.ts",
+      "sha256": "062d1a1bc4945f22c2798eac8501fc47ea0f35347ca92e69a76a45727cf0f3ea"
+    },
+    {
+      "path": "apps/backend/src/database/tracked-schema-metadata.ts",
+      "sha256": "a41e27ff44ac5c5d3bf8e30aaec570876e087f00e9f70adcd4c33fa85fcc2c0a"
+    },
+    {
+      "path": "apps/backend/src/database/typeorm.data-source.ts",
+      "sha256": "cc244c540eb6e8f34791a0b6d712d25cd503a829e3fabb85fb2aaf59e13e04dc"
+    },
+    {
+      "path": "apps/backend/src/database/typeorm.migration-profile.ts",
+      "sha256": "3b180e6fb33c1207b2b2aed4809ed1b8f96f3989a104c27bddb672218bd83c6e"
+    },
+    {
+      "path": "apps/backend/src/database/typeorm.options.ts",
+      "sha256": "d8ef0fe34e5aa60d73521f885f2584ba17803146f97368f9d10f6e31ffd5dac9"
+    },
+    {
+      "path": "apps/backend/src/integrations/ai/tracked-frame-storage.ts",
+      "sha256": "b1b1fe56f0a5834976ed93f2eac74fb50dcba8ca67b6848b38b832a0b5f67dfd"
+    },
+    {
+      "path": "apps/backend/src/modules/auth/account-email.service.ts",
+      "sha256": "93541eed3055716c36b8175cba9d0f9b5a3195fb2b45f76668bf67e91895a942"
+    },
+    {
+      "path": "apps/backend/src/modules/auth/auth-token.service.ts",
+      "sha256": "864b072293bc696c492096afab1b374fa5d9880317a34d59ff9db18100853a96"
+    },
+    {
+      "path": "apps/backend/src/modules/auth/auth.controller.ts",
+      "sha256": "d3bb5d8df91345b3dc40696cecd1185afec78a7fa7755987ec672567b4c3aef2"
+    },
+    {
+      "path": "apps/backend/src/modules/auth/auth.service.ts",
+      "sha256": "d95a7c5de75967094a86245abc31fcb6b0447db236adb132569f27b2e5203f9a"
+    },
+    {
+      "path": "apps/backend/src/modules/auth/configuration-command-context.ts",
+      "sha256": "c574c1cb28ae7f8a7168af03e5be00b479e06ab44ca24479e65f6251f9080cbd"
+    },
+    {
+      "path": "apps/backend/src/modules/auth/site-manager.guard.ts",
+      "sha256": "c1ffec450f75cc451eb837a7bb76ea67608cde3ed2f997d72d598b15754d0e8d"
+    },
+    {
+      "path": "apps/backend/src/modules/auth/user-auth.guard.ts",
+      "sha256": "66a499a3d64ff5b58a0b4ead148692d1360eabb5fa317ae06857694851bd041a"
+    },
+    {
+      "path": "apps/backend/src/modules/cameras/camera-configuration-acknowledgement.ts",
+      "sha256": "0ab27e184e59b337b6030b86de92f7d45507162f910515bb3715853e22e72178"
+    },
+    {
+      "path": "apps/backend/src/modules/cameras/camera-configuration-reference.service.ts",
+      "sha256": "f2d69a993b25e1009ae9b7e5a93431157678f2fa16c36b4698317714a92f8ca9"
+    },
+    {
+      "path": "apps/backend/src/modules/cameras/camera-configuration.service.ts",
+      "sha256": "cc641b9d7ee48fc2efa9a95aadb0bba124e2e80381b2940f206a6b71f2c026e7"
+    },
+    {
+      "path": "apps/backend/src/modules/cameras/camera-event-admission.service.ts",
+      "sha256": "b9b261cf06914286bbc540e11bca761a5ff752c0d37f5ed9d5eb2a37f863348b"
+    },
+    {
+      "path": "apps/backend/src/modules/cameras/camera-ppe-policy.service.ts",
+      "sha256": "ef50b7019c8bee960ab3adc8655971922b2aba94a6de09dced3934bb6fdb91e1"
+    },
+    {
+      "path": "apps/backend/src/modules/cameras/camera-region-revisions.ts",
+      "sha256": "693e33c4567113825e2943fce86b5d3870a9beb52790774c4e5470bcc01cf70f"
+    },
+    {
+      "path": "apps/backend/src/modules/cameras/cameras.controller.ts",
+      "sha256": "d35ca5a950bb26490fb978d7a69bb5ab406916e4edcb7e6697706e4713c24f53"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/alerts/durable-grouping.service.ts",
+      "sha256": "74ddf2858bcb0ce68029e0c22fd0ecdcdf110812a615b6e32312f9ea72703829"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/alerts/mf06-denied-episode-projection.ts",
+      "sha256": "cc55eafae707a0ce7de9fb77f07462d8f047b1e6184640e28466e58f7a85fd8a"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/alerts/safety-episode-inbox.service.ts",
+      "sha256": "f96ae36ff4bdf1e68f0f9b64dd144c3e9af302bc16d5994af51471e7944bd2b5"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/alerts/safety-episode-projection.service.ts",
+      "sha256": "903debf94e0495c075572bab6f86dc512e23701629526e858ce04aba2eb5b005"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-assessment-store.service.ts",
+      "sha256": "911103c102974172fc473d5a7f7c90ec44640545260a462f5ca243cb39ec989d"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-assessment-worker-runtime.service.ts",
+      "sha256": "2036b65f0377f3aeccaa30e3638414a3a9b155697434a8ce52284527e6bac077"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-assessment-worker.service.ts",
+      "sha256": "828faab64d162a4a07f9d3358e37d5cd23b44073b84ee9a2b1c05c0ffb51e383"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-candidate-metadata.service.ts",
+      "sha256": "f65c74df60261aa6adfc54ed8390da507ee71421d330c415480fc40b04bcbfb3"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-claim-context.reader.ts",
+      "sha256": "4d34d95fa15162cb6b1733fe805bfc0dc38da5a14e8a6f8a706f4d0a744cadf2"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-enqueue.service.ts",
+      "sha256": "79d68791b35077f0a643cfc7a64d185eab5ed2aa7bc6c5bc48f3f2b50b427bc0"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-face-http-resolver.ts",
+      "sha256": "dca2bd882a4ec61a4850e071b26e82627d12b17ea1c145f22d4f973f4d29548a"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-face-preparation.ts",
+      "sha256": "bb61792bb9ec1647a98fd74a9a0fd58e58c5ecbf4bd2e745cc156311bf1e4ee3"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-job-lease.service.ts",
+      "sha256": "00c73e57494c6f451827ec00c05fee38c6fa13742579685d3e9d60adf25796c1"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-retrospective-context.ts",
+      "sha256": "0c9f250751ae284088189aeb90e37061b17effdc872d2a09d6ddfc2835d9c0e5"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-work-preparation.ts",
+      "sha256": "325fe9c2e7117121f321ed5c5b878e684f8f0b5bc2ab9a28d8e579da7e75fc5b"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/assessments/mf06-zone-entry-assessment-work.port.ts",
+      "sha256": "7782e9539df8ae077f12d05cbab744cbbc2df90ae323a770dccade52892513c8"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/identification/c02-accepted-subject.ts",
+      "sha256": "55325ac1d94e5409e097bd25e5d8c0f7329fb8a14eff59bf9fab30e6a48fe683"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/identification/safety-identification.service.ts",
+      "sha256": "3e8f180e3d9de1aa9ca323a109e4c4458d5d00af6a3cae3d24eb9e272ebeb51a"
+    },
+    {
+      "path": "apps/backend/src/modules/safety/safety.module.ts",
+      "sha256": "494839f9dff030cdae3fe79dcde98b6928d96f38330df995be0cfaf1ad25e501"
+    },
+    {
+      "path": "apps/backend/src/modules/sites/site-configuration.service.ts",
+      "sha256": "2d2595c42fcbd3170b17f3b431d39d941a1823112c15c6172300cffcf564a374"
+    },
+    {
+      "path": "apps/backend/src/modules/sites/sites.controller.ts",
+      "sha256": "9ad1ba025b794671b2c478819fd2c814145d37bc1f5a6bd8d673cd05ec5b5bda"
+    },
+    {
+      "path": "apps/backend/src/modules/users/site-representatives.controller.ts",
+      "sha256": "22ee6c0dfed71a7a072b2092b498e74ca06ebe3f9400ce68b592984730465ca0"
+    },
+    {
+      "path": "apps/backend/src/modules/users/users.controller.ts",
+      "sha256": "18a289e0bc7b2c72099fc1ccdf860714cd00303f6b95b66b55e4ebb7b3fb0967"
+    },
+    {
+      "path": "apps/backend/src/modules/users/users.service.ts",
+      "sha256": "772ab3af507f2da0e78ff6788d1246bb2153cf5c43e9986fd0d5713884b67e0b"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/access/face-gate.service.ts",
+      "sha256": "a29bf2c6ea8a1c1d28a137d8c0b549463513a87b9e71e8fc46d6109074d54f8d"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/access/qr-access.service.ts",
+      "sha256": "a5d9dcc131801ca2993e5a35f2c3c1a8f984d1b2ff63ff77701c9cebc83c4af7"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/access/site-access-setup.controller.ts",
+      "sha256": "4ffde1e3875fca9b40fa1b649801940ba64290bc4e157adaaec9dd99b13c5224"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/access/site-access-setup.service.ts",
+      "sha256": "208c1c3e53258cd9dfb893a7182f19f99b94eb168388f49156c3e72a07a1eea9"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/attendance/attendance-reconciliation.service.ts",
+      "sha256": "08045e4815e1ad93a19c1cbb346f37b0aeae4cdc3b7b961059f34220e59075be"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/contractor-operations.controller.ts",
+      "sha256": "c3ffda7a4f63f167cce794fde12021abc9bb0264ab6b82f974b508802193a3cd"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/contractor-operations.service.ts",
+      "sha256": "ad9c0857a10e1d276d0ab909feead4115be17a77053c4145230b00db8d081b78"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/contractor-worker-accounts.controller.ts",
+      "sha256": "d0e234b0dcd212329c09ad2bee55eb0257d0b8d4e6c252a95a8c10e8493d3693"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/contractor-worker-accounts.service.ts",
+      "sha256": "2eede50d8e08bc1c880169092767d0fcefe4a6b01740a16a2bf9cce58492b3bb"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/contractors.controller.ts",
+      "sha256": "4f4d6266605bd88c412118ee187e96744938404fc2dac83842f4264c1c976122"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/worker-assignment.controller.ts",
+      "sha256": "4a38848c830aed86c1caf9502705f94c900cdacce881cafcde193e282df29b4e"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/worker-onboarding.controller.ts",
+      "sha256": "d5daeb27afce65787947a05fddbc52b46abf1d143a4335e93275b5419d5ebdf3"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/worker-onboarding.service.ts",
+      "sha256": "ab30ae5058d6fcb75ed3838bd50f597617bae1d2e66640a1231f2224ff4a4f0e"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/workforce-configuration.service.ts",
+      "sha256": "05df2a3742b15001ed59b1ed06dc337398d3714893ba54ac7052b4165e009995"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/directory/workforce.controller.ts",
+      "sha256": "8fab1ab0aedb8ff6c744c0bf3244293370b134e72621776fd269fffd09f25a12"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/documents/document-notifications.service.ts",
+      "sha256": "78155767aef4f006a99b3ecd29f4cee02aae6ef0b6eee20231ae52deb3ac109e"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/documents/worker-documents.controller.ts",
+      "sha256": "a8cc2972b7e718790378bcf4d64cceec944f35cb82b5b3c6c92c2dc66409857e"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/documents/worker-documents.service.ts",
+      "sha256": "b0e753a376ae8348c3e9ea717eafbd71d4745e32e561b3de3b056c2f328159f0"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/management/safety-work-context.service.ts",
+      "sha256": "909ce36b06dc00b1a25c4f15bd0a4813a48d08d7be2032a4863fd5d196abea86"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/notifications/scheduling-notification.service.ts",
+      "sha256": "a7510a8e0cf8aa146ff5061fe8d0749d4015824bc4576b762ca25e26a2c38126"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/safety-face-profile.reader.ts",
+      "sha256": "647f896d1343f5f027755c7574a93d78030a0527f10eab768a3f695e7bd10a38"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/scheduling/schedule-assignment.service.ts",
+      "sha256": "30b31715116ec0027316becc83779b7191af2804c2eead49c5329acc1a148eb6"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/shared/access-audit.ts",
+      "sha256": "562d999a7f738ec3386362081925e125f6f92cc3f0f60751aada46666d3967ac"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/teams/contractor-teams.controller.ts",
+      "sha256": "977ea2ea8a43fc224679e244278b3378c825392525a40f9f90776136d7dd725b"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/teams/contractor-teams.service.ts",
+      "sha256": "bd5051474f6ac8ff5d85e2850895b1e866903e368803dc248f7e765a679c6bc3"
+    },
+    {
+      "path": "apps/backend/src/modules/workforce/teams/dto/contractor-team.dto.ts",
+      "sha256": "8f192119515606d508e45cf1c0d179ed53f56dd4ac6aed9119c631181fff5f87"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-archived-permission-projection.ts",
+      "sha256": "cf695b9fa3dabc7b2bd89162645c3ee8172beb00846322d636e22b5b16a2cd9a"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-authority-archive-codec.ts",
+      "sha256": "82b898be9c1104eef9eca19b452ab6c8371ac4a2fa37175559a482f744d22976"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-authority-baseline-profile.ts",
+      "sha256": "928eb7fb33c943e3d343c4f61583a258cfcb8c8ed8e00749dd274bbc78949364"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-authority-capture-time.ts",
+      "sha256": "838c1df19b4bb8b3708caf0c4de510fb96e0839616c9a8707ef9402c0f441596"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-authority-captured-state.reader.ts",
+      "sha256": "731b286fbba6c784834dd00e8a6c0005e8eba39162c038a71efa50d239eca293"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-authority-cutover-release.ts",
+      "sha256": "0d994c6a8c5d82e37b847ba8b0306099c48dba76053bfe73e7da2d59451587fa"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-authority-cutover.service.ts",
+      "sha256": "134b835a1c42aa9b38e68c04397063c562b0dc7a4d9656b3f74dbb303798caf5"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-authority-read-snapshot.ts",
+      "sha256": "b023a85e9a00076570b8d112b6aea5e71fb931ded3859b99ca386498064aecd6"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-qualified-authority.reader.ts",
+      "sha256": "f02b4d3abe4eaa6383fa513c8431aa29fafb9f6e094a00f868b01383285cd87d"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/main-team-authority-archive.ts",
+      "sha256": "caed90320e7d607f2d4042d24e97e671a2085d70d89f5078839841713b975301"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/zone-access-management.service.ts",
+      "sha256": "91ca88c1fcc1418269e47b99423be36b4c0e309eb85c57ffaa485f37cd7e92b6"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/zone-access.controller.ts",
+      "sha256": "c887fb197df0317562aa8a8b0604010fff4c9e164ec830ea5e34e1ddef3c8c0e"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/zone-authority-transaction.ts",
+      "sha256": "68d6241151e5f283780051c65c308bb96bc42df9bba838de17a87e2e588e66d7"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/zone-configuration.service.ts",
+      "sha256": "11bcecdb1518f3bf257d135c69b0dac9e0f58d686e079bb8e96a3c853e701baf"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/zone-policy-revisions.ts",
+      "sha256": "06cbdd5265728344bf3d3286ab189a93849a81ef88e4b92d8e1ceda162f34be4"
+    },
+    {
+      "path": "apps/backend/src/modules/zones/zones.controller.ts",
+      "sha256": "4ef58a04597231f488a6cc55e60263e09cc55a588df4ef5db8de306df2331e59"
+    },
+    {
+      "path": "apps/backend/src/scripts/activate-authority-cutover.ts",
+      "sha256": "02d3e55d1a5843ade300971ba378a4ea8449b7f431cb23c518c3f4fa5e8d9b3e"
+    }
+  ],
+  "runtimeFiles": [
+    {
+      "path": "common/configuration/authorization-history-cutover-predecessor-v1.js",
+      "sha256": "242c8b285f782fcb3b34588ea371e0ef4a58ab42eff6efed7366c94fa8b6f25d"
+    },
+    {
+      "path": "config/cli-environment.js",
+      "sha256": "841c97e504dd6429c2633fdb7215826cffbef721a10110807882a37e3090e86d"
+    },
+    {
+      "path": "database/typeorm.data-source.js",
+      "sha256": "3a74b2235e92f5113eef44de2848b1dee6abe268be6fdc39b364eac0b3c3e931"
+    },
+    {
+      "path": "database/typeorm.options.js",
+      "sha256": "7f3c2682f1d44ea80ea2cb7adc4697fdd6e6b662928fcd1adfd11abdfd42784f"
+    },
+    {
+      "path": "database/typeorm.migration-profile.js",
+      "sha256": "279a1beb1804b524beac4dd23e687f66255d5e8e6b8a0b7aec4ac76e441249d8"
+    },
+    {
+      "path": "database/migration-profile-names.js",
+      "sha256": "ee594bbfe3339d7f23cf51f8ce4e36630dfc38ce0f888b7d955a2892525785f2"
+    },
+    {
+      "path": "database/tracked-schema-metadata.js",
+      "sha256": "82b6b66d3731d36e800897f7d742c5165c5b0612aa1709e9640cb89686c090ad"
+    },
+    {
+      "path": "database/migrations/1795046400012-InstallAuthorityJournal.js",
+      "sha256": "7f64a12d3c933601ed93f1535f22ae632e36f142feaa70225a5225f7d7925f09"
+    },
+    {
+      "path": "database/migrations/1795046400013-InstallAuthorityCutover.js",
+      "sha256": "fa90870ea481728b4c2ae48665e4c6035c0b96bd384002ae1a1e5aa0d3a7f18f"
+    },
+    {
+      "path": "database/migrations/1795046400014-ExactMf06AuthorityTime.js",
+      "sha256": "37940dd90dedd438926b48575c1723c82a8846d516be0c0a78771bcca712d369"
+    },
+    {
+      "path": "database/migrations/1795046400015-Mf06RetrospectiveBinding.js",
+      "sha256": "114f8054c876ea40fa50ca68ea060f116f90aa9aa5b324334d62fe5cc31278f1"
+    },
+    {
+      "path": "database/migrations/1795046400016-Mf06RetrospectiveResult.js",
+      "sha256": "8e9472199971c76f4a7dac6aaac2c00f46acd0f04f0579f66421b90b14413099"
+    },
+    {
+      "path": "database/migrations/extendAuthorityJournalToTeams.js",
+      "sha256": "3fcd9874cdc8c2a677d951618bb0dec08fbab3e77bb0d00e370871fcbd21a1a8"
+    },
+    {
+      "path": "database/migrations/installAuthorityJournal.js",
+      "sha256": "205b383c19e592f2cae5e29f4303548c7990fb325b806946104e332efcb63d53"
+    },
+    {
+      "path": "modules/auth/auth-token.service.js",
+      "sha256": "75cd8a3728ddb55ac67228c8ad9bfa70def74a3aa0f5115e37420f75dcd75dae"
+    },
+    {
+      "path": "scripts/activate-authority-cutover.js",
+      "sha256": "432e38fc5e12f4c757d0decc3bbab17099373593faab1f90fd9b1ed38ed201f5"
+    },
+    {
+      "path": "common/configuration/main-configuration-authority.js",
+      "sha256": "24e4425ec9f8ea435475eb0e40bc7fc75d9b517c9c6d2b2e7d3efad02ba771d5"
+    },
+    {
+      "path": "common/configuration/authority-storage-relations.js",
+      "sha256": "1799c585cd3fd6951ccad7775e00f687b03e4b033c0e15747dbdaf8c46aa28bf"
+    },
+    {
+      "path": "common/configuration/zone-entry-storage-profile-v1.js",
+      "sha256": "7638e659614b679a0d16ddb0861fb13610d2f70b869edf7c4d5837f7a3dc6148"
+    },
+    {
+      "path": "common/configuration/main-authority-capture-preflight.js",
+      "sha256": "71abfd7d74ed0b70fc2e95fa530bfe81f751b466058568e97aa554c41ea97f52"
+    },
+    {
+      "path": "common/configuration/site-entry-assignment-authority-profile-v1.js",
+      "sha256": "a6f082d3637d2a0afdc6c90dccecc547806bb9ad0f4e7b20b2e90f1a16d34157"
+    },
+    {
+      "path": "common/configuration/main-authority-sources.js",
+      "sha256": "1b50f06d0de2683c2e6cef7284f2f45d4911371f079a133a76b2933ba5fdea25"
+    },
+    {
+      "path": "common/configuration/authorization-history-cutover-bodies-v1.js",
+      "sha256": "3410a55307655cd67578fd492a1994b9fb5e73e9d68666bcddab23e8336b32d0"
+    },
+    {
+      "path": "common/configuration/main-team-authority-sources.js",
+      "sha256": "54a9c43b2558925f8c5f233c05ed5042b8bc704f375fed844cfaee8b3a95fc37"
+    },
+    {
+      "path": "modules/auth/configuration-command-context.js",
+      "sha256": "8492ae0c4f2bb8cfdee8f4965557294a8363593c950be6fd7790c9e35abd6ae2"
+    },
+    {
+      "path": "modules/auth/user-auth.guard.js",
+      "sha256": "bc00c30509ae9d69d0b357f1926ba895ea28be6a993341d48d9a23f16da96bcc"
+    },
+    {
+      "path": "modules/auth/auth.controller.js",
+      "sha256": "e7ae1c02e9ab0b8071a091bffd16e4174c8180e8833a45629d5eababd577eaae"
+    },
+    {
+      "path": "modules/auth/site-manager.guard.js",
+      "sha256": "dce865ab75333f64dbdb8e4771164ff3a6f04582c9567a973dcd49b0c477bd91"
+    },
+    {
+      "path": "modules/users/users.service.js",
+      "sha256": "9e3cfb1f8771f29a9dda2f06020614c48d52d4da3ebff4e4e40bf820c2865d68"
+    },
+    {
+      "path": "modules/users/users.controller.js",
+      "sha256": "5e113f4ae6d1319638bc23e73b07a1a025da8ad948fd25b38deaf1ff3bc95105"
+    },
+    {
+      "path": "modules/users/site-representatives.controller.js",
+      "sha256": "5610565ebd5833a3dee2779a078d3084b634fdeb7cbfbc0ea2d7dca70158e221"
+    },
+    {
+      "path": "modules/workforce/directory/contractors.controller.js",
+      "sha256": "8d20ea6b0fb6cc273b10d43a9aceb2f2810a9c733cb574a752363fd470acda89"
+    },
+    {
+      "path": "modules/workforce/directory/workforce-configuration.service.js",
+      "sha256": "70d5925636cadc218a35e7d29d88c62e13d7c7a897402028aa9af18f627792e7"
+    },
+    {
+      "path": "modules/workforce/directory/workforce.controller.js",
+      "sha256": "c70973724f8c57aa7eca9e9001c8bc8667589cce1bbe93490fd2a48f564f65a4"
+    },
+    {
+      "path": "modules/workforce/directory/contractor-operations.service.js",
+      "sha256": "1d7783265594ae31fd64638f53004aa5d6f07b455e1cd82e4500d4d52cbb5bb7"
+    },
+    {
+      "path": "modules/workforce/directory/contractor-operations.controller.js",
+      "sha256": "9c21923a0048d8a1aeedfdc937855fa6d1265427a54e6fe00b595fc5c66127fa"
+    },
+    {
+      "path": "modules/workforce/directory/contractor-worker-accounts.controller.js",
+      "sha256": "3d84956211e382c5cea8c693f62d3157657bc37669ea9d00a285ccdd8f30ccf9"
+    },
+    {
+      "path": "modules/workforce/directory/contractor-worker-accounts.service.js",
+      "sha256": "245f9368f33a7781571860177e20dbedf944d66db36382121a96a75eb978aa66"
+    },
+    {
+      "path": "modules/workforce/directory/worker-onboarding.controller.js",
+      "sha256": "e0cf19a430ae09ac2b3a492b3612de5d4ab8876c69ca3cc21adc646c24d15669"
+    },
+    {
+      "path": "modules/workforce/directory/worker-onboarding.service.js",
+      "sha256": "6c3e24a9387546f950fd3af7ffcdf3469bd23255c32df75a17ee0eb4411b905f"
+    },
+    {
+      "path": "modules/workforce/documents/worker-documents.controller.js",
+      "sha256": "641cd728519c769ba2d05beacc9f7c7d4060dd0ec22206bcd8e13521d40c888b"
+    },
+    {
+      "path": "modules/workforce/documents/worker-documents.service.js",
+      "sha256": "f86f61e48f27b2008e46ee6602b575a4f92e58a219ef5b1e9c926375af24dafd"
+    },
+    {
+      "path": "modules/workforce/directory/worker-assignment.controller.js",
+      "sha256": "e8dda1ce324f3d48ed4d7a267def1e73aeb708c8a4178136704e99f55b2a8dac"
+    },
+    {
+      "path": "modules/workforce/shared/access-audit.js",
+      "sha256": "98adf74d26d27527c7391c1985d26a3a901dc89c67dfc449d00569a8824e5d60"
+    },
+    {
+      "path": "modules/workforce/access/site-access-setup.controller.js",
+      "sha256": "abf5da4027bfade341a3291588aa2d4468c99b78c8d44b7e682363d1538bd39c"
+    },
+    {
+      "path": "modules/workforce/access/site-access-setup.service.js",
+      "sha256": "4cb798e7d1d7a7eb9792b7ceca383d0037d47c4500ec98fc0e2dcaa6d440c2b3"
+    },
+    {
+      "path": "modules/workforce/teams/contractor-teams.controller.js",
+      "sha256": "3aa0e2df2ae6eb83aca3644eba77dd8e3c4c6f5f12a7a72f80ed2d5803ec5652"
+    },
+    {
+      "path": "modules/workforce/teams/contractor-teams.service.js",
+      "sha256": "b2bd0ef75d75167d962549f3bb458800e939967af1508adf3521741a84601430"
+    },
+    {
+      "path": "modules/workforce/teams/dto/contractor-team.dto.js",
+      "sha256": "8994bb92a68150b24b5726f8c182f00d14acd7d8af274adfb77c2cd88b4a95a3"
+    },
+    {
+      "path": "modules/sites/site-configuration.service.js",
+      "sha256": "f0300117d70e95fd06c5c8e684b4d6a12a1e0e66247dfa3648a01d569fb0c53d"
+    },
+    {
+      "path": "modules/sites/sites.controller.js",
+      "sha256": "c132ccb90e34e753b0792ff5b50836805a4613fac196410e25cc32de0f68c8ee"
+    },
+    {
+      "path": "modules/zones/zone-configuration.service.js",
+      "sha256": "5fafbab98064055279b9e67fb03128accb89ae9b808cc478491e75eafac6d223"
+    },
+    {
+      "path": "modules/zones/zones.controller.js",
+      "sha256": "2c41734bc6e0d62d4de800ad49f23b94e0242b3d02f712a41745e105ac4d8791"
+    },
+    {
+      "path": "modules/zones/zone-access-management.service.js",
+      "sha256": "05e75c24f71aa54f9baa5e2d08c073c991f882f1b901582e4531c23ef7d9717d"
+    },
+    {
+      "path": "modules/zones/zone-access.controller.js",
+      "sha256": "17b2b095c1b9a2d6287c5d6b82409d4bb5f2ec4c4f31a10e5791bfeb02f30dfb"
+    },
+    {
+      "path": "modules/cameras/camera-configuration.service.js",
+      "sha256": "a3989c9255e8f3a8dfe468c49d9d6e4a5ad64a5fab35b4d59d98fcd7f1a7423b"
+    },
+    {
+      "path": "modules/cameras/cameras.controller.js",
+      "sha256": "e2031cd81335d232dd121c358021782c657228a482eb571d79c7f068725c3286"
+    },
+    {
+      "path": "modules/auth/auth.service.js",
+      "sha256": "dc65f132835af966aca502124aceda7e18aaf6b23883c7913d0b85377ea32535"
+    },
+    {
+      "path": "modules/zones/main-authority-cutover.service.js",
+      "sha256": "4f4794fae6d278da17945ea385e201bf504af814a9cfe87bd24504932ce8c22b"
+    },
+    {
+      "path": "modules/zones/zone-authority-transaction.js",
+      "sha256": "8d2298b0a3d0acefe7328f4636ef133484d5de1e9f44550ee524fd95ad4a3a03"
+    },
+    {
+      "path": "modules/zones/main-authority-cutover-release.js",
+      "sha256": "a859cf263ea388273c3d3e9b49d9be0f93d50f043ce26758819d225ae5f49b09"
+    },
+    {
+      "path": "modules/zones/main-authority-read-snapshot.js",
+      "sha256": "7ab06b8b2f283e46a72e5a61d7c5789adbb25328584a7e4ce6ce3c5f7a3b6e3c"
+    },
+    {
+      "path": "modules/zones/main-authority-captured-state.reader.js",
+      "sha256": "ea2070d6869a62eb68a03008b7b573ceda872e1c43fdaa6f9be74c53125d95f6"
+    },
+    {
+      "path": "modules/zones/main-authority-archive-codec.js",
+      "sha256": "1b957eac250f073bfd59154481115965dd28e68389801aca02de063928254e79"
+    },
+    {
+      "path": "modules/zones/main-authority-baseline-profile.js",
+      "sha256": "78ac479570d50573254c6d1aceb28353f461bbcfc50fabd42f77874b65ba03f5"
+    },
+    {
+      "path": "modules/zones/main-team-authority-archive.js",
+      "sha256": "920019b12bf9c47eef078d97baeda196689d52fb8d4a92c72ad58818878505ef"
+    },
+    {
+      "path": "modules/zones/main-qualified-authority.reader.js",
+      "sha256": "1496e1fe56e173c23764b542fbb53127ac618920ac238771041602089a6e0f87"
+    },
+    {
+      "path": "modules/zones/main-authority-capture-time.js",
+      "sha256": "cddce95c918cdf2fabc3d9468c96ee8b69d8cbdf0684e18437f0f8c310df8565"
+    },
+    {
+      "path": "modules/zones/main-archived-permission-projection.js",
+      "sha256": "77c0d26b7b85c1fde837383f90c10d8133a49be6f4f1aad68556035c4dba3f6c"
+    },
+    {
+      "path": "config/environment.js",
+      "sha256": "5c543a9059738005692e6342c3bd57eae68caee6d2b80d1de4a94aa009971fc6"
+    },
+    {
+      "path": "config/mf06-worker-environment.js",
+      "sha256": "31403ca1a90856cf9440f3f4f75d51f907d58b94dfdba318fbb0073618040744"
+    },
+    {
+      "path": "modules/safety/safety.module.js",
+      "sha256": "754237957b924b6449fdd281b44bc62b5655d5beef46b088b690aef066ee8256"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-assessment-worker-runtime.service.js",
+      "sha256": "69c725928517fef2681e718fbcd724d8eccd14848b7a6872b06349ac36f245b1"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-assessment-worker.service.js",
+      "sha256": "bb523cfc2bcebf21b419f1c6c0ea58ece9648f5b79eacf40c69dcbe01b2f248f"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-job-lease.service.js",
+      "sha256": "d5e01a96526bb2e258353e83f03d30210afaab3ee5cb80a88a56ad2e733db090"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-zone-entry-assessment-work.port.js",
+      "sha256": "a04548a16668017cf5c9094bad5fd27a594698b79c3fdbb25577471c7ff1abb1"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-work-preparation.js",
+      "sha256": "9af62766e0f2caec015bc6d4658edad47e7f9bcab1211af4ed3f6c78f02a9cbd"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-assessment-store.service.js",
+      "sha256": "2cf97e9831d7d7dafcf763f36f66dee990b93326b0fec2e10eaa6e48146de119"
+    },
+    {
+      "path": "modules/safety/alerts/mf06-denied-episode-projection.js",
+      "sha256": "43fc0db544b86cfc947873d6449b714f5a456707dc3c4c9fd6208818c798ad9e"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-claim-context.reader.js",
+      "sha256": "c52b236e1002e6cc6677e2724d05e83d17504beb114bbbfc29af644ecaf5702f"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-retrospective-context.js",
+      "sha256": "f46a5a8821c6046f1d9d38e49470b6eb2e3946026b140f56984a9aae6cc2151a"
+    },
+    {
+      "path": "modules/safety/identification/c02-accepted-subject.js",
+      "sha256": "b0df4f9b1370fd15d3cc5a49d7e152403e67e0d494e809d458460457d0ae2122"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-face-preparation.js",
+      "sha256": "75ecd0fe2b82f0560a41786c55938f23b8d9de6c1e3cab5a45e53c4f894462c1"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-face-http-resolver.js",
+      "sha256": "ebe339be084f5b57e9459a17ec8f506a1c5450d0d3f0329e385c8fcbb05c6d2a"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-candidate-metadata.service.js",
+      "sha256": "d972e0cbf2abc4524adc17d22d10c989c7f9dc5b8297839ed8d5839d57f3baf2"
+    },
+    {
+      "path": "integrations/ai/tracked-frame-storage.js",
+      "sha256": "ad1939f2cba07560dab2b74dc60624215ceaa47a269d9b6d854c5bede1501ecd"
+    },
+    {
+      "path": "modules/auth/account-email.service.js",
+      "sha256": "85178e0c9560f27896265c2a5ea132aff7c07512e400fbd69f270b22185f6731"
+    },
+    {
+      "path": "modules/cameras/camera-configuration-acknowledgement.js",
+      "sha256": "aa394e99fb1349ba3662816e75c02041312cd445c8e5fcfd8f78cddf3503a05b"
+    },
+    {
+      "path": "modules/cameras/camera-configuration-reference.service.js",
+      "sha256": "c5a347f466c706bd427fc5c959d50c0b60b59610cc98dca402b7c193f4c8dd9f"
+    },
+    {
+      "path": "modules/cameras/camera-event-admission.service.js",
+      "sha256": "4f43b600d5e8d38dd1d2d2b0edb9de18e893fb33ff67a3ef6ddef2460c665b77"
+    },
+    {
+      "path": "modules/cameras/camera-ppe-policy.service.js",
+      "sha256": "4f998c42427e786c7d2aae73d9c49c24b7e4b8de7ec782b4b9136206a0bee720"
+    },
+    {
+      "path": "modules/cameras/camera-region-revisions.js",
+      "sha256": "4fb091f9654b0ea5603fa47f31cfdc78ab76c118a1fb251218284e47e3962c66"
+    },
+    {
+      "path": "modules/safety/alerts/durable-grouping.service.js",
+      "sha256": "27c4ecec72121cad89ea0580c6f2b416a3d9730fac3170f2090e505f3602dc52"
+    },
+    {
+      "path": "modules/safety/alerts/safety-episode-inbox.service.js",
+      "sha256": "8d161d573c3e580880c65c5381cf762cb6e6116ddfe2170ea4d4af5d2b4960ae"
+    },
+    {
+      "path": "modules/safety/alerts/safety-episode-projection.service.js",
+      "sha256": "a09bcbbd2b80ca07b8b7a7eac351e58b22c9247e1cb91d7cd35576a1916371e4"
+    },
+    {
+      "path": "modules/safety/assessments/mf06-enqueue.service.js",
+      "sha256": "c4ac7dd648ca280eb28fe17cf40b954f16740ac9fb4fe2490afe798faf8ed784"
+    },
+    {
+      "path": "modules/safety/identification/safety-identification.service.js",
+      "sha256": "30c4fa1ca2e1e1b4503d97ff519203fc63dc5997ab376aa874b91b82dd92824d"
+    },
+    {
+      "path": "modules/workforce/access/face-gate.service.js",
+      "sha256": "6d425070d2252c24128476ca546aa0cbd065dc5e03f44c94b12c0b7909b20daa"
+    },
+    {
+      "path": "modules/workforce/access/qr-access.service.js",
+      "sha256": "5f95be40a102b42db6672ef47caf5d49acaf9153bf61e4ce3b6c09af93ea47d0"
+    },
+    {
+      "path": "modules/workforce/attendance/attendance-reconciliation.service.js",
+      "sha256": "ed892f14cae8b47f4a8e25751917ddcd7c8cc3b34e1d3add81269abd5e45e9e1"
+    },
+    {
+      "path": "modules/workforce/documents/document-notifications.service.js",
+      "sha256": "106fc0723399d8cb29d05292d58a52e3b31c48e4866885b192e6730a7c0fd893"
+    },
+    {
+      "path": "modules/workforce/management/safety-work-context.service.js",
+      "sha256": "62b6f9b53e8e3f2245eb092b20589f713a07d1c8cf4140006be198ff8b0054c2"
+    },
+    {
+      "path": "modules/workforce/notifications/scheduling-notification.service.js",
+      "sha256": "6f87bb3ed5e51ebdec8cb406cfae0d2e3ab35d6a519fcc511bf0479d8e71bdf6"
+    },
+    {
+      "path": "modules/workforce/safety-face-profile.reader.js",
+      "sha256": "9ddcc5fbb8aeddf0a25c378be4cd5ec379621ccebc86d4ab2fab0c201a0be198"
+    },
+    {
+      "path": "modules/workforce/scheduling/schedule-assignment.service.js",
+      "sha256": "c52d4e52a56391b0bb6406ff438240265f44dd661397508e48bed4da1ec54614"
+    },
+    {
+      "path": "modules/zones/zone-policy-revisions.js",
+      "sha256": "6be4d48efa64d4e1216a9e18bd057359be2a78ac9392847b40b54c7dd0f8f8e2"
+    }
+  ],
+  "writerReview": {
+    "protocol": "PINNED_AUTHORITY_SOURCE_REVIEW_RECONCILIATION_V1",
+    "sourceIndexSha256": "f09bcf035009b50db693af11689a5868e3ad835abfd7e8261166d994d72cf176",
+    "methods": 105,
+    "files": 40,
+    "exactQuotesAndSourcePinsVerified": true,
+    "missingOrDuplicateMethods": false,
+    "completeWriterClosureEstablished": true,
+    "rows": [
+      {
+        "file": "integrations/ai/tracked-frame-storage.ts",
+        "method": "TrackedFramePrototypeStore.storeInTransaction",
+        "fileSha256": "b1b1fe56f0a5834976ed93f2eac74fb50dcba8ca67b6848b38b832a0b5f67dfd",
+        "methodBodySha256": "5183df99784ec284efd4de80b61026cc9cb9c44c7f23aa36c04424fa48418e59",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "SELECT ai_observation_event via columns constant; surrounding raw event/tracked storage outside 18 masks.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/auth/account-email.service.ts",
+        "method": "AccountEmailService.confirmReset",
+        "fileSha256": "93541eed3055716c36b8175cba9d0f9b5a3195fb2b45f76668bf67e91895a942",
+        "methodBodySha256": "3d2f392018ef6a2b7b8d22e13b796a5569b6196b05f8c89b5611f463adf08286",
+        "classification": "MASKED_COMMAND",
+        "rationale": "USER_PASSWORD_CHANGE wraps password update, exact proof consumption and session revocation in the canonical authority transaction; failed OTP attempts commit separately without an authority command.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/auth/account-email.service.ts",
+        "method": "AccountEmailService.setEmail",
+        "fileSha256": "93541eed3055716c36b8175cba9d0f9b5a3195fb2b45f76668bf67e91895a942",
+        "methodBodySha256": "a763e2332cd86b0c0a02b1397b196f5adac9a53da9a80d8dbd3d5379827bd7a2",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Email/verification metadata and challenge/outbox writes outside the USER_ACCOUNT authority mask; existing cloud email functionality remains enabled.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/auth/account-email.service.ts",
+        "method": "AccountEmailService.verify",
+        "fileSha256": "93541eed3055716c36b8175cba9d0f9b5a3195fb2b45f76668bf67e91895a942",
+        "methodBodySha256": "48ab7d379d93dec741c286eac109831782cf7c67bd3d9fc761d370562a206049",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Email/verification metadata and challenge/outbox writes outside the USER_ACCOUNT authority mask; existing cloud email functionality remains enabled.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/auth/auth.service.ts",
+        "method": "AuthService.changePassword",
+        "fileSha256": "d95a7c5de75967094a86245abc31fcb6b0447db236adb132569f27b2e5203f9a",
+        "methodBodySha256": "b8985dd548932d69327956b7e30420f33e071db5e40e9798fd9587df44910869",
+        "classification": "MASKED_COMMAND",
+        "rationale": "USER_PASSWORD_CHANGE password_hash/must_change_password; session revocation outside mask. Original bearer rechecked inside tx; self-ID callback, temporary-password helper.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/cameras/camera-configuration-acknowledgement.ts",
+        "method": "recordCameraConfigurationAcknowledgement",
+        "fileSha256": "0ab27e184e59b337b6030b86de92f7d45507162f910515bb3715853e22e72178",
+        "methodBodySha256": "2a89faa9758051b1ec943a61f156d909764beb45f5dc237101fefc12a69f118f",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Buffer.from digest and CameraConfigurationApplicationReceiptEntity insert; Camera/Region read only. Generation authentication/bundle binding govern receipt validity.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/cameras/camera-configuration-reference.service.ts",
+        "method": "CameraConfigurationReferenceService.read",
+        "fileSha256": "f2d69a993b25e1009ae9b7e5a93431157678f2fa16c36b4698317714a92f8ca9",
+        "methodBodySha256": "3baabb43fa8014d73e26d81c227ac2ab5028418e7b694df2e027f0bbf59a4443",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "views alias CameraViewRevisionEntity; view retirement/insertion plus reference insert only. Camera locked/read, no masked update; original bearer rechecked in tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/cameras/camera-configuration.service.ts",
+        "method": "CameraConfigurationService.bump",
+        "fileSha256": "cc641b9d7ee48fc2efa9a95aadb0bba124e2e80381b2940f206a6b71f2c026e7",
+        "methodBodySha256": "2efcbd70aa3330bf3102a41707145e9225e60a043eccfb4724015240c094fa1b",
+        "classification": "INTERNAL_ONLY",
+        "rationale": "CAMERA status/configuration_version update with supplied manager; only setStatus/createRegionMutation/changeRegion call inside outer command.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/cameras/camera-configuration.service.ts",
+        "method": "CameraConfigurationService.changeRegion",
+        "fileSha256": "cc641b9d7ee48fc2efa9a95aadb0bba124e2e80381b2940f206a6b71f2c026e7",
+        "methodBodySha256": "9874b0da854631d5398cff3d059a6b5628c5203bff531034fb74ecf2cd4244f6",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current scoped Site Manager callback. Camera locked by Site; Region scoped by Camera; creation and reactivation lock live Site-scoped Zone. CAMERA/REGION and children share outer command.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/cameras/camera-configuration.service.ts",
+        "method": "CameraConfigurationService.create",
+        "fileSha256": "cc641b9d7ee48fc2efa9a95aadb0bba124e2e80381b2940f206a6b71f2c026e7",
+        "methodBodySha256": "856ab14042be5992c0b79caa9eccf97cdc9444ba18c7814a5c7af8d60d94532f",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current scoped Site Manager callback. Camera locked by Site; Region scoped by Camera; creation and reactivation lock live Site-scoped Zone. CAMERA/REGION and children share outer command.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/cameras/camera-configuration.service.ts",
+        "method": "CameraConfigurationService.createRegionMutation",
+        "fileSha256": "cc641b9d7ee48fc2efa9a95aadb0bba124e2e80381b2940f206a6b71f2c026e7",
+        "methodBodySha256": "4890d737fed1fd0f395a750325b7ede47012bcbb6af59baec22f8e52ce02a6d0",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current scoped Site Manager callback. Camera locked by Site; Region scoped by Camera; creation and reactivation lock live Site-scoped Zone. CAMERA/REGION and children share outer command.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/cameras/camera-configuration.service.ts",
+        "method": "CameraConfigurationService.rename",
+        "fileSha256": "cc641b9d7ee48fc2efa9a95aadb0bba124e2e80381b2940f206a6b71f2c026e7",
+        "methodBodySha256": "c3c3f5079a77c43d20f6b3287e48f69c5ece9bd29391d6ed1237ff9f78b0c2de",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Only camera.name; metadata reauth and scoped Site Manager.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/cameras/camera-configuration.service.ts",
+        "method": "CameraConfigurationService.setStatus",
+        "fileSha256": "cc641b9d7ee48fc2efa9a95aadb0bba124e2e80381b2940f206a6b71f2c026e7",
+        "methodBodySha256": "64ebc611797d5d5cb1413d8bad843b5065772649e938f02a49828532ca093a25",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current scoped Site Manager callback. Camera locked by Site; Region scoped by Camera; creation and reactivation lock live Site-scoped Zone. CAMERA/REGION and children share outer command.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/cameras/camera-event-admission.service.ts",
+        "method": "CameraEventAdmissionService.check",
+        "fileSha256": "b9b261cf06914286bbc540e11bca761a5ff752c0d37f5ed9d5eb2a37f863348b",
+        "methodBodySha256": "15f7c80ab17e789ab5cdaf6d75165fe4e7a3368dec42cf167987add428da1c2e",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "OUTSIDE_MASK: SELECT-only stored tracked receipt freshness check matching generation/Site/session/configuration/view/bundle; writes no authority source or permission (ROOT-WRITER-DELTA-REVIEW.md).",
+        "callerAndOwner": "Canonical module owner; changed method delta reviewed on 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "CHANGED_BODY_RECONCILED_8E60F046"
+      },
+      {
+        "file": "modules/cameras/camera-ppe-policy.service.ts",
+        "method": "CameraPpePolicyService.apply",
+        "fileSha256": "ef50b7019c8bee960ab3adc8655971922b2aba94a6de09dced3934bb6fdb91e1",
+        "methodBodySha256": "c4fb01efeb51a0fa822c14d65067e20be0f0cfd4516488239a58e18e192ac6bc",
+        "classification": "MASKED_COMMAND",
+        "rationale": "CAMERA_PPE_POLICY_UPDATE changes configuration_version and can activate Region; requires reauthorize function, original bearer, scoped Manager callback. Policy/reference/bundle checks same tx. ACTIVATE_REGION has no direct Zone lock; buildCameraConfigurationBundle calls configurationPolicy to read live nondeleted scoped Zone and fails if no bundle. Concurrent delete safety relies on SERIALIZABLE reciprocal Zone/Region dependencies; test this route separately.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/cameras/camera-region-revisions.ts",
+        "method": "recordRegionRevision",
+        "fileSha256": "693e33c4567113825e2943fce86b5d3870a9beb52790774c4e5470bcc01cf70f",
+        "methodBodySha256": "ec0d4d79a3c6c9d065affad7aa7ee7222a95ffc9cf38a2c69adc95721d041bdb",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "repository alias CameraRegionRevisionEntity append, not camera_observation_region; parent command same manager.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/alerts/durable-grouping.service.ts",
+        "method": "DurableGroupingService.groupEpisodeCandidate",
+        "fileSha256": "74ddf2858bcb0ce68029e0c22fd0ecdcdf110812a615b6e32312f9ea72703829",
+        "methodBodySha256": "8a3cb814aac0d0491803245acc9ec5b89ec71eca2d4f7364c437af95bbd977d7",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "SELECT safety_episode/UPDATE safety_alert only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/alerts/safety-episode-inbox.service.ts",
+        "method": "SafetyEpisodeInboxService.read",
+        "fileSha256": "f96ae36ff4bdf1e68f0f9b64dd144c3e9af302bc16d5994af51471e7944bd2b5",
+        "methodBodySha256": "fb4bb67089cd46b4eead35cf736e9b1c455db812498dc9f4b472c8ddbc9d8f0a",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "SELECT episode/UPDATE safety_episode_recipient only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/alerts/safety-episode-projection.service.ts",
+        "method": "SafetyEpisodeProjectionService.produceObservationFindings",
+        "fileSha256": "903debf94e0495c075572bab6f86dc512e23701629526e858ce04aba2eb5b005",
+        "methodBodySha256": "35ce9ecffc804966708846c7e4cf8552c0a7cf99bcd736a6efd5f1291d098bda",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic SELECT/INSERT/UPDATE safety_episode,safety_alert,alert_detection_mapping only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/alerts/safety-episode-projection.service.ts",
+        "method": "SafetyEpisodeProjectionService.project",
+        "fileSha256": "903debf94e0495c075572bab6f86dc512e23701629526e858ce04aba2eb5b005",
+        "methodBodySha256": "d95abb6ed60efc32bdb95062af5d45fac8327e18ce589bff3275bac871a36983",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic SELECT/INSERT/UPDATE safety_episode,safety_alert,alert_detection_mapping only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/assessments/mf06-assessment-store.service.ts",
+        "method": "Mf06AssessmentStore.append",
+        "fileSha256": "911103c102974172fc473d5a7f7c90ec44640545260a462f5ca243cb39ec989d",
+        "methodBodySha256": "2026922ae3c8f3dde1027e648a23f4cb0c9c8e0644512ce563276ac497aacde7",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic SELECT job and INSERT zone_entry_authority_artifact/zone_entry_assessment; result archive not source authority.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/assessments/mf06-candidate-metadata.service.ts",
+        "method": "Mf06CandidateMetadataService.revalidate",
+        "fileSha256": "f65c74df60261aa6adfc54ed8390da507ee71421d330c415480fc40b04bcbfb3",
+        "methodBodySha256": "29cfb85ef932eff7c3a500bd3bce3a17b6a7522131402faf8530781de2cbc32d",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "SAVEPOINT/RELEASE/ROLLBACK TO; optional safety profile lookup read-only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/assessments/mf06-enqueue.service.ts",
+        "method": "Mf06EnqueueService.enqueueQualified",
+        "fileSha256": "79d68791b35077f0a643cfc7a64d185eab5ed2aa7bc6c5bc48f3f2b50b427bc0",
+        "methodBodySha256": "8a2fff3305a5015dfd3ff8fce21f679a651bdfdb38e6d4f1fc4817e7353a527c",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "insertRequestSql/insertJobSql resolve zone_entry_assessment_request/job only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/assessments/mf06-job-lease.service.ts",
+        "method": "Mf06JobLeaseService.claim",
+        "fileSha256": "00c73e57494c6f451827ec00c05fee38c6fa13742579685d3e9d60adf25796c1",
+        "methodBodySha256": "911a7120fcb542895fdef57564bfd79c73d1a18e148aad8ce0e992633e217140",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "jobTable resolves quoted driver-selected schema.zone_entry_assessment_job; SELECT/job lease/status UPDATE only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/assessments/mf06-job-lease.service.ts",
+        "method": "Mf06JobLeaseService.expireInTransaction",
+        "fileSha256": "00c73e57494c6f451827ec00c05fee38c6fa13742579685d3e9d60adf25796c1",
+        "methodBodySha256": "f49b05b5d730d83ec9f87468776af142f1ce0d1fcd9c8f064a16f1e09ec13cf9",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "jobTable resolves quoted driver-selected schema.zone_entry_assessment_job; SELECT/job lease/status UPDATE only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/assessments/mf06-job-lease.service.ts",
+        "method": "Mf06JobLeaseService.transition",
+        "fileSha256": "00c73e57494c6f451827ec00c05fee38c6fa13742579685d3e9d60adf25796c1",
+        "methodBodySha256": "b33105e2a90d5d955762d7f1cf7268ff3252d3cb790ef48857fb55dd0b03ae60",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "jobTable resolves quoted driver-selected schema.zone_entry_assessment_job; SELECT/job lease/status UPDATE only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/identification/safety-identification.service.ts",
+        "method": "SafetyIdentificationService.assignee",
+        "fileSha256": "3e8f180e3d9de1aa9ca323a109e4c4458d5d00af6a3cae3d24eb9e272ebeb51a",
+        "methodBodySha256": "7ddc93c4d2965b475722661f3c5ca238ff764d21e92d697c955246ccbb0c9ac2",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic scope/requestSelect/eligibleSiteManager SELECT joins only. Surrounding create/change writes identification request/action/evidence, never Worker/account/role authority.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/identification/safety-identification.service.ts",
+        "method": "SafetyIdentificationService.change",
+        "fileSha256": "3e8f180e3d9de1aa9ca323a109e4c4458d5d00af6a3cae3d24eb9e272ebeb51a",
+        "methodBodySha256": "7e033511d4e39c60bf88a8ec7cabd516c16db154b832d5476ff6a78d650df53e",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic scope/requestSelect/eligibleSiteManager SELECT joins only. Surrounding create/change writes identification request/action/evidence, never Worker/account/role authority.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/identification/safety-identification.service.ts",
+        "method": "SafetyIdentificationService.create",
+        "fileSha256": "3e8f180e3d9de1aa9ca323a109e4c4458d5d00af6a3cae3d24eb9e272ebeb51a",
+        "methodBodySha256": "3a91f1dc51d0cfcd61b541912eabaf101ed15dec87e5aa513f1e773ee3f8cc75",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic scope/requestSelect/eligibleSiteManager SELECT joins only. Surrounding create/change writes identification request/action/evidence, never Worker/account/role authority.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/identification/safety-identification.service.ts",
+        "method": "SafetyIdentificationService.get",
+        "fileSha256": "3e8f180e3d9de1aa9ca323a109e4c4458d5d00af6a3cae3d24eb9e272ebeb51a",
+        "methodBodySha256": "a5caf31c11f983ba12c01b3dace3509d67c36f67d1255d0d493fd962c2fbda36",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic scope/requestSelect/eligibleSiteManager SELECT joins only. Surrounding create/change writes identification request/action/evidence, never Worker/account/role authority.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/identification/safety-identification.service.ts",
+        "method": "SafetyIdentificationService.history",
+        "fileSha256": "3e8f180e3d9de1aa9ca323a109e4c4458d5d00af6a3cae3d24eb9e272ebeb51a",
+        "methodBodySha256": "a547534b7898ba5628004eeb7d7e1afa796f34564d7483c2ac9a7372c3b15947",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic scope/requestSelect/eligibleSiteManager SELECT joins only. Surrounding create/change writes identification request/action/evidence, never Worker/account/role authority.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/identification/safety-identification.service.ts",
+        "method": "SafetyIdentificationService.list",
+        "fileSha256": "3e8f180e3d9de1aa9ca323a109e4c4458d5d00af6a3cae3d24eb9e272ebeb51a",
+        "methodBodySha256": "09bf8715f556dfee7e6092c6f8d1632e34a26b8d5c0221d27803a1f2a174daff",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic scope/requestSelect/eligibleSiteManager SELECT joins only. Surrounding create/change writes identification request/action/evidence, never Worker/account/role authority.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/identification/safety-identification.service.ts",
+        "method": "SafetyIdentificationService.requireAssignee",
+        "fileSha256": "3e8f180e3d9de1aa9ca323a109e4c4458d5d00af6a3cae3d24eb9e272ebeb51a",
+        "methodBodySha256": "d99caf5cd38879c3c9136e765fd8cec80576f07057d38336148ebdb4af292801",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic scope/requestSelect/eligibleSiteManager SELECT joins only. Surrounding create/change writes identification request/action/evidence, never Worker/account/role authority.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/safety/identification/safety-identification.service.ts",
+        "method": "SafetyIdentificationService.retrospectiveHistory",
+        "fileSha256": "3e8f180e3d9de1aa9ca323a109e4c4458d5d00af6a3cae3d24eb9e272ebeb51a",
+        "methodBodySha256": "648bdd4af77dd96ebcbde30fbd779f43a768e9765e1885eae7339b54f1b00c20",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic scope/requestSelect/eligibleSiteManager SELECT joins only. Surrounding create/change writes identification request/action/evidence, never Worker/account/role authority.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/sites/site-configuration.service.ts",
+        "method": "SiteConfigurationService.create",
+        "fileSha256": "2d2595c42fcbd3170b17f3b431d39d941a1823112c15c6172300cffcf564a374",
+        "methodBodySha256": "d29b192524f3ab42437dafa55a150776408cc3157799e612733cc33b7578b81b",
+        "classification": "MASKED_COMMAND",
+        "rationale": "SITE_CREATE original bearer/default current global Admin callback; masked Site insert.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/sites/site-configuration.service.ts",
+        "method": "SiteConfigurationService.rename",
+        "fileSha256": "2d2595c42fcbd3170b17f3b431d39d941a1823112c15c6172300cffcf564a374",
+        "methodBodySha256": "977d1fa2b839a7c61885536aeb136542834b0c161a836fe269bb026d8f03dd0f",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Site name only; no access_policy_version change; metadata authorization.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/users/site-representatives.controller.ts",
+        "method": "SiteRepresentativesService.rename",
+        "fileSha256": "22ee6c0dfed71a7a072b2092b498e74ca06ebe3f9400ce68b592984730465ca0",
+        "methodBodySha256": "a9f992449e5d828df28c0cc1801055c53a6e1bbbac895abd722daab751143f13",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Candidate owner is SiteRepresentativesService, not controller. app_user.display_name only; scoped Manager metadata callback; exclusive Site and target role checked.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/users/users.service.ts",
+        "method": "UsersService.bootstrap",
+        "fileSha256": "772ab3af507f2da0e78ff6788d1246bb2153cf5c43e9986fd0d5713884b67e0b",
+        "methodBodySha256": "8af088c867789da6482643327f478294b91a76cc7c18a6cb871749bab6958fb2",
+        "classification": "CANONICAL_BLOCKED_LEGACY",
+        "rationale": "Advisory lock then AUTHORITY_RELATIONS_WITH_HISTORY pg_class check blocks current/legacy/baseline-only/partial installed history before save; initial pre-journal bootstrap only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/users/users.service.ts",
+        "method": "UsersService.createInTransaction",
+        "fileSha256": "772ab3af507f2da0e78ff6788d1246bb2153cf5c43e9986fd0d5713884b67e0b",
+        "methodBodySha256": "dadc2fcc8c5dd3e3a171ea64c5272288e61174fae82dd842db295fd68ae5991f",
+        "classification": "INTERNAL_ONLY",
+        "rationale": "Supplied manager account/role writes; parents own USER_ACCOUNT_CREATE or USER_SITE_REPRESENTATIVE_CREATE.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/users/users.service.ts",
+        "method": "UsersService.createWorkerAccount",
+        "fileSha256": "772ab3af507f2da0e78ff6788d1246bb2153cf5c43e9986fd0d5713884b67e0b",
+        "methodBodySha256": "303bb6fa3ca69a587d00a584d90773b948de588037b4c07b9fd8d6f635e17de5",
+        "classification": "INTERNAL_ONLY",
+        "rationale": "Supplied manager account/role writes; sole parent owns USER_CONTRACTOR_WORKER_ACCOUNT_CREATE including Worker insert.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/users/users.service.ts",
+        "method": "UsersService.replaceRoleAssignments",
+        "fileSha256": "772ab3af507f2da0e78ff6788d1246bb2153cf5c43e9986fd0d5713884b67e0b",
+        "methodBodySha256": "5821f29ecd654cf7a2c8688c41e63d32a592eaf7395e5d647acb3c0b45f6cee9",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current global Admin callback; invariant advisory lock; account/role mutation plus session revocation atomic; reset request journal excludes password.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/users/users.service.ts",
+        "method": "UsersService.resetPassword",
+        "fileSha256": "772ab3af507f2da0e78ff6788d1246bb2153cf5c43e9986fd0d5713884b67e0b",
+        "methodBodySha256": "45e922b1fda6ed31394dc93b3b944bd4750ceba367df74ec9911eeadd5521c55",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current global Admin callback; invariant advisory lock; account/role mutation plus session revocation atomic; reset request journal excludes password.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/users/users.service.ts",
+        "method": "UsersService.revokeSiteManager",
+        "fileSha256": "772ab3af507f2da0e78ff6788d1246bb2153cf5c43e9986fd0d5713884b67e0b",
+        "methodBodySha256": "77aef5ea3f23f48b40c230083c900f8eec294f5f0e65fdbcb80a4b6b6af4a55a",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current global Admin callback; invariant advisory lock; account/role mutation plus session revocation atomic; reset request journal excludes password.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/users/users.service.ts",
+        "method": "UsersService.setStatus",
+        "fileSha256": "772ab3af507f2da0e78ff6788d1246bb2153cf5c43e9986fd0d5713884b67e0b",
+        "methodBodySha256": "a522f8381d38b78b05a19b27d9e49a0c449a4545ef3868b28ad4009df94c65b9",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current global Admin callback; invariant advisory lock; account/role mutation plus session revocation atomic; reset request journal excludes password.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/access/face-gate.service.ts",
+        "method": "FaceGateService.evaluate",
+        "fileSha256": "a29bf2c6ea8a1c1d28a137d8c0b549463513a87b9e71e8fc46d6109074d54f8d",
+        "methodBodySha256": "09f5baecb2e98e4bb2a145eff8c66f8261afe188f62e8464a039232bc7db5154",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "createHash.update hashes profile reference; authority entities only read; gate log/attendance/notification storage outside masks.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/access/qr-access.service.ts",
+        "method": "<module>",
+        "fileSha256": "a5d9dcc131801ca2993e5a35f2c3c1a8f984d1b2ff63ff77701c9cebc83c4af7",
+        "methodBodySha256": "c7631591831869699f083c9de19e1b8410daad1cfc2e278291e2e38ff588226c",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "OUTSIDE_MASK_MODULE_HASH_UPDATED_WORKER_GATE_ERROR_SPLIT",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_MODIFIED"
+      },
+      {
+        "file": "modules/workforce/access/site-access-setup.service.ts",
+        "method": "SiteAccessSetupService.grantContractor",
+        "fileSha256": "208c1c3e53258cd9dfb893a7182f19f99b94eb168388f49156c3e72a07a1eea9",
+        "methodBodySha256": "44280267736732f9878f5dc2359be4250c25001a7e2a55176f982ac257b01bd6",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current actor and Site role callback; Manager contractor grant/revoke, representative Worker grant/revoke. Work checks scoped parents; permissions and auditAccess Site increment same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/access/site-access-setup.service.ts",
+        "method": "SiteAccessSetupService.grantWorker",
+        "fileSha256": "208c1c3e53258cd9dfb893a7182f19f99b94eb168388f49156c3e72a07a1eea9",
+        "methodBodySha256": "f325d466d92c45cdde55d237618a8daa734f5b373f39f189c2bc6647a1c6508b",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current actor and Site role callback; Manager contractor grant/revoke, representative Worker grant/revoke. Work checks scoped parents; permissions and auditAccess Site increment same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/access/site-access-setup.service.ts",
+        "method": "SiteAccessSetupService.revoke",
+        "fileSha256": "208c1c3e53258cd9dfb893a7182f19f99b94eb168388f49156c3e72a07a1eea9",
+        "methodBodySha256": "2ae2bafce91a3c31a8f9cfb9457c8e413e59d3bd83eac9c5692b59275536e9b4",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current actor and Site role callback; Manager contractor grant/revoke, representative Worker grant/revoke. Work checks scoped parents; permissions and auditAccess Site increment same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/attendance/attendance-reconciliation.service.ts",
+        "method": "AttendanceReconciliationService.refresh",
+        "fileSha256": "08045e4815e1ad93a19c1cbb346f37b0aeae4cdc3b7b961059f34220e59075be",
+        "methodBodySha256": "bb62e7e4a50b1398807c11726c0e6a0487bf96a176b8442ce8d87a516b95d520",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "OUTSIDE_MASK_NON_AUTHORITY_ATTENDANCE_PROJECTION_UPDATED",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_MODIFIED"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-operations.service.ts",
+        "method": "ContractorOperationsService.createContractor",
+        "fileSha256": "ad9c0857a10e1d276d0ab909feead4115be17a77053c4145230b00db8d081b78",
+        "methodBodySha256": "ae3852aee36ad5a76703aeb7cd89a98fb9e740b5438c01b82135bfd501307cf7",
+        "classification": "CANONICAL_BLOCKED_LEGACY",
+        "rationale": "No current src caller. Explicit undefined-context CONTRACTOR_CREATE wrapper rejects current/legacy/partial history before save.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-operations.service.ts",
+        "method": "ContractorOperationsService.createParticipation",
+        "fileSha256": "ad9c0857a10e1d276d0ab909feead4115be17a77053c4145230b00db8d081b78",
+        "methodBodySha256": "9adcc7c934fb18de6f9f2c3d3b0223b2c8d135c404623b89e7ff41ba4b0b7fe7",
+        "classification": "MASKED_COMMAND",
+        "rationale": "MAIN_PARTICIPATION_CREATE original bearer/scoped Manager callback; Site/Contractor and interval checked.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-operations.service.ts",
+        "method": "ContractorOperationsService.createWorker",
+        "fileSha256": "ad9c0857a10e1d276d0ab909feead4115be17a77053c4145230b00db8d081b78",
+        "methodBodySha256": "dd9cbc0fff24702832ff21d20b98a4d7b1c79a07b4bfe02886a71c6fa7b8c1b8",
+        "classification": "MASKED_COMMAND",
+        "rationale": "CONTRACTOR_WORKER_CREATE same actor/current Site representative callback; locked Contractor grant and active participation checks inside work.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-operations.service.ts",
+        "method": "ContractorOperationsService.grantRepresentative",
+        "fileSha256": "ad9c0857a10e1d276d0ab909feead4115be17a77053c4145230b00db8d081b78",
+        "methodBodySha256": "7daed45d4ed4a751480ece9aee48b1be9385350ffcba5c77d9ebdac84a7e9243",
+        "classification": "CANONICAL_BLOCKED_LEGACY",
+        "rationale": "Unconditionally denied by the current canonical global-directory guard; reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-operations.service.ts",
+        "method": "ContractorOperationsService.requestAssignment",
+        "fileSha256": "ad9c0857a10e1d276d0ab909feead4115be17a77053c4145230b00db8d081b78",
+        "methodBodySha256": "4882646c1d12cad4a5a232e0121c9ddcd30095822aa5f19d07a5666e30efdce6",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/assignmentCommandAuthorization checks same actor and current role on requested/loaded Site; retains scoped Worker/Contractor/Zone/status/version rules. Decision/revoke include indirect Site increment.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-operations.service.ts",
+        "method": "ContractorOperationsService.revokeAssignment",
+        "fileSha256": "ad9c0857a10e1d276d0ab909feead4115be17a77053c4145230b00db8d081b78",
+        "methodBodySha256": "ac5f0709cd075c06ea9d40b8cf523ff4206680bd8b79368df32134c6802da04d",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/assignmentCommandAuthorization checks same actor and current role on requested/loaded Site; retains scoped Worker/Contractor/Zone/status/version rules. Decision/revoke include indirect Site increment.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-operations.service.ts",
+        "method": "ContractorOperationsService.safetyReview",
+        "fileSha256": "ad9c0857a10e1d276d0ab909feead4115be17a77053c4145230b00db8d081b78",
+        "methodBodySha256": "6acbaee601c79dcca7890637ef7433e1d3304f0aa7280027c998897094dff9ef",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/assignmentCommandAuthorization checks same actor and current role on requested/loaded Site; retains scoped Worker/Contractor/Zone/status/version rules. Decision/revoke include indirect Site increment.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-operations.service.ts",
+        "method": "ContractorOperationsService.siteManagerDecision",
+        "fileSha256": "ad9c0857a10e1d276d0ab909feead4115be17a77053c4145230b00db8d081b78",
+        "methodBodySha256": "9ba80982cc2cefc626fb20820677855d39bbf51bffeaff972889c86b645d61bc",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/assignmentCommandAuthorization checks same actor and current role on requested/loaded Site; retains scoped Worker/Contractor/Zone/status/version rules. Decision/revoke include indirect Site increment.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-worker-accounts.service.ts",
+        "method": "ContractorWorkerAccountsService.create",
+        "fileSha256": "2eede50d8e08bc1c880169092767d0fcefe4a6b01740a16a2bf9cce58492b3bb",
+        "methodBodySha256": "e4f95bbc966948389d88e9573437185e4784fadd7b99a25b914c48d2815762cf",
+        "classification": "MASKED_COMMAND",
+        "rationale": "MASKED_COMMAND_REFACTORED_VIA_CREATE_LINKED_ACCOUNT",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_MODIFIED"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-worker-accounts.service.ts",
+        "method": "ContractorWorkerAccountsService.createLinkedAccount",
+        "fileSha256": "2eede50d8e08bc1c880169092767d0fcefe4a6b01740a16a2bf9cce58492b3bb",
+        "methodBodySha256": "aad0725ce38f2eb716c88e298d0952649c0c97746fd66b1ce649036afa62281c",
+        "classification": "INTERNAL_ONLY",
+        "rationale": "Shared internal helper called strictly inside executeMainConfigurationCommand from ContractorWorkerAccountsService.create and WorkerOnboardingService.provisionOne.",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_ADDITION"
+      },
+      {
+        "file": "modules/workforce/directory/contractor-worker-accounts.service.ts",
+        "method": "ContractorWorkerAccountsService.update",
+        "fileSha256": "2eede50d8e08bc1c880169092767d0fcefe4a6b01740a16a2bf9cce58492b3bb",
+        "methodBodySha256": "497b2e462363037941d6bc61a31470ca464c8e6dd3b272aa60c2096a205236a4",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Original bearer/current representative Site role and Contractor grant/participation callback. create owns account/role/Worker; update WORKER_PROFILE_UPDATE includes indirect Site policy increment even for labels.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "FILE_CHANGED_METHOD_UNCHANGED"
+      },
+      {
+        "file": "modules/workforce/directory/worker-onboarding.service.ts",
+        "method": "WorkerOnboardingService.provisionBatch",
+        "fileSha256": "ab30ae5058d6fcb75ed3838bd50f597617bae1d2e66640a1231f2224ff4a4f0e",
+        "methodBodySha256": "15b3e899db1f21db62611e9f66f4849962987513980ed6270b8f7ff72fe77bc6",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Batch loop coordinator calling authorize check then provisionOne() per draft with isolated per-item exception mapping.",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_ADDITION"
+      },
+      {
+        "file": "modules/workforce/directory/worker-onboarding.service.ts",
+        "method": "WorkerOnboardingService.provisionOne",
+        "fileSha256": "ab30ae5058d6fcb75ed3838bd50f597617bae1d2e66640a1231f2224ff4a4f0e",
+        "methodBodySha256": "1f45c178b515465853df87ff5f3e16fc487103b9983b1eeb848f3bdca19d1bb5",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Wrapped in executeMainConfigurationCommand; delegates user/worker provisioning to ContractorWorkerAccountsService.createLinkedAccount inside callback.",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_ADDITION"
+      },
+      {
+        "file": "modules/workforce/directory/worker-onboarding.service.ts",
+        "method": "WorkerOnboardingService.save",
+        "fileSha256": "ab30ae5058d6fcb75ed3838bd50f597617bae1d2e66640a1231f2224ff4a4f0e",
+        "methodBodySha256": "e857c4ab4e20d8fae892ce0435db352f8594edf15bae4dea8aed553d39347cc2",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Non-authority draft persistence using executeMainMetadataMutation + ContractorWorkerAccountsService.commandAuthorization.",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_ADDITION"
+      },
+      {
+        "file": "modules/workforce/directory/workforce-configuration.service.ts",
+        "method": "WorkforceConfigurationService.assignRepresentativeInTransaction",
+        "fileSha256": "05df2a3742b15001ed59b1ed06dc337398d3714893ba54ac7052b4165e009995",
+        "methodBodySha256": "06e37a2b3ca8d015db71bcdc31eef9e9289cb3da020900c51b817d239428057f",
+        "classification": "INTERNAL_ONLY",
+        "rationale": "Supplied manager grant/assignment alias saves; parents own command; checks active Site role, Contractor, participation.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/workforce-configuration.service.ts",
+        "method": "WorkforceConfigurationService.create",
+        "fileSha256": "05df2a3742b15001ed59b1ed06dc337398d3714893ba54ac7052b4165e009995",
+        "methodBodySha256": "c4123cf6c3a39597ea74e58c07bdd1bb801504ae0128e2fc23c2b33c1e660020",
+        "classification": "CANONICAL_BLOCKED_LEGACY",
+        "rationale": "No production src caller; explicit undefined-context WORKER_ROSTER_CREATE rejects installed/legacy/partial history before Worker save.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/workforce-configuration.service.ts",
+        "method": "WorkforceConfigurationService.createContractor",
+        "fileSha256": "05df2a3742b15001ed59b1ed06dc337398d3714893ba54ac7052b4165e009995",
+        "methodBodySha256": "fd6ffe92d897566947919f664ee5e7aeaf9f2ad54c1dcd7c868c5454705b0581",
+        "classification": "MASKED_COMMAND",
+        "rationale": "SITE_CONTRACTOR_CREATE original bearer/scoped Manager callback; Site lookup and insert/idempotent reuse same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/workforce-configuration.service.ts",
+        "method": "WorkforceConfigurationService.createContractorWithParticipation",
+        "fileSha256": "05df2a3742b15001ed59b1ed06dc337398d3714893ba54ac7052b4165e009995",
+        "methodBodySha256": "b451871235e170bfab0ffa49800c3a548cb3491df0c7128b5d4657ce1f344ae4",
+        "classification": "INTERNAL_ONLY",
+        "rationale": "Supplied manager CONTRACTOR/PARTICIPATION insert; sole src parent owns composite command.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/workforce-configuration.service.ts",
+        "method": "WorkforceConfigurationService.forAccount",
+        "fileSha256": "05df2a3742b15001ed59b1ed06dc337398d3714893ba54ac7052b4165e009995",
+        "methodBodySha256": "98da08578469fc660e2ba5088b94cb0d65c5f725b8a56ac204362d5716c297ec",
+        "classification": "MASKED_COMMAND",
+        "rationale": "WORKER_ACCOUNT_PREPARE/LINK original bearer/default Admin; account active with Site role; Worker scoped by Site; locks/idempotence retained.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/workforce-configuration.service.ts",
+        "method": "WorkforceConfigurationService.linkAccount",
+        "fileSha256": "05df2a3742b15001ed59b1ed06dc337398d3714893ba54ac7052b4165e009995",
+        "methodBodySha256": "3fefa84d0aa2967725d93ccafa93f83035d8ce4db2f761f1ea64395e33bf0714",
+        "classification": "MASKED_COMMAND",
+        "rationale": "WORKER_ACCOUNT_PREPARE/LINK original bearer/default Admin; account active with Site role; Worker scoped by Site; locks/idempotence retained.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/directory/workforce-configuration.service.ts",
+        "method": "WorkforceConfigurationService.renameContractor",
+        "fileSha256": "05df2a3742b15001ed59b1ed06dc337398d3714893ba54ac7052b4165e009995",
+        "methodBodySha256": "99da8e01d93d59a9ff189625af0a1c6927e2da55c1cb2f33b49b4944a5b65419",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Contractor.name only; original bearer/scoped Manager metadata; rejects shared cross-Site participation/stale name.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/documents/document-notifications.service.ts",
+        "method": "DocumentNotificationsService.record",
+        "fileSha256": "78155767aef4f006a99b3ecd29f4cee02aae6ef0b6eee20231ae52deb3ac109e",
+        "methodBodySha256": "660b1e5f7e0592bd9ae72e2d726c8bfa1e7cc73e4e1ed3c975512d6bf3c4c3d5",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "repository UserNotificationEntity insert, not Worker/Site.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/documents/worker-documents.service.ts",
+        "method": "WorkerDocumentsService.analyzeDocument",
+        "fileSha256": "b0e753a376ae8348c3e9ea717eafbd71d4745e32e561b3de3b056c2f328159f0",
+        "methodBodySha256": "2279af1d37003e6081688627455c628f2132fbfb3848ea19b30765d506d19761",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Non-authority AI lease claim and token-checked result writeback.",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_ADDITION"
+      },
+      {
+        "file": "modules/workforce/documents/worker-documents.service.ts",
+        "method": "WorkerDocumentsService.review",
+        "fileSha256": "b0e753a376ae8348c3e9ea717eafbd71d4745e32e561b3de3b056c2f328159f0",
+        "methodBodySha256": "e2c72a3d99e81e9ddb05c5ebcf3448bf84855ba8dd725c121c2bf768c3440d26",
+        "classification": "MASKED_COMMAND",
+        "rationale": "MASKED_COMMAND_UPDATED_DRAFT_GUARD_NO_OCR_SELECT",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_MODIFIED"
+      },
+      {
+        "file": "modules/workforce/documents/worker-documents.service.ts",
+        "method": "WorkerDocumentsService.submit",
+        "fileSha256": "b0e753a376ae8348c3e9ea717eafbd71d4745e32e561b3de3b056c2f328159f0",
+        "methodBodySha256": "80a1877b21ea6da0ea0aebbbfc834935f1e4e9fb0015253465131d87d701bc27",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "CLASSIFICATION_CHANGED_MASKED_COMMAND_TO_OUTSIDE_MASK_DRAFT_ONLY",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_MODIFIED"
+      },
+      {
+        "file": "modules/workforce/documents/worker-documents.service.ts",
+        "method": "WorkerDocumentsService.submitBatch",
+        "fileSha256": "b0e753a376ae8348c3e9ea717eafbd71d4745e32e561b3de3b056c2f328159f0",
+        "methodBodySha256": "213eb9d27726be000302ac9846f9ccb2c35051276dcfb0474108c479e76c43b9",
+        "classification": "MASKED_COMMAND",
+        "rationale": "Batch successor to old cc03 submit(); iterates items, wraps each in executeMainConfigurationCommand and updates site.access_policy_version.",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_ADDITION"
+      },
+      {
+        "file": "modules/workforce/documents/worker-documents.service.ts",
+        "method": "WorkerDocumentsService.updateOwnIdentity",
+        "fileSha256": "b0e753a376ae8348c3e9ea717eafbd71d4745e32e561b3de3b056c2f328159f0",
+        "methodBodySha256": "41e55499e524a1236e48c69928aac7d95c4f735748ecac8fe720db393e223fb7",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Self-service worker identity mutation via executeMainMetadataMutation on non-18 compliance/identity tables.",
+        "callerAndOwner": "Reviewed in MAIN-DEPLOY-AUTHORITY-DELTA-REVIEW.md against Main85abb863",
+        "deltaStatus": "REVIEWED_ADDITION"
+      },
+      {
+        "file": "modules/workforce/management/safety-work-context.service.ts",
+        "method": "SafetyWorkContextService.contractors",
+        "fileSha256": "909ce36b06dc00b1a25c4f15bd0a4813a48d08d7be2032a4863fd5d196abea86",
+        "methodBodySha256": "aefda1e97fd3eb353a017d3091e406a19c9828463d907964cac4bdd56dbba5c0",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic fragments compose SELECT count/rows only from Worker/Team/Contractor permission projections.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/management/safety-work-context.service.ts",
+        "method": "SafetyWorkContextService.teamPage",
+        "fileSha256": "909ce36b06dc00b1a25c4f15bd0a4813a48d08d7be2032a4863fd5d196abea86",
+        "methodBodySha256": "29ca3ee6d501e7d612d8d1fbf64b8ddbf7d1cf49544946efc2fe33a18119fa22",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic fragments compose SELECT count/rows only from Worker/Team/Contractor permission projections.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/management/safety-work-context.service.ts",
+        "method": "SafetyWorkContextService.workerPage",
+        "fileSha256": "909ce36b06dc00b1a25c4f15bd0a4813a48d08d7be2032a4863fd5d196abea86",
+        "methodBodySha256": "27575d232527435170f34bb06dd03053725463dc104fa15b937b341d3b025e98",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic fragments compose SELECT count/rows only from Worker/Team/Contractor permission projections.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/management/safety-work-context.service.ts",
+        "method": "SafetyWorkContextService.zoneTeams",
+        "fileSha256": "909ce36b06dc00b1a25c4f15bd0a4813a48d08d7be2032a4863fd5d196abea86",
+        "methodBodySha256": "ddaaf2cd0bc3359fccee430e550afc5750900af26214cd4b3bd9a1cf98d7a80a",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic fragments compose SELECT count/rows only from Worker/Team/Contractor permission projections.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/notifications/scheduling-notification.service.ts",
+        "method": "SchedulingNotificationService.delete",
+        "fileSha256": "a7510a8e0cf8aa146ff5061fe8d0749d4015824bc4576b762ca25e26a2c38126",
+        "methodBodySha256": "f94831af022aa9175446ea1ef01c1a4060a482b8028a0ccfcd64b160eceea343",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "recordNoScheduleDenial hashes notification ID; read/readAll/deleteRead/delete UPDATE user_notification only; scope predicates read authority.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/workforce/notifications/scheduling-notification.service.ts",
+        "method": "SchedulingNotificationService.deleteRead",
+        "fileSha256": "a7510a8e0cf8aa146ff5061fe8d0749d4015824bc4576b762ca25e26a2c38126",
+        "methodBodySha256": "718437bdd4c744dedd9a6dc88a4076553b62ca24bba4d286e0ba554f80518634",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "recordNoScheduleDenial hashes notification ID; read/readAll/deleteRead/delete UPDATE user_notification only; scope predicates read authority.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/workforce/notifications/scheduling-notification.service.ts",
+        "method": "SchedulingNotificationService.read",
+        "fileSha256": "a7510a8e0cf8aa146ff5061fe8d0749d4015824bc4576b762ca25e26a2c38126",
+        "methodBodySha256": "bf37d8dc547e9352bea48f14901ff5b30df36fef8843215458372bc214fcd0e6",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "recordNoScheduleDenial hashes notification ID; read/readAll/deleteRead/delete UPDATE user_notification only; scope predicates read authority.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/workforce/notifications/scheduling-notification.service.ts",
+        "method": "SchedulingNotificationService.readAll",
+        "fileSha256": "a7510a8e0cf8aa146ff5061fe8d0749d4015824bc4576b762ca25e26a2c38126",
+        "methodBodySha256": "84e9d215f7b30d0aab7aebb1f4741eabbca904f37445b80526922a25d3dd5468",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "recordNoScheduleDenial hashes notification ID; read/readAll/deleteRead/delete UPDATE user_notification only; scope predicates read authority.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/workforce/notifications/scheduling-notification.service.ts",
+        "method": "SchedulingNotificationService.recordNoScheduleDenial",
+        "fileSha256": "a7510a8e0cf8aa146ff5061fe8d0749d4015824bc4576b762ca25e26a2c38126",
+        "methodBodySha256": "a23efc70b1a225353d4c22be2276f6efe46efb390990b174f2b6b3a6bae699c8",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "recordNoScheduleDenial hashes notification ID; read/readAll/deleteRead/delete UPDATE user_notification only; scope predicates read authority.",
+        "callerAndOwner": "Canonical module owner; unchanged AST method body with refreshed 8e60f046 fileSha256 reconciled in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_BODY_FILE_REFRESHED"
+      },
+      {
+        "file": "modules/workforce/safety-face-profile.reader.ts",
+        "method": "SafetyFaceProfileMetadataReader.findCurrentForSafety",
+        "fileSha256": "647f896d1343f5f027755c7574a93d78030a0527f10eab768a3f695e7bd10a38",
+        "methodBodySha256": "3fabe7e54bdbe6af919fe59bcd6bf173727fc036be5194cd6b78465e6067db24",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic profileTable/workerTable/consentTable SELECT join only.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/scheduling/schedule-assignment.service.ts",
+        "method": "<module>",
+        "fileSha256": "30b31715116ec0027316becc83779b7191af2804c2eead49c5329acc1a148eb6",
+        "methodBodySha256": "211a7ff63c9a355b17fe3aa8de7f57fd7251db0bf01a19ba61bd4715c4b8fc41",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "OUTSIDE_MASK: Overlap checks read Shift/WorkerSchedule and write WorkerSchedule/ScheduleAssignmentBatch only; no worker_site_zone_assignment or Zone rights writes (ROOT-WRITER-DELTA-REVIEW.md).",
+        "callerAndOwner": "Canonical module owner; changed method delta reviewed on 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "CHANGED_BODY_RECONCILED_8E60F046"
+      },
+      {
+        "file": "modules/workforce/shared/access-audit.ts",
+        "method": "auditAccess",
+        "fileSha256": "562d999a7f738ec3386362081925e125f6f92cc3f0f60751aada46666d3967ac",
+        "methodBodySha256": "65a88ee9b5f156d4cba47234f086b110c4d2b15735de478949f3b1cee97c2593",
+        "classification": "INTERNAL_ONLY",
+        "rationale": "INTERNAL_ONLY: Returns existing AccessAudit repository save promise directly; preserves same non-masked audit write with no permission writes (ROOT-WRITER-DELTA-REVIEW.md).",
+        "callerAndOwner": "Canonical module owner; changed method delta reviewed on 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "CHANGED_BODY_RECONCILED_8E60F046"
+      },
+      {
+        "file": "modules/workforce/teams/contractor-teams.service.ts",
+        "method": "ContractorTeamsService.archive",
+        "fileSha256": "bd5051474f6ac8ff5d85e2850895b1e866903e368803dc248f7e765a679c6bc3",
+        "methodBodySha256": "642d74fb8bb869ce32a6625fa767b6c2f8098e4b4c386bd7479f834de40d6cba",
+        "classification": "MASKED_COMMAND",
+        "rationale": "TEAM_* outer owner; original bearer/current actor callback locks scoped representative role/assignment/Contractor/participation; scope rechecks active interval. Team/member/permission saves and archive SQL same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/teams/contractor-teams.service.ts",
+        "method": "ContractorTeamsService.assign",
+        "fileSha256": "bd5051474f6ac8ff5d85e2850895b1e866903e368803dc248f7e765a679c6bc3",
+        "methodBodySha256": "16015a307bb85135a5f1f6964afb66cf6461759d9c618aa7aed6fd340ec3fae9",
+        "classification": "MASKED_COMMAND",
+        "rationale": "TEAM_* outer owner; original bearer/current actor callback locks scoped representative role/assignment/Contractor/participation; scope rechecks active interval. Team/member/permission saves and archive SQL same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/teams/contractor-teams.service.ts",
+        "method": "ContractorTeamsService.create",
+        "fileSha256": "bd5051474f6ac8ff5d85e2850895b1e866903e368803dc248f7e765a679c6bc3",
+        "methodBodySha256": "cb43cb6b102d9467c7ac7dcd0dcc3034da21802b7b4cd35c03f7b0643f0f3bd3",
+        "classification": "MASKED_COMMAND",
+        "rationale": "TEAM_* outer owner; original bearer/current actor callback locks scoped representative role/assignment/Contractor/participation; scope rechecks active interval. Team/member/permission saves and archive SQL same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/teams/contractor-teams.service.ts",
+        "method": "ContractorTeamsService.grantZone",
+        "fileSha256": "bd5051474f6ac8ff5d85e2850895b1e866903e368803dc248f7e765a679c6bc3",
+        "methodBodySha256": "7bea69307fa126643f06ca5cb901ee497d53c69ac62541eaec1bf9cd8488eb4f",
+        "classification": "MASKED_COMMAND",
+        "rationale": "TEAM_* outer owner; original bearer/current actor callback locks scoped representative role/assignment/Contractor/participation; scope rechecks active interval. Team/member/permission saves and archive SQL same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/teams/contractor-teams.service.ts",
+        "method": "ContractorTeamsService.revokeZone",
+        "fileSha256": "bd5051474f6ac8ff5d85e2850895b1e866903e368803dc248f7e765a679c6bc3",
+        "methodBodySha256": "164f7de898d58e806ca42326429fbc79e87989bbe3cd14c48e960479e9ec6e9c",
+        "classification": "MASKED_COMMAND",
+        "rationale": "TEAM_* outer owner; original bearer/current actor callback locks scoped representative role/assignment/Contractor/participation; scope rechecks active interval. Team/member/permission saves and archive SQL same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/teams/contractor-teams.service.ts",
+        "method": "ContractorTeamsService.setLeader",
+        "fileSha256": "bd5051474f6ac8ff5d85e2850895b1e866903e368803dc248f7e765a679c6bc3",
+        "methodBodySha256": "07838ffde18392250781bde093bc6cf0f2e820e2acbcbb26d4bda3bf71b838a6",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Only leaderWorkerId/version and access_audit change; no TEAM mask field changes.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/workforce/teams/contractor-teams.service.ts",
+        "method": "ContractorTeamsService.update",
+        "fileSha256": "bd5051474f6ac8ff5d85e2850895b1e866903e368803dc248f7e765a679c6bc3",
+        "methodBodySha256": "9e1638a198275ff95592a0c91ad5cf2c8651df343194fa0d7e651850a1770a50",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Only name/normalized_name/description/version change; TEAM id/site/contractor/is_active unchanged. Metadata original bearer/current representative scope; audit action does not increment Site.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/zones/main-authority-read-snapshot.ts",
+        "method": "withMainAuthoritySnapshot",
+        "fileSha256": "b023a85e9a00076570b8d112b6aea5e71fb931ded3859b99ca386498064aecd6",
+        "methodBodySha256": "1e603a7441ee547c9f4fd42074f3d2fee820206ecd7c1722061ff2cec8985d8f",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Dynamic SET TRANSACTION READ ONLY/WRITE, locks/search_path; callback requires independent classification.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/zones/zone-access-management.service.ts",
+        "method": "ZoneAccessManagementService.createGrant",
+        "fileSha256": "91ca88c1fcc1418269e47b99423be36b4c0e309eb85c57ffaa485f37cd7e92b6",
+        "methodBodySha256": "01fcf8e63707beb0635fedd4322026eab0f6f3277f797c9972d7e04f0a62da0c",
+        "classification": "MASKED_COMMAND",
+        "rationale": "ZONE_DENY_CREATE/REVOKE original bearer/scoped Manager callback; Site-scoped Zone/Worker/grant checks; ALLOW rejected; revoke alias is ZoneAccessGrantEntity.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/zones/zone-access-management.service.ts",
+        "method": "ZoneAccessManagementService.revokeGrant",
+        "fileSha256": "91ca88c1fcc1418269e47b99423be36b4c0e309eb85c57ffaa485f37cd7e92b6",
+        "methodBodySha256": "cc5d019ad6d7a2df1d56ef3547c51d4296e21c7e8b36706408d5d98ec9aa0716",
+        "classification": "MASKED_COMMAND",
+        "rationale": "ZONE_DENY_CREATE/REVOKE original bearer/scoped Manager callback; Site-scoped Zone/Worker/grant checks; ALLOW rejected; revoke alias is ZoneAccessGrantEntity.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/zones/zone-configuration.service.ts",
+        "method": "ZoneConfigurationService.create",
+        "fileSha256": "11bcecdb1518f3bf257d135c69b0dac9e0f58d686e079bb8e96a3c853e701baf",
+        "methodBodySha256": "d0e472512332f9acb1783ef6afd7b0295c74c1c556aa556552014648e8019ba0",
+        "classification": "MASKED_COMMAND",
+        "rationale": "ZONE_CREATE/POLICY_UPDATE original bearer/scoped Manager callback; Site/Zone ownership/permanent linked-policy lock; revision child same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/zones/zone-configuration.service.ts",
+        "method": "ZoneConfigurationService.markLinked",
+        "fileSha256": "11bcecdb1518f3bf257d135c69b0dac9e0f58d686e079bb8e96a3c853e701baf",
+        "methodBodySha256": "4e83c9fdd4d5a113bb8fc76e947392d45103c9a6357a086999150214e7708aa8",
+        "classification": "INTERNAL_ONLY",
+        "rationale": "Supplied manager configuration_locked update; sole production parent REGION_CREATE captures Zone and locks live scoped Zone.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/zones/zone-configuration.service.ts",
+        "method": "ZoneConfigurationService.remove",
+        "fileSha256": "11bcecdb1518f3bf257d135c69b0dac9e0f58d686e079bb8e96a3c853e701baf",
+        "methodBodySha256": "05eb86b34618e1b677290e929ccb2e98b592566173b3956851c3b623b4ef3610",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Authenticated ZONE_DELETE softDelete changes deleted_at, excluded from frozen mask. Managed path requires no active Regions/assignments/permissions; deactivation archived; CameraConfigurationService activation locks live scoped Zone; PPE activation instead requires live-Zone bundle lookup under SERIALIZABLE. Capture-time projection test outstanding.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/zones/zone-configuration.service.ts",
+        "method": "ZoneConfigurationService.rename",
+        "fileSha256": "11bcecdb1518f3bf257d135c69b0dac9e0f58d686e079bb8e96a3c853e701baf",
+        "methodBodySha256": "8c757031e72e78f9ab3c2aa379b608318817e73e05752691b732284a1f89933d",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "Zone.name only; scoped Manager metadata callback.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/zones/zone-configuration.service.ts",
+        "method": "ZoneConfigurationService.updatePolicy",
+        "fileSha256": "11bcecdb1518f3bf257d135c69b0dac9e0f58d686e079bb8e96a3c853e701baf",
+        "methodBodySha256": "40e6ff07727cc0b7d4cc3e489e9bd2e40f638aaf4cde768e229fcc7fbddebbbb",
+        "classification": "MASKED_COMMAND",
+        "rationale": "ZONE_CREATE/POLICY_UPDATE original bearer/scoped Manager callback; Site/Zone ownership/permanent linked-policy lock; revision child same tx.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      },
+      {
+        "file": "modules/zones/zone-policy-revisions.ts",
+        "method": "appendZonePolicyRevision",
+        "fileSha256": "06cbdd5265728344bf3d3286ab189a93849a81ef88e4b92d8e1ceda162f34be4",
+        "methodBodySha256": "4a5c4b993307b278a7c436a2403c1c6eb1696c54391c288475efba11188b5360",
+        "classification": "OUTSIDE_MASK",
+        "rationale": "repository ZonePolicyRevisionEntity insert, not ZoneEntity; Zone parent command same manager.",
+        "callerAndOwner": "Canonical module owner; unchanged file and AST method body reconciled against 8e60f046 in ROOT-WRITER-DELTA-REVIEW.md.",
+        "deltaStatus": "UNCHANGED_EXACT"
+      }
+    ],
+    "reviewBasis": "Independent Main85 authority delta source review plus preserved prior unchanged writer inventory; operational activation not implied"
+  }
+}
