@@ -88,16 +88,21 @@ export function useBrowserCameraUplink({
   frameEncoder = defaultFrameEncoder,
 }: UseBrowserCameraUplinkOptions): BrowserCameraUplinkController {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const attachedVideoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const trackEndedListenerRef = useRef<(() => void) | null>(null);
   const leaseRef = useRef<BrowserCameraUplinkStartResponse | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
+  const startingRef = useRef(false);
   const sequenceRef = useRef(0);
   const inFlightRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const pendingStopRef = useRef<Promise<void> | null>(null);
+  const eligibleRef = useRef(supported && canWrite && !cameraInactive);
+  const scopeResetNeededRef = useRef(false);
 
   const [phase, setPhase] = useState<BrowserCameraUplinkPhase>('idle');
   const [issue, setIssue] = useState<BrowserCameraUplinkIssue>(null);
@@ -128,8 +133,31 @@ export function useBrowserCameraUplink({
     }
     trackEndedListenerRef.current = null;
     streamRef.current = null;
-    releaseBrowserCameraStream(currentStream, videoRef.current);
+    const targetVideo = videoRef.current ?? attachedVideoRef.current;
+    attachedVideoRef.current = null;
+    releaseBrowserCameraStream(currentStream, targetVideo);
   }, []);
+
+  const stopLeaseBestEffort = useCallback(
+    async (leaseId: string, reason: BrowserCameraUplinkStopReason, keepalive: boolean) => {
+      const stopPromise = client
+        .stop(apiUrl, token, siteId, cameraId, { leaseId, reason }, { keepalive })
+        .then(
+          () => undefined,
+          () => undefined, // Teardown is best-effort; backend lease TTL bounds orphaned state.
+        )
+        .finally(() => {
+          if (pendingStopRef.current === stopPromise) {
+            pendingStopRef.current = null;
+          }
+        });
+      if (!keepalive) {
+        pendingStopRef.current = stopPromise;
+      }
+      await stopPromise;
+    },
+    [apiUrl, cameraId, client, siteId, token],
+  );
 
   const teardownAndNotifyStop = useCallback(
     async (
@@ -138,7 +166,8 @@ export function useBrowserCameraUplink({
       nextPhase?: BrowserCameraUplinkPhase,
       nextIssue?: BrowserCameraUplinkIssue,
     ) => {
-      generationRef.current += 1;
+      const generation = ++generationRef.current;
+      startingRef.current = false;
       clearTimerAndAbort();
       releaseLocalMedia();
 
@@ -146,48 +175,49 @@ export function useBrowserCameraUplink({
       leaseRef.current = null;
       sequenceRef.current = 0;
 
-      if (nextPhase) {
+      const deferStoppedPhase = Boolean(nextPhase === 'stopped' && !keepalive && activeLease);
+      if (nextPhase && !deferStoppedPhase) {
         setPhase(nextPhase);
         setIssue(nextIssue ?? null);
       }
 
       if (activeLease) {
-        try {
-          await client.stop(
-            apiUrl,
-            token,
-            siteId,
-            cameraId,
-            { leaseId: activeLease.leaseId, reason },
-            { keepalive },
-          );
-        } catch {
-          // Teardown is best-effort; backend lease TTL bounds orphaned state.
-        }
+        await stopLeaseBestEffort(activeLease.leaseId, reason, keepalive);
+      }
+
+      if (deferStoppedPhase && generation === generationRef.current) {
+        setPhase(nextPhase!);
+        setIssue(nextIssue ?? null);
       }
     },
-    [apiUrl, cameraId, clearTimerAndAbort, client, releaseLocalMedia, siteId, token],
+    [clearTimerAndAbort, releaseLocalMedia, stopLeaseBestEffort],
   );
 
   const stop = useCallback(
     async (reason: BrowserCameraUplinkStopReason = 'USER_STOPPED', keepalive = false) => {
-      const hadLease = leaseRef.current !== null || streamRef.current !== null;
-      if (!hadLease) {
+      const hadMediaOrLease = leaseRef.current !== null || streamRef.current !== null;
+      const wasStarting = startingRef.current;
+      if (!hadMediaOrLease && !wasStarting) {
         setPhase('idle');
         setIssue(null);
         return;
       }
-      if (!keepalive) {
+      if (!keepalive && hadMediaOrLease) {
         setPhase('stopping');
       }
-      await teardownAndNotifyStop(reason, keepalive, 'stopped', null);
+      const nextPhase: BrowserCameraUplinkPhase = hadMediaOrLease ? 'stopped' : 'idle';
+      await teardownAndNotifyStop(reason, keepalive, nextPhase, null);
     },
     [teardownAndNotifyStop],
   );
 
   const pushSingleFrame = useCallback(
     async (generation: number, lease: BrowserCameraUplinkStartResponse) => {
-      if (generation !== generationRef.current || leaseRef.current?.leaseId !== lease.leaseId) {
+      if (
+        generation !== generationRef.current ||
+        leaseRef.current?.leaseId !== lease.leaseId ||
+        !eligibleRef.current
+      ) {
         return;
       }
       if (inFlightRef.current) {
@@ -205,12 +235,26 @@ export function useBrowserCameraUplink({
         if (!canvasRef.current && typeof document !== 'undefined') {
           canvasRef.current = document.createElement('canvas');
         }
-        const encoded = await frameEncoder(video, {
-          maxWidth: lease.maxWidth,
-          maxHeight: lease.maxHeight,
-          maxBytes: lease.maxFrameBytes,
-        });
-        if (generation !== generationRef.current || controller.signal.aborted) return;
+        const encoded =
+          frameEncoder === defaultFrameEncoder
+            ? await encodeVideoFrameToJpeg(video, {
+                maxWidth: lease.maxWidth,
+                maxHeight: lease.maxHeight,
+                maxBytes: lease.maxFrameBytes,
+                canvas: canvasRef.current ?? undefined,
+              })
+            : await frameEncoder(video, {
+                maxWidth: lease.maxWidth,
+                maxHeight: lease.maxHeight,
+                maxBytes: lease.maxFrameBytes,
+              });
+        if (
+          generation !== generationRef.current ||
+          controller.signal.aborted ||
+          !eligibleRef.current
+        ) {
+          return;
+        }
 
         const nextSeq = sequenceRef.current + 1;
         sequenceRef.current = nextSeq;
@@ -229,9 +273,20 @@ export function useBrowserCameraUplink({
           },
           controller.signal,
         );
-        if (generation !== generationRef.current || controller.signal.aborted) return;
+        if (
+          generation !== generationRef.current ||
+          controller.signal.aborted ||
+          !eligibleRef.current
+        ) {
+          return;
+        }
         setFramesUploaded(receipt.sequence);
         setLastAcceptedAt(receipt.acceptedAt);
+        setIssue((current) =>
+          current === 'RATE_LIMITED' || current === 'FRAME_TOO_LARGE' || current === 'UPLOAD_FAILED'
+            ? null
+            : current,
+        );
       } catch (err) {
         if (generation !== generationRef.current || controller.signal.aborted) return;
         if (err instanceof BrowserCameraCaptureError) {
@@ -248,6 +303,7 @@ export function useBrowserCameraUplink({
         if (err instanceof BrowserCameraUplinkError) {
           if (err.status === 401 || err.status === 403) {
             generationRef.current += 1;
+            startingRef.current = false;
             clearTimerAndAbort();
             releaseLocalMedia();
             leaseRef.current = null;
@@ -271,7 +327,10 @@ export function useBrowserCameraUplink({
         }
         setIssue('UPLOAD_FAILED');
       } finally {
-        inFlightRef.current = false;
+        if (abortRef.current === controller) {
+          inFlightRef.current = false;
+          abortRef.current = null;
+        }
       }
     },
     [
@@ -291,13 +350,34 @@ export function useBrowserCameraUplink({
   const start = useCallback(async () => {
     if (!supported || !canWrite || cameraInactive) return;
 
-    await teardownAndNotifyStop('SOURCE_SWITCHED', false);
-    const generation = generationRef.current;
+    // Claim generation ownership synchronously before awaiting stop or media acquisition.
+    const generation = ++generationRef.current;
+    startingRef.current = true;
+    clearTimerAndAbort();
+    releaseLocalMedia();
+    const previousLease = leaseRef.current;
+    leaseRef.current = null;
+    sequenceRef.current = 0;
+
     setPhase('starting');
     setIssue(null);
     setFramesUploaded(0);
     setFramesDropped(0);
     setLastAcceptedAt(null);
+
+    if (previousLease) {
+      await stopLeaseBestEffort(previousLease.leaseId, 'SOURCE_SWITCHED', false);
+    } else if (pendingStopRef.current) {
+      await pendingStopRef.current;
+    }
+
+    if (generation !== generationRef.current || !eligibleRef.current) {
+      if (generation === generationRef.current) {
+        startingRef.current = false;
+        setPhase('idle');
+      }
+      return;
+    }
 
     try {
       const stream = await acquireBrowserCameraStream({
@@ -305,8 +385,12 @@ export function useBrowserCameraUplink({
         maxWidth: BROWSER_CAMERA_UPLINK_DEFAULT_MAX_WIDTH,
         maxHeight: BROWSER_CAMERA_UPLINK_DEFAULT_MAX_HEIGHT,
       });
-      if (generation !== generationRef.current) {
+      if (generation !== generationRef.current || !eligibleRef.current) {
         releaseBrowserCameraStream(stream);
+        if (generation === generationRef.current) {
+          startingRef.current = false;
+          setPhase('idle');
+        }
         return;
       }
 
@@ -314,16 +398,33 @@ export function useBrowserCameraUplink({
       const video = videoRef.current;
       if (video) {
         video.srcObject = stream;
+        attachedVideoRef.current = video;
         await video.play();
       }
-      if (generation !== generationRef.current) {
-        releaseLocalMedia();
+      if (generation !== generationRef.current || !eligibleRef.current) {
+        if (streamRef.current === stream) {
+          releaseLocalMedia();
+        } else {
+          releaseBrowserCameraStream(stream);
+        }
+        if (generation === generationRef.current) {
+          startingRef.current = false;
+          setPhase('idle');
+        }
         return;
       }
 
       const enumerated = await enumerateBrowserVideoDevices();
-      if (generation !== generationRef.current) {
-        releaseLocalMedia();
+      if (generation !== generationRef.current || !eligibleRef.current) {
+        if (streamRef.current === stream) {
+          releaseLocalMedia();
+        } else {
+          releaseBrowserCameraStream(stream);
+        }
+        if (generation === generationRef.current) {
+          startingRef.current = false;
+          setPhase('idle');
+        }
         return;
       }
       setDevices(enumerated);
@@ -356,18 +457,24 @@ export function useBrowserCameraUplink({
         },
         controller.signal,
       );
-      if (generation !== generationRef.current || controller.signal.aborted) {
-        releaseLocalMedia();
-        void client
-          .stop(
-            apiUrl,
-            token,
-            siteId,
-            cameraId,
-            { leaseId: started.leaseId, reason: 'SOURCE_SWITCHED' },
-            { keepalive: true },
-          )
-          .catch(() => {});
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+      if (
+        generation !== generationRef.current ||
+        controller.signal.aborted ||
+        !eligibleRef.current
+      ) {
+        if (streamRef.current === stream) {
+          releaseLocalMedia();
+        } else {
+          releaseBrowserCameraStream(stream);
+        }
+        if (generation === generationRef.current) {
+          startingRef.current = false;
+          setPhase('idle');
+        }
+        void stopLeaseBestEffort(started.leaseId, 'SOURCE_SWITCHED', true);
         return;
       }
 
@@ -382,6 +489,7 @@ export function useBrowserCameraUplink({
 
       leaseRef.current = started;
       sequenceRef.current = 0;
+      startingRef.current = false;
       const effectiveInterval = Math.max(
         BROWSER_CAMERA_UPLINK_MIN_INTERVAL_MS,
         started.recommendedIntervalMs || BROWSER_CAMERA_UPLINK_DEFAULT_INTERVAL_MS,
@@ -396,7 +504,11 @@ export function useBrowserCameraUplink({
         void pushSingleFrame(generation, started);
       }, effectiveInterval);
     } catch (err) {
+      if (abortRef.current && generation === generationRef.current) {
+        abortRef.current = null;
+      }
       if (generation !== generationRef.current) return;
+      startingRef.current = false;
       clearTimerAndAbort();
       releaseLocalMedia();
       leaseRef.current = null;
@@ -448,15 +560,32 @@ export function useBrowserCameraUplink({
     releaseLocalMedia,
     selectedDeviceId,
     siteId,
+    stopLeaseBestEffort,
     supported,
     teardownAndNotifyStop,
     token,
   ]);
 
+  // Immediately stop capture, timer, and lease if capability, write access, or camera active state drops mid-stream.
+  useEffect(() => {
+    const eligible = supported && canWrite && !cameraInactive;
+    eligibleRef.current = eligible;
+    if (eligible) return;
+    const isActive =
+      leaseRef.current !== null ||
+      streamRef.current !== null ||
+      startingRef.current ||
+      phase === 'starting' ||
+      phase === 'uploading';
+    if (!isActive) return;
+    const reason: BrowserCameraUplinkStopReason = !canWrite ? 'AUTH_REVOKED' : 'SOURCE_SWITCHED';
+    void teardownAndNotifyStop(reason, false, 'stopped', null);
+  }, [supported, canWrite, cameraInactive, phase, teardownAndNotifyStop]);
+
   // Reliable unload cleanup using Fetch keepalive:true + Authorization header (sendBeacon cannot carry Bearer auth).
   useEffect(() => {
     const onPageHide = () => {
-      if (!leaseRef.current && !streamRef.current) return;
+      if (!leaseRef.current && !streamRef.current && !startingRef.current) return;
       void teardownAndNotifyStop('PAGE_HIDDEN', true);
     };
     window.addEventListener('pagehide', onPageHide);
@@ -467,9 +596,23 @@ export function useBrowserCameraUplink({
 
   // Guaranteed stream + lease teardown on unmount or scope change.
   useEffect(() => {
+    if (scopeResetNeededRef.current) {
+      scopeResetNeededRef.current = false;
+      void Promise.resolve().then(() => {
+        setPhase((current) =>
+          current === 'starting' || current === 'uploading' || current === 'stopping'
+            ? 'stopped'
+            : current,
+        );
+        setIssue(null);
+      });
+    }
     const videoEl = videoRef.current;
     return () => {
+      const wasActive =
+        leaseRef.current !== null || streamRef.current !== null || startingRef.current;
       generationRef.current += 1;
+      startingRef.current = false;
       if (timerRef.current !== null) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -487,10 +630,15 @@ export function useBrowserCameraUplink({
       }
       trackEndedListenerRef.current = null;
       streamRef.current = null;
-      releaseBrowserCameraStream(currentStream, videoEl);
+      const targetVideo = attachedVideoRef.current ?? videoEl;
+      attachedVideoRef.current = null;
+      releaseBrowserCameraStream(currentStream, targetVideo);
 
       const activeLease = leaseRef.current;
       leaseRef.current = null;
+      if (wasActive) {
+        scopeResetNeededRef.current = true;
+      }
       if (activeLease) {
         void client
           .stop(
@@ -509,7 +657,7 @@ export function useBrowserCameraUplink({
   const selectDeviceId = useCallback(
     (nextId: string) => {
       setSelectedDeviceId(nextId);
-      if (leaseRef.current || streamRef.current) {
+      if (leaseRef.current || streamRef.current || startingRef.current) {
         void stop('SOURCE_SWITCHED', false);
       }
     },

@@ -127,7 +127,7 @@ function SourceWorkspace({
   } = controller;
 
   const isCameraInactive = camera.status === 'INACTIVE';
-  const browserUplinkSupported = caps?.browserCameraSupported === true;
+  const browserUplinkSupported = !hosts.isError && caps?.browserCameraSupported === true;
   const handleBrowserUplinkRevoked = useCallback(() => {
     markRevoked();
     setPassword('');
