@@ -23,7 +23,16 @@ export async function configureApplication(app: NestExpressApplication): Promise
   // Mount CORS before parsers so preflight and parser errors have the same public headers.
   app.getHttpAdapter().enableCors({
     origin: config.get('CORS_ORIGINS', { infer: true }),
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Request-Id',
+      'X-Uplink-Lease-Id',
+      'X-Uplink-Sequence',
+      'X-Uplink-Captured-At',
+      'X-Uplink-Width',
+      'X-Uplink-Height',
+    ],
     exposedHeaders: ['X-Request-Id', 'Retry-After'],
     credentials: true,
   });

@@ -15,6 +15,7 @@ import { CameraStatus } from '../../database/entities/enums.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 import { AuthService } from '../auth/auth.service.js';
 import { CameraConfigurationService } from './camera-configuration.service.js';
+import { CameraBrowserUplinkService } from './camera-browser-uplink.service.js';
 import { fetchConfigurationImageJson } from './camera-configuration-image.transport.js';
 
 export const CAMERA_CONFIGURATION_IMAGE_FETCH = Symbol('CAMERA_CONFIGURATION_IMAGE_FETCH');
@@ -42,6 +43,8 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
     @Optional()
     @Inject(CAMERA_CONFIGURATION_IMAGE_CLOCK)
     private readonly clock: () => number = Date.now,
+    @Optional()
+    private readonly browserUplink?: CameraBrowserUplinkService,
   ) {}
 
   onModuleDestroy(): void {
@@ -105,6 +108,53 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
     try {
       const camera = await this.camera(siteId, cameraId);
       await this.authorize(token, siteId);
+      const sources = this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true });
+      const hasStaticOrigin = Object.hasOwn(sources, camera.externalId);
+      if (!hasStaticOrigin && this.browserUplink?.isEnabled()) {
+        if (this.reads.has(cameraId) || this.reads.size >= 4) {
+          throw new PublicHttpException(HttpStatus.TOO_MANY_REQUESTS, {
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: 'Camera configuration image read limit reached',
+          });
+        }
+        this.reads.set(cameraId, controller);
+        acquired = true;
+        signal?.addEventListener('abort', abort, { once: true });
+        if (signal?.aborted) abort();
+        const fresh = await this.browserUplink.readFreshFrame(siteId, cameraId);
+        if (!fresh || controller.signal.aborted) return unavailable();
+        await this.authorize(token, siteId);
+        const current = await this.camera(siteId, cameraId);
+        await this.authorize(token, siteId);
+        if (controller.signal.aborted || current.externalId !== camera.externalId)
+          return unavailable();
+        if (current.configurationVersion !== camera.configurationVersion) conflict();
+        const now = this.clock();
+        const captured = Date.parse(fresh.capturedAt);
+        if (!Number.isFinite(now) || now - captured >= 2000 || captured - now > 1000)
+          return unavailable();
+        return {
+          schemaVersion: 1,
+          purpose: 'REGION_CONFIGURATION',
+          sourceKind: 'LIVE',
+          siteId,
+          cameraId,
+          configurationVersion: camera.configurationVersion,
+          referenceExpiresAt: new Date(
+            Math.min(captured, now) + CONFIGURATION_REFERENCE_LIFETIME_MS,
+          ).toISOString(),
+          frame: {
+            cameraExternalId: camera.externalId,
+            sessionId: fresh.leaseId,
+            sequenceNumber: String(fresh.sequence),
+            capturedAt: fresh.capturedAt,
+            width: fresh.width,
+            height: fresh.height,
+            imageDataUrl: `data:image/jpeg;base64,${fresh.jpegBytes.toString('base64')}`,
+            imageSha256: createHash('sha256').update(fresh.jpegBytes).digest('hex'),
+          },
+        };
+      }
       const origin = this.origin(camera.externalId);
       if (this.reads.has(cameraId) || this.reads.size >= 4) {
         throw new PublicHttpException(HttpStatus.TOO_MANY_REQUESTS, {

@@ -208,7 +208,16 @@ export class CameraSourceService {
             ),
           );
           if (parsed.hostId !== host.id) unavailable();
-          return { id: host.id, label: host.label, available: true as const, capabilities: parsed };
+          const browserCameraSupported =
+            this.config.get('BROWSER_CAMERA_UPLINK_ENABLED', { infer: true }) === true;
+          return {
+            id: host.id,
+            label: host.label,
+            available: true as const,
+            capabilities: browserCameraSupported
+              ? { ...parsed, browserCameraSupported: true }
+              : parsed,
+          };
         } catch (error) {
           return {
             id: host.id,
