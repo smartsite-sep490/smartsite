@@ -85,6 +85,10 @@ beforeEach(async () => {
     items: [compliance],
     total: 1,
   });
+  vi.spyOn(SmartSiteManagementClient.prototype, 'listSafetyContractors').mockResolvedValue({
+    items: [{ id: 'contractor-1', name: 'Nhà thầu Alpha' }],
+    total: 1,
+  });
 
   vi.spyOn(SmartSiteManagementClient.prototype, 'workerCompliance').mockResolvedValue(compliance);
 });
@@ -116,6 +120,42 @@ function mount(initialUrl = '/worker-documents', probe = false) {
     </QueryClientProvider>,
   );
 }
+
+it('groups the current Safety page by contractor and filters through the API', async () => {
+  const other = {
+    ...compliance,
+    workerId: 'worker-2',
+    contractorId: 'contractor-2',
+    displayName: 'Nguyễn Văn Bình',
+  };
+  vi.mocked(SmartSiteManagementClient.prototype.listSafetyContractors).mockResolvedValue({
+    items: [
+      { id: 'contractor-1', name: 'Nhà thầu Alpha' },
+      { id: 'contractor-2', name: 'Nhà thầu Beta' },
+    ],
+    total: 2,
+  });
+  const query = vi.mocked(SmartSiteManagementClient.prototype.listWorkerCompliance);
+  query.mockImplementation(async (_token, _site, params) => {
+    const items = [compliance, other].filter(
+      (row) => !params?.contractorId || row.contractorId === params.contractorId,
+    );
+    return { items, total: items.length };
+  });
+  mount();
+  const group = within(await screen.findByRole('region', { name: 'Nhà thầu Alpha' }));
+  expect(group.getByRole('button', { name: /Nguyễn Văn An/ })).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Nhà thầu Beta' })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText(tr('common.contractor')), {
+    target: { value: 'contractor-2' },
+  });
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Nhà thầu Alpha' })).toBeNull());
+  expect(query).toHaveBeenLastCalledWith(
+    'synthetic-token',
+    'site-a',
+    expect.objectContaining({ contractorId: 'contractor-2', offset: 0 }),
+  );
+});
 
 it('shows a safe request error and retries document prerequisites', async () => {
   vi.mocked(SmartSiteManagementClient.prototype.listSites).mockRejectedValueOnce(

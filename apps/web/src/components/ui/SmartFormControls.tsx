@@ -718,6 +718,7 @@ export function SmartDatePicker({
 
   const fallbackId = useId();
   const id = propId ?? fallbackId;
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -768,56 +769,51 @@ export function SmartDatePicker({
         </label>
       )}
       <Popover.Root open={open} onOpenChange={setOpen}>
-        <Popover.Trigger asChild>
-          <button
-            id={id}
-            type="button"
-            aria-label={label}
-            className={`${triggerClass} flex items-center justify-between text-left cursor-pointer ${
-              !displayValue ? 'text-[#94A3B8] font-normal' : ''
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <IconCalSm />
-              <span>{displayValue || placeholder}</span>
-            </span>
-            <div className="flex items-center gap-1">
-              {clearable && Boolean(value) && (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  aria-label={tr('common.clear')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      onChange('');
-                    }
-                  }}
-                  className="p-0.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  <IconX className="w-3.5 h-3.5" />
-                </span>
-              )}
+        <div className="relative">
+          <Popover.Trigger asChild>
+            <button
+              id={id}
+              ref={triggerRef}
+              type="button"
+              aria-label={label}
+              className={`${triggerClass} flex items-center justify-between gap-1 text-left cursor-pointer ${
+                !displayValue ? 'text-[#94A3B8] font-normal' : ''
+              }`}
+            >
+              <span
+                className={'flex min-w-0 items-center gap-2 ' + (clearable && value ? 'pr-7' : '')}
+              >
+                <IconCalSm />
+                <span className="min-w-0 truncate">{displayValue || placeholder}</span>
+              </span>
               <IconChevDown open={open} />
-            </div>
-          </button>
-        </Popover.Trigger>
+            </button>
+          </Popover.Trigger>
+          {clearable && Boolean(value) && (
+            <button
+              type="button"
+              aria-label={label ? tr('calendar.clearField', { field: label }) : tr('common.clear')}
+              onClick={() => {
+                onChange('');
+                setOpen(false);
+                triggerRef.current?.focus();
+              }}
+              className="absolute right-9 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-orange-600"
+            >
+              <IconX className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         <Popover.Portal container={popoverContainer}>
           <Popover.Content
             side="bottom"
             sideOffset={8}
             align="start"
-            avoidCollisions={false}
             collisionPadding={12}
-            className="z-50 w-auto max-w-[calc(100vw-24px)]"
+            className="z-50 w-auto max-w-[calc(100vw-24px)] max-h-[var(--radix-popover-content-available-height)] overflow-auto rounded-2xl border border-[#DCE6EF] bg-white shadow-[0_16px_48px_rgba(7,26,43,0.14)]"
             style={{ outline: 'none' }}
           >
-            <div className="bg-white rounded-2xl border border-[#DCE6EF] shadow-[0_16px_48px_rgba(7,26,43,0.14)] overflow-hidden">
+            <div>
               <DayPicker
                 locale={uiLanguage() === 'vi' ? vi : enUS}
                 labels={calendarLabels()}

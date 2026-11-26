@@ -81,8 +81,12 @@ it('saves an incomplete intake without creating an account or requesting CCCD', 
   const provision = vi.spyOn(SmartSiteManagementClient.prototype, 'provisionWorkerOnboardingBatch');
   mount();
   const user = userEvent.setup();
-  await user.click(await screen.findByRole('button', { name: tr('workerIntake.add') }));
-  await user.type(screen.getByLabelText(tr('common.full_name')), 'First Worker');
+  const form = within(await screen.findByRole('region', { name: tr('workerIntake.add') }));
+  expect(form.getByRole('button', { name: tr('workerIntake.save') })).toHaveProperty(
+    'disabled',
+    true,
+  );
+  await user.type(form.getByLabelText(tr('common.full_name')), 'First Worker');
   const attachment = new File(['sample'], 'health.png', { type: 'image/png' });
   await user.upload(screen.getByLabelText(tr('documents.HEALTH_CERTIFICATE')), attachment);
   expect(screen.queryByLabelText(tr('documents.nationalId'))).toBeNull();
@@ -109,7 +113,7 @@ it('saves an incomplete intake without creating an account or requesting CCCD', 
   );
 });
 
-it('opens the selected draft in a keyboard-accessible drawer and keeps the site in the roster link', async () => {
+it('keeps the form above the list and focuses it when editing a draft', async () => {
   vi.mocked(SmartSiteManagementClient.prototype.listWorkerOnboardingDrafts).mockResolvedValue({
     items: [baseRow],
   });
@@ -117,12 +121,17 @@ it('opens the selected draft in a keyboard-accessible drawer and keeps the site 
   const user = userEvent.setup();
   const rosterLink = await screen.findByRole('link', { name: tr('workerIntake.recordTitle') });
   expect(rosterLink.getAttribute('href')).toBe('/worker-documents?siteId=site-a');
+  const add = screen.getByRole('region', { name: tr('workerIntake.add') });
+  expect(
+    add.compareDocumentPosition(await screen.findByRole('table')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   const edit = await screen.findByRole('button', { name: tr('workerIntake.edit') });
   await user.click(edit);
-  const drawer = screen.getByRole('dialog', { name: tr('workerIntake.edit') });
-  expect(document.activeElement).toBe(within(drawer).getByLabelText(tr('common.full_name')));
-  await user.keyboard('{Escape}');
-  expect(screen.queryByRole('dialog')).toBeNull();
+  const form = within(screen.getByRole('region', { name: tr('workerIntake.edit') }));
+  expect(document.activeElement).toBe(form.getByLabelText(tr('common.full_name')));
+  await user.click(form.getByRole('button', { name: tr('common.cancel') }));
+  expect(screen.getByRole('region', { name: tr('workerIntake.add') })).toBeTruthy();
   expect(document.activeElement).toBe(edit);
 });
 
@@ -142,12 +151,16 @@ it('preserves the insurance start date when an optional draft expiry is cleared'
   mount();
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: tr('workerIntake.edit') }));
-  const form = within(screen.getByRole('dialog', { name: tr('workerIntake.edit') }));
+  const form = within(screen.getByRole('region', { name: tr('workerIntake.edit') }));
   const start = form.getByRole('button', { name: tr('documents.coverageStartsOn') });
   const expiry = form.getByRole('button', { name: tr('documents.expiresOn') });
   expect(start.textContent).toContain('10/11/2026');
   expect(expiry.textContent).toContain('09/11/2027');
-  await user.click(within(expiry).getByRole('button', { name: tr('common.clear') }));
+  await user.click(
+    form.getByRole('button', {
+      name: tr('calendar.clearField', { field: tr('documents.expiresOn') }),
+    }),
+  );
   await user.click(form.getByRole('button', { name: tr('workerIntake.save') }));
   await waitFor(() =>
     expect(save.mock.calls[0]?.[4].documents).toEqual({
