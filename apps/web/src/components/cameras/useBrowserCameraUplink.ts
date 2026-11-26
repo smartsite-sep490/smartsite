@@ -664,10 +664,20 @@ export function useBrowserCameraUplink({
     [stop],
   );
 
+  const effectivePhase: BrowserCameraUplinkPhase = !canWrite
+    ? phase === 'uploading' || phase === 'starting' || phase === 'revoked'
+      ? 'revoked'
+      : phase
+    : (!supported || cameraInactive) && (phase === 'uploading' || phase === 'starting')
+      ? 'stopped'
+      : phase;
+  const effectiveIssue: BrowserCameraUplinkIssue =
+    !canWrite || !supported || cameraInactive ? null : issue;
+
   return {
     videoRef,
-    phase,
-    issue,
+    phase: effectivePhase,
+    issue: effectiveIssue,
     devices,
     selectedDeviceId,
     selectDeviceId,
