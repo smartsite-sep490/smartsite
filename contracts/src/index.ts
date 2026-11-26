@@ -240,6 +240,7 @@ export type {
   SourceTestResult,
 } from './camera-source-setup.js';
 export type { SourceActivationResult, SourcePreparationResult } from './camera-source-setup.js';
+export * from './browser-camera-uplink.js';
 
 export type {
   SubmitWorkerDocumentsCommand,
