@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import {
   SmartSiteManagementClient,
   type WorkerComplianceResponse,
@@ -10,62 +11,52 @@ import {
 } from '@smartsite/api-client';
 import { WorkerDocumentsPanel } from '../components/WorkerDocumentsPanel';
 import i18n, { translate as tr } from '../../../i18n';
-let cache: QueryClient;
-let client: SmartSiteManagementClient;
-const doc: WorkerDocumentResponse = {
-  id: 'document',
+
+const health: WorkerDocumentResponse = {
+  id: 'doc-1',
   workerId: 'worker',
-  kind: 'SAFETY_CARD',
+  kind: 'HEALTH_CERTIFICATE',
   status: 'PENDING',
-  originalName: 'synthetic-card.jpg',
+  originalName: 'synthetic-health.jpg',
   mediaType: 'image/jpeg',
   size: 123,
-  ocr: {
-    status: 'READ',
-    issuedOn: '2026-10-17',
-    expiresOn: '2028-10-17',
-    warnings: ['OFFICER_MUST_CONFIRM_DATES'],
-  },
   issuedOn: null,
   expiresOn: null,
+  submittedIssuedOn: format(new Date(Date.now() - 7 * 86_400_000), 'yyyy-MM-dd'),
   uploadedAt: '2026-10-17T00:00:00Z',
   reviewedAt: null,
   reviewNote: null,
   version: 3,
 };
+const base: WorkerComplianceResponse = {
+  workerId: 'worker',
+  contractorId: 'contractor',
+  displayName: 'Synthetic Worker',
+  externalId: 'W001',
+  version: 4,
+  identityVersion: 2,
+  safetyCardRequired: false,
+  nationalId: null,
+  phoneNumber: null,
+  gender: null,
+  address: null,
+  identityImages: [],
+  status: 'PENDING',
+  submissionStatus: 'PENDING_REVIEW',
+  needsSupplement: false,
+  documents: [health],
+  missingKinds: [],
+  expiringKinds: [],
+};
+let client: SmartSiteManagementClient;
+let cache: QueryClient;
 beforeEach(async () => {
-  await i18n.changeLanguage('vi');
-  URL.createObjectURL = vi.fn(() => 'blob:synthetic-card');
+  await i18n.changeLanguage('en');
+  URL.createObjectURL = vi.fn(() => 'blob:synthetic');
   URL.revokeObjectURL = vi.fn();
-  cache = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client = new SmartSiteManagementClient('https://api.example.test');
-  const profile: WorkerComplianceResponse = {
-    workerId: 'worker',
-    contractorId: 'contractor',
-    displayName: 'Synthetic Worker',
-    externalId: 'W001',
-    nationalId: '000000000001',
-    phoneNumber: '0900000001',
-    gender: 'MALE',
-    address: 'Synthetic address',
-    identityImages: [],
-    status: 'PENDING',
-    submissionStatus: 'PENDING_REVIEW',
-    needsSupplement: true,
-    documents: [doc],
-    missingKinds: ['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'],
-    expiringKinds: [],
-  };
-  vi.spyOn(client, 'workerCompliance').mockResolvedValue(profile);
-  vi.spyOn(client, 'reviewWorkerDocument').mockResolvedValue({
-    ...doc,
-    status: 'APPROVED',
-    issuedOn: '2026-10-17',
-    expiresOn: '2028-10-17',
-    version: 4,
-  });
+  vi.spyOn(client, 'workerCompliance').mockResolvedValue(base);
   vi.spyOn(client, 'workerDocumentFile').mockResolvedValue(
     new Blob(['synthetic'], { type: 'image/jpeg' }),
   );
@@ -75,116 +66,7 @@ afterEach(() => {
   cache.clear();
   vi.restoreAllMocks();
 });
-it('completed documents start collapsed instead of using a test-only expanded layout', async () => {
-  const profile = await client.workerCompliance('token', 'site', 'worker');
-  vi.mocked(client.workerCompliance).mockResolvedValue({
-    ...profile,
-    documents: [{ ...doc, status: 'APPROVED' }],
-  });
-  mount(true);
-  await screen.findByRole('heading', { name: /Synthetic Worker/ });
-  expect(screen.queryByText(doc.originalName)).toBeNull();
-});
-it('opens pending documents and respects a manual collapse after refresh', async () => {
-  mount(true);
-  await screen.findByText(doc.originalName);
-  await userEvent
-    .setup()
-    .click(screen.getByRole('button', { name: new RegExp(tr('documents.SAFETY_CARD')) }));
-  expect(screen.queryByText(doc.originalName)).toBeNull();
-  const calls = vi.mocked(client.workerCompliance).mock.calls.length;
-  await cache.invalidateQueries();
-  expect(vi.mocked(client.workerCompliance).mock.calls.length).toBeGreaterThan(calls);
-  expect(screen.queryByText(doc.originalName)).toBeNull();
-});
-it('lets Safety switch document cards while showing only the selected review form', async () => {
-  const profile = await client.workerCompliance('token', 'site', 'worker');
-  const health = {
-    ...doc,
-    id: 'health-document',
-    kind: 'HEALTH_CERTIFICATE' as const,
-    originalName: 'synthetic-health.jpg',
-    submittedIssuedOn: '2026-10-17',
-  };
-  vi.mocked(client.workerCompliance).mockResolvedValue({
-    ...profile,
-    documents: [doc, health],
-  });
-  mount(true);
-  await screen.findByText(doc.originalName);
-  expect(screen.queryByText(health.originalName)).toBeNull();
-  expect(screen.getAllByLabelText(tr('documents.note'))).toHaveLength(1);
-  const user = userEvent.setup();
-  await user.click(
-    screen.getByRole('button', { name: new RegExp(tr('documents.HEALTH_CERTIFICATE')) }),
-  );
-  expect(screen.queryByText(doc.originalName)).toBeNull();
-  expect(screen.getByText(health.originalName)).toBeTruthy();
-  expect(screen.getAllByLabelText(tr('documents.note'))).toHaveLength(1);
-  await user.type(screen.getByLabelText(tr('documents.note')), 'Checked health original');
-  await user.click(screen.getByLabelText(tr('documents.confirm')));
-  await user.click(screen.getByRole('button', { name: tr('documents.approve') }));
-  await waitFor(() =>
-    expect(client.reviewWorkerDocument).toHaveBeenCalledWith(
-      'token',
-      'site',
-      'worker',
-      health.id,
-      expect.objectContaining({ approve: true, issuedOn: '2026-10-17', expectedVersion: 3 }),
-    ),
-  );
-});
-it('shows the citizen ID warning to Safety without blocking explicit approval', async () => {
-  const profile = await client.workerCompliance('token', 'site', 'worker');
-  vi.mocked(client.workerCompliance).mockResolvedValue({
-    ...profile,
-    documents: [
-      { ...doc, identityCheck: { status: 'MISMATCH', detectedNationalIds: ['000000000099'] } },
-    ],
-  });
-  mount(true);
-  const user = userEvent.setup();
-  await screen.findByText(tr('documents.identityMismatch'));
-  expect(
-    screen.getByText(
-      tr('documents.identityValues', { expected: '000000000001', detected: '000000000099' }),
-    ),
-  ).toBeTruthy();
-  await user.click(screen.getByRole('button', { name: tr('documents.view') }));
-  await user.click(await screen.findByRole('button', { name: tr('common.close_dialog') }));
-  await user.type(screen.getByLabelText(tr('documents.note')), 'Original checked despite warning');
-  await user.click(screen.getByLabelText(tr('documents.confirm')));
-  const approve = screen.getByRole('button', {
-    name: tr('documents.approve'),
-  }) as HTMLButtonElement;
-  expect(approve.disabled).toBe(false);
-  await user.click(approve);
-  await waitFor(() => expect(client.reviewWorkerDocument).toHaveBeenCalled());
-});
-it('shows mismatched ID warnings on originals to the read-only Worker too', async () => {
-  const profile = await client.workerCompliance('token', 'site', 'worker');
-  vi.mocked(client.workerCompliance).mockResolvedValue({
-    ...profile,
-    documents: [
-      { ...doc, identityCheck: { status: 'MISMATCH', detectedNationalIds: ['000000000099'] } },
-    ],
-    identityImages: [
-      {
-        id: 'id-front',
-        side: 'FRONT',
-        mediaType: 'image/jpeg',
-        originalName: 'synthetic-id.jpg',
-        uploadedAt: '2026-10-17T00:00:00Z',
-        identityCheck: { status: 'MISMATCH', detectedNationalIds: ['000000000099'] },
-      },
-    ],
-  });
-  mount(false);
-  await screen.findAllByText(tr('documents.identityMismatch'));
-  expect(screen.getAllByText(tr('documents.identityMismatch')).length).toBe(2);
-  expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
-});
-function mount(canReview: boolean, canUpload = false) {
+function mount(mode: 'safety' | 'rep' | 'worker') {
   render(
     <QueryClientProvider client={cache}>
       <WorkerDocumentsPanel
@@ -192,178 +74,272 @@ function mount(canReview: boolean, canUpload = false) {
         token="token"
         siteId="site"
         workerId="worker"
-        scope="synthetic-reviewer"
-        canReview={canReview}
-        canUpload={canUpload}
+        scope={mode}
+        canReview={mode === 'safety'}
+        canUpload={mode === 'rep'}
+        canEditIdentity={mode === 'worker'}
       />
     </QueryClientProvider>,
   );
 }
-it('prefills OCR suggestions but requires explicit original/date confirmation before Safety approval', async () => {
-  mount(true);
+
+it('lets Safety approve declared dates after opening the original', async () => {
+  const review = vi
+    .spyOn(client, 'reviewWorkerDocument')
+    .mockResolvedValue({ ...health, status: 'APPROVED' });
+  mount('safety');
   const user = userEvent.setup();
-  await screen.findByText(/synthetic-card.jpg/);
-  const approve = screen.getByRole('button', {
-    name: tr('documents.approve'),
-  }) as HTMLButtonElement;
-  expect(approve.disabled).toBe(true);
-  expect(screen.getByLabelText(tr('documents.expiresOn')).textContent).toContain('17/10/2028');
-  await user.type(screen.getByLabelText(tr('documents.note')), 'Original checked');
-  expect(approve.disabled).toBe(true);
+  await screen.findByText(health.originalName);
+  expect(screen.queryByRole('button', { name: tr('documents.aiRun') })).toBeNull();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(screen.queryByRole('button', { name: tr('documents.examinationOn') })).toBeNull();
+  const approve = screen.getByRole('button', { name: tr('documents.approve') });
+  expect(approve).toHaveProperty('disabled', true);
   await user.click(screen.getByRole('button', { name: tr('documents.view') }));
-  await screen.findByRole('dialog', { name: tr('documents.view') });
-  await user.keyboard('{Escape}');
-  expect(client.workerDocumentFile).toHaveBeenCalledWith('token', 'site', 'worker', 'document');
-  await user.click(screen.getByLabelText(tr('documents.confirm')));
+  await user.click(await screen.findByRole('button', { name: tr('common.close_dialog') }));
   await user.click(approve);
   await waitFor(() =>
-    expect(client.reviewWorkerDocument).toHaveBeenCalledWith(
-      'token',
-      'site',
-      'worker',
-      'document',
-      {
-        expectedVersion: 3,
-        approve: true,
-        issuedOn: '2026-10-17',
-        expiresOn: '2028-10-17',
-        reviewNote: 'Original checked',
-      },
-    ),
-  );
-});
-it('read-only Worker documents expose originals and status without review or upload controls', async () => {
-  mount(false);
-  await screen.findByText(/synthetic-card.jpg/);
-  expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
-  expect(screen.queryByLabelText(tr('documents.note'))).toBeNull();
-  expect(screen.queryByText(tr('documents.upload'))).toBeNull();
-  expect(screen.getByRole('button', { name: tr('documents.view') })).toBeTruthy();
-});
-it('prefills the Representative date when OCR cannot determine expiry and still requires confirmation', async () => {
-  const profile = await client.workerCompliance('token', 'site', 'worker');
-  vi.mocked(client.workerCompliance).mockResolvedValue({
-    ...profile,
-    documents: [{ ...doc, submittedExpiresOn: '2027-10-18', ocr: { ...doc.ocr, expiresOn: null } }],
-  });
-  mount(true);
-  const expiry = await screen.findByLabelText(tr('documents.expiresOn'));
-  expect(expiry.textContent).toContain('18/10/2027');
-  expect(
-    (screen.getByRole('button', { name: tr('documents.approve') }) as HTMLButtonElement).disabled,
-  ).toBe(true);
-  expect(screen.getByText(`${tr('documents.submittedExpiryLabel')}: 2027-10-18`)).toBeTruthy();
-});
-it('health review uses only the confirmed issue date, with a read-only one-year expiry', async () => {
-  const profile = await client.workerCompliance('token', 'site', 'worker');
-  vi.mocked(client.workerCompliance).mockResolvedValue({
-    ...profile,
-    documents: [
-      {
-        ...doc,
-        kind: 'HEALTH_CERTIFICATE',
-        ocr: { ...doc.ocr, issuedOn: '2026-10-18', expiresOn: '2026-11-01' },
-      },
-    ],
-  });
-  mount(true);
-  const user = userEvent.setup();
-  const expiry = await screen.findByLabelText(tr('documents.expiresOn'));
-  expect(expiry.tagName).toBe('OUTPUT');
-  expect(expiry.textContent).toBe('18/10/2027');
-  await chooseCalendarDate(tr('documents.issuedOn'), '2026-10-17');
-  expect(expiry.textContent).toBe('17/10/2027');
-  await user.type(screen.getByLabelText(tr('documents.note')), 'Original date checked');
-  await user.click(screen.getByLabelText(tr('documents.confirm')));
-  await user.click(screen.getByRole('button', { name: tr('documents.approve') }));
-  await waitFor(() =>
-    expect(client.reviewWorkerDocument).toHaveBeenCalledWith(
-      'token',
-      'site',
-      'worker',
-      'document',
-      {
-        expectedVersion: 3,
-        approve: true,
-        issuedOn: '2026-10-17',
-        reviewNote: 'Original date checked',
-      },
-    ),
-  );
-});
-it('Safety hides citizen ID OCR controls and keeps the mismatch warning concise', async () => {
-  const profile = await client.workerCompliance('token', 'site', 'worker');
-  vi.mocked(client.workerCompliance).mockResolvedValue({
-    ...profile,
-    identityImages: [
-      {
-        id: 'front',
-        side: 'FRONT',
-        mediaType: 'image/jpeg',
-        originalName: 'synthetic.jpg',
-        uploadedAt: doc.uploadedAt,
-        identityCheck: { status: 'MISMATCH', detectedNationalIds: ['000000000099'] },
-      },
-    ],
-  });
-  mount(true);
-  await screen.findByText(doc.originalName);
-  expect(screen.getAllByRole('button', { name: tr('documents.ocr') })).toHaveLength(1);
-  await userEvent.setup().click(
-    screen.getByRole('button', {
-      name: (name) => name.startsWith(tr('documents.identityBothSides')),
+    expect(review).toHaveBeenCalledWith('token', 'site', 'worker', health.id, {
+      expectedVersion: 3,
+      approve: true,
+      issuedOn: health.submittedIssuedOn,
+      reviewNote: '',
     }),
   );
-  await screen.findByText(tr('documents.identityMismatch'));
-  expect(screen.queryByText(tr('documents.identityAdvisory'))).toBeNull();
-  expect(screen.queryByRole('button', { name: tr('documents.ocr') })).toBeNull();
-  expect(screen.getAllByRole('button', { name: tr('documents.view') })).toHaveLength(1);
 });
 
-it('Representative has one bundle submission form and Workers have no write controls', async () => {
-  mount(false, true);
-  await screen.findByRole('button', { name: tr('documents.sendBundle') });
-  expect(screen.getByLabelText(tr('documents.safetyCardRequired'))).toBeTruthy();
-  expect(screen.queryByRole('button', { name: tr('documents.submitForReview') })).toBeNull();
+it('requires a reason to return a certificate', async () => {
+  vi.mocked(client.workerCompliance).mockResolvedValue({
+    ...base,
+    documents: [{ ...health, submittedIssuedOn: null }],
+  });
+  const review = vi
+    .spyOn(client, 'reviewWorkerDocument')
+    .mockResolvedValue({ ...health, status: 'REJECTED' });
+  mount('safety');
+  const user = userEvent.setup();
+  const reject = await screen.findByRole('button', { name: tr('documents.reject') });
+  expect(screen.queryByRole('textbox')).toBeNull();
+  await user.click(reject);
+  const confirm = screen.getByRole('button', { name: tr('documents.confirmReturn') });
+  expect(confirm).toHaveProperty('disabled', true);
+  await user.type(screen.getByLabelText(tr('documents.returnNote')), 'Page missing');
+  await user.click(confirm);
+  await waitFor(() =>
+    expect(review).toHaveBeenCalledWith('token', 'site', 'worker', health.id, {
+      expectedVersion: 3,
+      approve: false,
+      reviewNote: 'Page missing',
+    }),
+  );
 });
-it('opening an original never calls OpenAI or displays an AI trigger inside the preview', async () => {
+
+it('lets Safety complete a missing insurance start date before approval', async () => {
+  const expiresOn = format(new Date(Date.now() + 30 * 86_400_000), 'yyyy-MM-dd');
+  const insurance: WorkerDocumentResponse = {
+    ...health,
+    kind: 'PERSONAL_INSURANCE',
+    submittedIssuedOn: null,
+    submittedExpiresOn: expiresOn,
+  };
+  vi.mocked(client.workerCompliance).mockResolvedValue({ ...base, documents: [insurance] });
+  const review = vi
+    .spyOn(client, 'reviewWorkerDocument')
+    .mockResolvedValue({ ...insurance, status: 'APPROVED' });
+  mount('safety');
+  const user = userEvent.setup();
+  await screen.findByText(tr('documents.reviewDatesRequired'));
+  expect(screen.getByText(tr('documents.notRequired'))).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: tr('documents.view') }));
+  await user.click(await screen.findByRole('button', { name: tr('common.close_dialog') }));
+  expect(screen.getByRole('button', { name: tr('documents.approve') })).toHaveProperty(
+    'disabled',
+    true,
+  );
+  await user.click(screen.getByRole('button', { name: tr('documents.editReviewDates') }));
+  await user.click(screen.getByRole('button', { name: tr('documents.coverageStartsOn') }));
+  await user.click(await screen.findByRole('button', { name: /today/i }));
+  await user.click(screen.getByRole('button', { name: tr('common.done') }));
+  await user.click(screen.getByRole('button', { name: tr('documents.approve') }));
+  await waitFor(() =>
+    expect(review).toHaveBeenCalledWith('token', 'site', 'worker', insurance.id, {
+      expectedVersion: insurance.version,
+      approve: true,
+      issuedOn: format(new Date(), 'yyyy-MM-dd'),
+      expiresOn,
+      reviewNote: '',
+    }),
+  );
+});
+
+it('marks optional safety cards without presenting a missing document or review action', async () => {
+  const oldCard: WorkerDocumentResponse = {
+    ...health,
+    id: 'archived-card',
+    kind: 'SAFETY_CARD',
+    status: 'SUPERSEDED',
+    originalName: 'old-safety-card.jpg',
+  };
+  vi.mocked(client.workerCompliance).mockResolvedValue({ ...base, documents: [health, oldCard] });
+  mount('safety');
+  const user = userEvent.setup();
+  await screen.findByText(health.originalName);
+  await user.click(screen.getByRole('button', { name: new RegExp(tr('documents.SAFETY_CARD')) }));
+  expect(screen.getByText(tr('documents.notRequired'))).toBeTruthy();
+  expect(screen.queryByText(tr('documents.cardNotRequired'))).toBeNull();
+  expect(screen.queryByText(tr('documents.noFile'), { selector: 'p' })).toBeNull();
+  expect(screen.queryByRole('button', { name: tr('documents.approve') })).toBeNull();
+  await user.click(screen.getByText(tr('documents.history')));
+  await user.click(screen.getByRole('button', { name: tr('documents.view') }));
+  await user.click(await screen.findByRole('button', { name: tr('common.close_dialog') }));
+  expect(client.workerDocumentFile).toHaveBeenCalledWith('token', 'site', 'worker', oldCard.id);
+  await user.click(screen.getByRole('button', { name: tr('documents.PERSONAL_INSURANCE') }));
+  expect(
+    screen.getByText(
+      tr('documents.requiredFileMissing', { name: tr('documents.PERSONAL_INSURANCE') }),
+    ),
+  ).toBeTruthy();
+});
+
+it('shows actionable AI date discrepancies without rendering legacy identity fields', async () => {
+  const declared = '2026-10-17';
+  const detected = '2026-10-20';
+  const analysis = {
+    status: 'COMPLETE' as const,
+    detectedKind: health.kind,
+    kindMismatch: false,
+    issuedOn: detected,
+    expiresOn: '2027-10-20',
+    dateCheck: {
+      field: 'ISSUED_ON' as const,
+      status: 'MISMATCH' as const,
+      submittedDate: declared,
+      detectedDate: detected,
+    },
+    nationalId: '000000000001',
+    identityCheck: 'MISMATCH' as const,
+  };
+  vi.mocked(client.workerCompliance).mockResolvedValue({
+    ...base,
+    documents: [{ ...health, status: 'DRAFT', aiAnalysis: analysis }],
+  });
+  mount('rep');
+  const discrepancy = await screen.findByText(tr('documents.aiDiscrepancy'));
+  expect(discrepancy.closest('.bg-rose-50')).toBeTruthy();
+  expect(screen.getByText(tr('documents.aiAdvisory'))).toBeTruthy();
+  expect(
+    screen.getByText(tr('documents.aiComparisonValues', { declared, detected }), {
+      selector: 'span',
+    }),
+  ).toBeTruthy();
+  expect(screen.queryByText('000000000001')).toBeNull();
+  expect(screen.getByText(tr('documents.aiComparisonDetails')).closest('details')?.open).toBe(
+    false,
+  );
+});
+
+it('keeps AI optional and sends the selected worker draft version explicitly', async () => {
+  vi.mocked(client.workerCompliance).mockResolvedValue({
+    ...base,
+    canSubmit: true,
+    submissionStatus: 'NOT_SUBMITTED',
+    documents: [{ ...health, status: 'DRAFT', aiAnalysis: { status: 'UNAVAILABLE' } }],
+  });
   const analyze = vi.spyOn(client, 'analyzeWorkerDocument');
-  mount(true);
-  await screen.findByText(doc.originalName);
-  await userEvent.setup().click(screen.getByRole('button', { name: tr('documents.view') }));
-  const dialog = await screen.findByRole('dialog');
-  expect(within(dialog).queryByRole('button', { name: tr('documents.aiRun') })).toBeNull();
+  const send = vi
+    .spyOn(client, 'sendWorkerDocumentsBatch')
+    .mockResolvedValue({ items: [{ id: 'worker', status: 'SUCCEEDED' }] });
+  mount('rep');
+  const user = userEvent.setup();
+  await screen.findByText(tr('documents.aiUnavailable'));
+  await user.click(screen.getByRole('button', { name: tr('workerIntake.send') }));
+  await waitFor(() =>
+    expect(send).toHaveBeenCalledWith('token', 'site', 'contractor', [
+      { id: 'worker', version: 4 },
+    ]),
+  );
   expect(analyze).not.toHaveBeenCalled();
 });
-async function chooseCalendarDate(label: string, date: string) {
-  const [year, month, day] = date.split('-').map(Number);
-  const user = userEvent.setup();
-  await user.click(screen.getByLabelText(label));
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: tr('calendar.year') }),
-    String(year),
-  );
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: tr('calendar.month') }),
-    String((month ?? 1) - 1),
-  );
-  await user.click(screen.getByRole('button', { name: new RegExp(`${day}.*${year}`) }));
-}
 
-it('never invents gender when a Representative corrects a legacy identity profile', async () => {
-  const current = await client.workerCompliance('token', 'site', 'worker');
-  vi.mocked(client.workerCompliance).mockResolvedValue({ ...current, gender: null });
-  const submit = vi
-    .spyOn(client, 'submitWorkerDocuments')
-    .mockResolvedValue({ requestId: 'test', version: 2, documentIds: [] });
-  mount(false, true);
-  await screen.findByRole('button', { name: tr('documents.sendBundle') });
+it('shows the returned reason beside the file and stages a replacement', async () => {
+  const returned = { ...health, status: 'REJECTED' as const, reviewNote: 'Page missing' };
+  const approved = {
+    ...health,
+    id: 'older',
+    status: 'APPROVED' as const,
+    uploadedAt: '2026-01-01T00:00:00Z',
+    expiresOn: '2027-01-01',
+  };
+  vi.mocked(client.workerCompliance).mockResolvedValue({
+    ...base,
+    documents: [returned, approved],
+  });
+  const save = vi.spyOn(client, 'submitWorkerDocuments').mockResolvedValue({
+    requestId: 'request',
+    version: 5,
+    documentIds: ['replacement'],
+  });
+  mount('rep');
   const user = userEvent.setup();
-  await user.click(document.querySelector('form summary')!);
-  expect((screen.getByLabelText(tr('documents.gender')) as HTMLSelectElement).value).toBe('');
-  await user.clear(screen.getByLabelText(tr('documents.phoneNumber')));
-  await user.type(screen.getByLabelText(tr('documents.phoneNumber')), '0900000009');
-  await user.click(screen.getByRole('button', { name: tr('documents.sendBundle') }));
-  await screen.findByText(tr('documents.required'));
-  expect(submit).not.toHaveBeenCalled();
+  await screen.findByText(tr('workerIntake.returnReason', { reason: 'Page missing' }));
+  expect(screen.getByText(tr('documents.expiresOn') + ': 2027-01-01')).toBeTruthy();
+  await user.click(
+    screen.getByRole('button', {
+      name: tr('workerIntake.replaceAttachment', { name: tr('documents.HEALTH_CERTIFICATE') }),
+    }),
+  );
+  const replacement = new File(['synthetic'], 'replacement.jpg', { type: 'image/jpeg' });
+  await user.upload(screen.getByLabelText(tr('documents.HEALTH_CERTIFICATE')), replacement);
+  const date = format(new Date(), 'yyyy-MM-dd');
+  await user.click(screen.getByRole('button', { name: tr('documents.submittedIssuedOn') }));
+  await user.click(await screen.findByRole('button', { name: /today/i }));
+  await user.click(screen.getByRole('button', { name: tr('workerIntake.save') }));
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledWith(
+      'token',
+      'site',
+      'worker',
+      expect.objectContaining({
+        expectedVersion: 4,
+        documents: { HEALTH_CERTIFICATE: { submittedIssuedOn: date } },
+      }),
+      { HEALTH_CERTIFICATE: replacement },
+    ),
+  );
+});
+
+it('lets the worker edit their own identity and preview both files before saving', async () => {
+  const update = vi.spyOn(client, 'updateMyWorkerIdentity').mockResolvedValue({ version: 3 });
+  mount('worker');
+  const user = userEvent.setup();
+  await user.click(await screen.findByText(tr('documents.personalDetails')));
+  await user.click(screen.getByRole('button', { name: tr('workerIntake.editIdentity') }));
+  await user.type(screen.getByLabelText(tr('documents.nationalId')), '000000000001');
+  await user.type(screen.getByLabelText(tr('documents.phoneNumber')), '0900000001');
+  await user.selectOptions(screen.getByLabelText(tr('documents.gender')), 'MALE');
+  await user.type(screen.getByLabelText(tr('documents.address')), 'Synthetic address');
+  const front = new File(['synthetic front'], 'front.jpg', { type: 'image/jpeg' });
+  const back = new File(['synthetic back'], 'back.jpg', { type: 'image/jpeg' });
+  const save = screen.getByRole('button', { name: tr('workerIntake.saveIdentity') });
+  await user.upload(screen.getByLabelText(tr('documents.FRONT')), front);
+  expect(save).toHaveProperty('disabled', true);
+  await user.upload(screen.getByLabelText(tr('documents.BACK')), back);
+  expect(screen.getByRole('img', { name: tr('documents.FRONT') })).toBeTruthy();
+  expect(screen.getByRole('img', { name: tr('documents.BACK') })).toBeTruthy();
+  await user.click(save);
+  await waitFor(() =>
+    expect(update).toHaveBeenCalledWith(
+      'token',
+      'site',
+      {
+        expectedVersion: 2,
+        nationalId: '000000000001',
+        phoneNumber: '0900000001',
+        gender: 'MALE',
+        address: 'Synthetic address',
+      },
+      { FRONT: front, BACK: back },
+    ),
+  );
 });

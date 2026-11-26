@@ -161,9 +161,24 @@ function sameProfile(left: WorkerProfileSnapshot, right: WorkerProfileSnapshot) 
   );
 }
 
+type LinkedWorkerAccountInput = Pick<WorkerAccountCommand, 'siteId' | 'displayName' | 'username'> &
+  Partial<
+    Pick<
+      WorkerAccountCommand,
+      | 'nationalId'
+      | 'phoneNumber'
+      | 'gender'
+      | 'address'
+      | 'externalId'
+      | 'temporaryPassword'
+      | 'email'
+      | 'language'
+    >
+  >;
+
 @Injectable()
 export class ContractorWorkerAccountsService {
-  private commandAuthorization(
+  commandAuthorization(
     context: MainConfigurationCommandContext | undefined,
     actor: WorkforceActor,
     siteId: string,
@@ -299,6 +314,31 @@ export class ContractorWorkerAccountsService {
     await this.source.transaction((manager) =>
       this.operations.requireWorkerCreationAccess(manager, actor, contractorId, siteId),
     );
+    const prepared = await this.prepareLinkedAccount(value);
+    try {
+      return await executeMainConfigurationCommand(
+        this.source,
+        context,
+        'USER_CONTRACTOR_WORKER_ACCOUNT_CREATE',
+        { siteId, contractorId, username: value.username, externalId: value.externalId ?? null },
+        async (manager) => {
+          await this.operations.requireWorkerCreationAccess(
+            manager,
+            actor,
+            contractorId,
+            siteId,
+            true,
+          );
+          return this.createLinkedAccount(manager, actor, contractorId, value, prepared);
+        },
+        this.commandAuthorization(context, actor, siteId, contractorId),
+      );
+    } catch (error) {
+      this.workerAccountConflict(error);
+    }
+  }
+
+  async prepareLinkedAccount(value: LinkedWorkerAccountInput) {
     if (value.email) {
       if (!this.accountEmail)
         throw new PublicHttpException(503, {
@@ -316,101 +356,92 @@ export class ContractorWorkerAccountsService {
       ...value,
       temporaryPassword: initialPassword,
     });
-    try {
-      return await executeMainConfigurationCommand(
-        this.source,
-        context,
-        'USER_CONTRACTOR_WORKER_ACCOUNT_CREATE',
+    return { initialPassword, prepared };
+  }
+
+  async createLinkedAccount(
+    manager: EntityManager,
+    actor: WorkforceActor,
+    contractorId: string,
+    value: LinkedWorkerAccountInput,
+    {
+      initialPassword,
+      prepared,
+    }: Awaited<ReturnType<ContractorWorkerAccountsService['prepareLinkedAccount']>>,
+  ): Promise<ContractorWorkerAccountResponse> {
+    const { siteId } = value;
+    const account = await this.users.createWorkerAccount(manager, prepared);
+    if (value.email) {
+      await manager.getRepository(UserEntity).update(account.id, {
+        email: value.email,
+        emailVerifiedAt: null,
+      });
+      account.email = value.email;
+      account.emailVerifiedAt = null;
+      await this.accountEmail!.queueWelcome(
+        manager,
         {
-          siteId,
-          contractorId,
-          username: value.username,
-          externalId: value.externalId ?? null,
+          id: account.id,
+          username: account.username,
+          email: value.email,
+          passwordHash: prepared.passwordHash,
         },
-        async (manager) => {
-          // Recheck current scope and participation after hashing.
-          await this.operations.requireWorkerCreationAccess(
-            manager,
-            actor,
-            contractorId,
-            siteId,
-            true,
-          );
-          const account = await this.users.createWorkerAccount(manager, prepared);
-          if (value.email) {
-            await manager.getRepository(UserEntity).update(account.id, {
-              email: value.email,
-              emailVerifiedAt: null,
-            });
-            account.email = value.email;
-            account.emailVerifiedAt = null;
-            await this.accountEmail!.queueWelcome(
-              manager,
-              {
-                id: account.id,
-                username: account.username,
-                email: value.email,
-                passwordHash: prepared.passwordHash,
-              },
-              initialPassword,
-              value.language,
-            );
-          }
-          const workers = manager.getRepository(WorkerEntity);
-          let externalId = value.externalId;
-          if (externalId === undefined) {
-            // PostgreSQL sequences allocate distinct values across concurrent transactions.
-            // Gaps after a rollback are intentional; codes must never be recycled.
-            do {
-              const [allocated] = await manager.query<{ number: string }[]>(
-                "SELECT nextval('worker_code_seq')::text AS number",
-              );
-              externalId = `W${allocated!.number.padStart(6, '0')}`;
-            } while (await workers.existsBy({ siteId, externalId }));
-          }
-          const worker = await workers.save({
-            id: randomUUID(),
-            contractorId,
-            siteId,
-            userId: account.id,
-            externalId,
-            displayName: value.displayName,
-            isActive: true,
-          });
-          await manager.getRepository(WorkerComplianceProfileEntity).save({
-            workerId: worker.id,
-            nationalId: value.nationalId,
-            phoneNumber: value.phoneNumber,
-            gender: value.gender,
-            address: value.address,
-            identityRequired: true,
-          });
-          await auditAccess(
-            manager,
-            actor.id,
-            siteId,
-            'WORKER_ACCOUNT_CREATED',
-            'worker',
-            worker.id,
-            null,
-            { contractorId, userId: account.id },
-          );
-          return {
-            account,
-            worker: { ...worker, createdAt: worker.createdAt.toISOString() },
-            ...(value.email ? { emailDelivery: 'QUEUED' as const } : {}),
-          };
-        },
-        this.commandAuthorization(context, actor, siteId, contractorId),
+        initialPassword,
+        value.language,
       );
-    } catch (error) {
-      // Retrying the same username/code returns CONFLICT without partial accounts or a reset.
-      knownUnique(error, [
-        'uq_app_user_username',
-        'uq_user_email',
-        'uq_worker_site_external_id',
-        'uq_worker_site_user',
-      ]);
     }
+    const workers = manager.getRepository(WorkerEntity);
+    let externalId = value.externalId;
+    if (externalId === undefined) {
+      // PostgreSQL sequences allocate distinct values across concurrent transactions.
+      // Gaps after a rollback are intentional; codes must never be recycled.
+      do {
+        const [allocated] = await manager.query<{ number: string }[]>(
+          "SELECT nextval('worker_code_seq')::text AS number",
+        );
+        externalId = `W${allocated!.number.padStart(6, '0')}`;
+      } while (await workers.existsBy({ siteId, externalId }));
+    }
+    const worker = await workers.save({
+      id: randomUUID(),
+      contractorId,
+      siteId,
+      userId: account.id,
+      externalId,
+      displayName: value.displayName,
+      isActive: true,
+    });
+    await manager.getRepository(WorkerComplianceProfileEntity).save({
+      workerId: worker.id,
+      nationalId: value.nationalId ?? null,
+      phoneNumber: value.phoneNumber ?? null,
+      gender: value.gender ?? null,
+      address: value.address ?? null,
+      identityRequired: Boolean(value.nationalId),
+    });
+    await auditAccess(
+      manager,
+      actor.id,
+      siteId,
+      'WORKER_ACCOUNT_CREATED',
+      'worker',
+      worker.id,
+      null,
+      { contractorId, userId: account.id },
+    );
+    return {
+      account,
+      worker: { ...worker, createdAt: worker.createdAt.toISOString() },
+      ...(value.email ? { emailDelivery: 'QUEUED' as const } : {}),
+    };
+  }
+
+  workerAccountConflict(error: unknown): never {
+    knownUnique(error, [
+      'uq_app_user_username',
+      'uq_user_email',
+      'uq_worker_site_external_id',
+      'uq_worker_site_user',
+    ]);
   }
 }

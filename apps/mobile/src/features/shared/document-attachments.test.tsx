@@ -2,17 +2,18 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { convertFormDataAsync } from 'expo/src/winter/fetch/convertFormData';
-import { Attachments } from './uploads';
+import { SingleDocumentAttachment } from './uploads';
 import { translate as t } from '../../i18n';
 const native = vi.hoisted(() => ({
   deleted: [] as string[],
   camera: vi.fn(),
   gallery: vi.fn(),
   document: vi.fn(),
+  cameraPermission: vi.fn(),
 }));
 vi.mock('expo-image-picker', () => ({
   CameraType: { front: 'front', back: 'back' },
-  requestCameraPermissionsAsync: async () => ({ granted: true }),
+  requestCameraPermissionsAsync: native.cameraPermission,
   requestMediaLibraryPermissionsAsync: async () => ({ granted: true }),
   launchCameraAsync: native.camera,
   launchImageLibraryAsync: native.gallery,
@@ -46,6 +47,7 @@ let root: ReactTestRenderer;
 beforeEach(() => {
   vi.clearAllMocks();
   native.deleted.length = 0;
+  native.cameraPermission.mockResolvedValue({ granted: true });
   native.camera.mockResolvedValue({
     canceled: false,
     assets: [{ uri: 'cache://camera.jpg', width: 4000, height: 3000 }],
@@ -71,7 +73,7 @@ const button = (label: string) =>
   )[0]!;
 
 it.each(['camera', 'gallery', 'file', 'pdf'] as const)(
-  'sends %s through the shared client and real Expo encoder before accepting the selection',
+  'uploads %s from the attachment picker using the shared client and the real Expo encoder',
   async (source) => {
     class NativeForm {
       parts: [string, unknown][] = [];
@@ -87,7 +89,7 @@ it.each(['camera', 'gallery', 'file', 'pdf'] as const)(
     const request = vi.fn(async (_url: string, init: RequestInit) => {
       const { body } = await convertFormDataAsync(init.body as FormData, 'test-boundary');
       encoded = new TextDecoder().decode(body);
-      return Response.json({ status: 'ACCEPTED', reason: 'IMAGE_ACCEPTED' });
+      return Response.json({ id: 'draft' });
     });
     vi.stubGlobal('fetch', request);
     if (source === 'pdf')
@@ -105,92 +107,71 @@ it.each(['camera', 'gallery', 'file', 'pdf'] as const)(
     const client = new SmartSiteManagementClient('https://api.example.test');
     const changed = vi.fn();
     await act(async () => {
-      root = create(
-        <Attachments
-          files={[]}
-          onChange={changed}
-          validateFile={async (file) => {
-            await client.checkDocumentImageQuality('synthetic-token', 'site', 'contractor', file);
-          }}
-        />,
-      );
+      root = create(<SingleDocumentAttachment label="Document" onChange={changed} />);
     });
     await act(async () => {
-      button(
-        source === 'camera'
-          ? t('documents.camera')
-          : source === 'gallery'
-            ? t('documents.gallery')
-            : t('uploads.chooseAttachment'),
-      ).props.onPress();
+      button(t('onboarding.attachFile') + ': Document').props.onPress();
     });
+    await act(async () => {
+      const label =
+        source === 'camera'
+          ? t('uploads.takePhoto')
+          : source === 'gallery'
+            ? t('onboarding.choosePhoto')
+            : t('uploads.chooseAttachment');
+      button(label + ': Document').props.onPress();
+    });
+    expect(changed).toHaveBeenCalledTimes(1);
+    const file = changed.mock.calls[0]![0];
+    await client.saveWorkerOnboardingDraft(
+      'synthetic-token',
+      'site',
+      'contractor',
+      'draft',
+      {
+        expectedVersion: 0,
+        displayName: 'Synthetic',
+        username: '',
+        email: '',
+        safetyCardRequired: null,
+        documents: { HEALTH_CERTIFICATE: {} },
+      },
+      { HEALTH_CERTIFICATE: file },
+    );
     expect(request).toHaveBeenCalledTimes(1);
-    expect(request.mock.calls[0]![0]).toContain('/contractors/contractor/document-image-quality');
+    expect(request.mock.calls[0]![0]).toContain(
+      '/contractors/contractor/worker-onboarding-drafts/draft',
+    );
     expect(encoded).toContain('SYNTHETIC DOCUMENT');
     expect(encoded).toContain(
       source === 'pdf' ? 'application/pdf' : source === 'file' ? 'image/png' : 'image/jpeg',
     );
     expect(encoded).not.toContain('cache://');
-    expect(changed).toHaveBeenCalledTimes(1);
-    const file = changed.mock.calls[0]![0][0];
     expect(typeof file.bytes).toBe('function');
     expect(Object.keys(file).sort()).toEqual(['name', 'type', 'uri']);
   },
 );
-it('offers camera and gallery, and rejects a blurry capture before selecting it', async () => {
+it('offers image sources only for citizen ID and explains permission denial before selection', async () => {
   const changed = vi.fn();
-  const validate = vi
-    .fn()
-    .mockRejectedValueOnce(new Error('Synthetic blurry document'))
-    .mockResolvedValue(undefined);
+  native.cameraPermission.mockResolvedValueOnce({ granted: false });
   await act(async () => {
-    root = create(
-      <Attachments files={[]} onChange={changed} maxFiles={1} validateFile={validate} />,
-    );
+    root = create(<SingleDocumentAttachment label="Front" identity onChange={changed} />);
   });
-  expect(button(t('documents.gallery'))).toBeTruthy();
+  expect(button(t('onboarding.choosePhoto') + ': Front')).toBeTruthy();
+  expect(button(t('uploads.chooseAttachment') + ': Front')).toBeUndefined();
   await act(async () => {
-    button(t('documents.camera')).props.onPress();
+    button(t('uploads.takePhoto') + ': Front').props.onPress();
   });
   expect(changed).not.toHaveBeenCalled();
-  expect(JSON.stringify(root.toJSON())).toContain('Synthetic blurry document');
-  expect(native.deleted).toContain('cache://document.jpg');
+  expect(JSON.stringify(root.toJSON())).toContain(t('uploads.cameraPermission'));
   await act(async () => {
-    button(t('documents.camera')).props.onPress();
+    button(t('onboarding.choosePhoto') + ': Front').props.onPress();
   });
-  expect(changed).toHaveBeenCalledWith([
-    { uri: 'cache://document.jpg', name: 'photo.jpg', type: 'image/jpeg' },
-  ]);
-});
-it('validates gallery and selected files and limits citizen ID selection to images', async () => {
-  const validate = vi.fn().mockResolvedValue(undefined);
-  const changed = vi.fn();
-  await act(async () => {
-    root = create(
-      <Attachments
-        files={[]}
-        onChange={changed}
-        maxFiles={1}
-        allowPdf={false}
-        validateFile={validate}
-      />,
-    );
+  expect(native.gallery).toHaveBeenCalledOnce();
+  expect(changed).toHaveBeenCalledWith({
+    uri: 'cache://document.jpg',
+    name: 'document-gallery.jpg',
+    type: 'image/jpeg',
   });
-  await act(async () => {
-    button(t('documents.gallery')).props.onPress();
-  });
-  expect(native.gallery).toHaveBeenCalled();
-  expect(validate).toHaveBeenCalledWith(expect.objectContaining({ type: 'image/jpeg' }));
-  await act(async () => {
-    button('Chọn tệp đính kèm').props.onPress();
-  });
-  expect(native.document).toHaveBeenCalledWith(
-    expect.objectContaining({ type: ['image/jpeg', 'image/png'] }),
-  );
-  expect(validate).toHaveBeenCalledWith({
-    uri: 'cache://selected.png',
-    name: 'synthetic.png',
-    type: 'image/png',
-  });
-  expect(changed).toHaveBeenCalledTimes(2);
+  expect(native.document).not.toHaveBeenCalled();
 });

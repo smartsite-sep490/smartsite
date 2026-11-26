@@ -170,27 +170,6 @@ const previewSourcesSchema = z
 
 export const backendEnvironmentSchema = z
   .object({
-    WORKER_DOCUMENT_PYTHON: z
-      .string()
-      .trim()
-      .min(1)
-      .max(4096)
-      .regex(/^[^\p{Cc}]+$/u)
-      .optional(),
-    WORKER_DOCUMENT_TESSERACT: z
-      .string()
-      .trim()
-      .min(1)
-      .max(4096)
-      .regex(/^[^\p{Cc}]+$/u)
-      .optional(),
-    WORKER_DOCUMENT_PDFTOPPM: z
-      .string()
-      .trim()
-      .min(1)
-      .max(4096)
-      .regex(/^[^\p{Cc}]+$/u)
-      .optional(),
     WORKER_DOCUMENT_OPENAI_TIMEOUT_MS: integer(30000, 1000, 120000),
     WORKER_DOCUMENT_NOTICE_DAYS: integer(30, 1, 365),
     WORKER_DOCUMENT_OPENAI_MODEL: z

@@ -10,7 +10,6 @@ const fields = {
   detectedKind: 'HEALTH_CERTIFICATE',
   issuedOn: '2026-02-28',
   expiresOn: null,
-  nationalId: '000000000001',
 };
 const service = new DocumentAnalysisService(createTestConfig({ OPENAI_API_KEY: key }));
 
@@ -44,7 +43,7 @@ test('sends original validated upload bytes in a single structured Responses req
           schema: {
             type: 'object',
             additionalProperties: false,
-            required: ['detectedKind', 'issuedOn', 'expiresOn', 'nationalId'],
+            required: ['detectedKind', 'issuedOn', 'expiresOn'],
           },
         },
       },
@@ -110,7 +109,10 @@ test('refusals, incomplete responses, invalid fields and provider failures remai
       type: 'output_text',
       text: JSON.stringify({ ...fields, issuedOn: '2026-02-30' }),
     }),
-    completion({ type: 'output_text', text: JSON.stringify({ ...fields, nationalId: '12345' }) }),
+    completion({
+      type: 'output_text',
+      text: JSON.stringify({ ...fields, nationalId: '000000000001' }),
+    }),
     completion({ type: 'output_text', text: JSON.stringify({ ...fields, approval: true }) }),
     new Response('Synthetic error', { status: 429 }),
   ];

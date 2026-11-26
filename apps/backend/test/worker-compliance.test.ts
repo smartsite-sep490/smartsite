@@ -1,3 +1,4 @@
+import { isWorkerDocumentDate as isCalendarDate } from '@smartsite/contracts';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -12,58 +13,10 @@ import type { EntityManager } from 'typeorm';
 import {
   WorkerComplianceProfileEntity,
   WorkerDocumentEntity,
-  WorkerIdentityImageEntity,
 } from '../src/database/entities/worker-document.entity.js';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
-import {
-  validateWorkerDocument,
-  compareDocumentIdentity,
-} from '../src/modules/workforce/documents/worker-documents.service.js';
-import {
-  DocumentOcrService,
-  isCalendarDate,
-} from '../src/modules/workforce/documents/document-ocr.service.js';
-import { createTestConfig } from './support/config.js';
-import { command } from '../src/common/configuration/commands.js';
-import { UploadWorkerDocumentDto } from '../src/modules/workforce/documents/worker-documents.commands.js';
-import { LocalDocumentOcr } from '../src/modules/workforce/documents/local-document-ocr.js';
+import { validateWorkerDocument } from '../src/modules/workforce/documents/worker-documents.service.js';
 const kinds = ['SAFETY_CARD', 'HEALTH_CERTIFICATE', 'PERSONAL_INSURANCE'] as const;
-test('preflight DTO accepts only declared date suggestions', () => {
-  assert.equal(
-    command(UploadWorkerDocumentDto, { submittedExpiresOn: '2027-10-18' }).submittedExpiresOn,
-    '2027-10-18',
-  );
-  for (const input of [
-    { submittedExpiresOn: '18/10/2027' },
-    { submittedExpiresOn: null },
-    { submittedExpiresOn: '2027-10-18', approve: true },
-  ])
-    assert.throws(() => command(UploadWorkerDocumentDto, input));
-});
-test('citizen ID comparison is advisory and keeps unreadable or missing references distinct', () => {
-  const ocr = {
-    status: 'READ' as const,
-    issuedOn: null,
-    expiresOn: null,
-    warnings: [],
-    nationalIds: ['000000000001'],
-  };
-  assert.equal(compareDocumentIdentity('000000000001', ocr).status, 'MATCH');
-  assert.equal(compareDocumentIdentity('000000000099', ocr).status, 'MISMATCH');
-  assert.equal(
-    compareDocumentIdentity('000000000001', {
-      ...ocr,
-      nationalIds: ['000000000001', '000000000099'],
-    }).status,
-    'MISMATCH',
-  );
-  assert.equal(
-    compareDocumentIdentity('000000000001', { ...ocr, nationalIds: [] }).status,
-    'NOT_DETECTED',
-  );
-  assert.equal(compareDocumentIdentity(null, ocr).status, 'NO_REFERENCE');
-  assert.equal(compareDocumentIdentity('000000000001', null).status, 'UNAVAILABLE');
-});
 const approved = () =>
   kinds.map((kind) => ({
     kind,
@@ -79,50 +32,48 @@ test('review tags distinguish no submission, waiting review and supplement witho
     expiresOn: '2027-01-01',
     uploadedAt: new Date('2026-01-01'),
   }));
-  assert.deepEqual(documentReviewState([], true, at), {
+  assert.deepEqual(documentReviewState([], at), {
     submissionStatus: 'NOT_SUBMITTED',
     needsSupplement: true,
   });
-  assert.deepEqual(documentReviewState(docs, true, at), {
+  assert.deepEqual(documentReviewState(docs, at), {
     submissionStatus: 'REVIEWED',
     needsSupplement: false,
   });
-  assert.equal(documentReviewState(docs, false, at).needsSupplement, true);
   const pending = {
     ...docs[0]!,
     id: 'pending',
     status: 'PENDING' as const,
     uploadedAt: new Date('2026-10-18'),
   };
-  assert.deepEqual(documentReviewState([pending], true, at), {
+  assert.deepEqual(documentReviewState([pending], at), {
     submissionStatus: 'PENDING_REVIEW',
     needsSupplement: true,
   });
-  assert.deepEqual(documentReviewState([...docs, pending], true, at), {
+  assert.deepEqual(documentReviewState([...docs, pending], at), {
     submissionStatus: 'PENDING_REVIEW',
     needsSupplement: false,
   });
   const rejected = { ...pending, status: 'REJECTED' as const };
-  assert.deepEqual(documentReviewState([...docs, rejected], true, at), {
+  assert.deepEqual(documentReviewState([...docs, rejected], at), {
     submissionStatus: 'REVIEWED',
     needsSupplement: true,
   });
   assert.equal(
-    documentReviewState([...docs, { ...rejected, status: 'SUPERSEDED' }], true, at).needsSupplement,
+    documentReviewState([...docs, { ...rejected, status: 'SUPERSEDED' }], at).needsSupplement,
     false,
   );
   const expired = docs.map((doc) => ({ ...doc, expiresOn: '2026-10-17' }));
-  assert.equal(documentReviewState(expired, true, at).needsSupplement, true);
+  assert.equal(documentReviewState(expired, at).needsSupplement, true);
   assert.equal(
     documentReviewState(
       docs.map((doc) => ({ ...doc, status: 'PENDING' })),
-      true,
       at,
     ).needsSupplement,
     false,
   );
 });
-test('missing legacy documents, expiry, incomplete identity and manual suspension cannot permit Worker operations', async (t) => {
+test('legacy missing or expired documents and suspension block operations, incomplete identity is independent', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-18T00:00:00Z') });
   let documents = approved().map((d) => ({ ...d, expiresOn: '2099-01-01' }));
   let profile: Partial<WorkerComplianceProfileEntity> | null = null;
@@ -130,7 +81,6 @@ test('missing legacy documents, expiry, incomplete identity and manual suspensio
     getRepository(entity: unknown) {
       if (entity === WorkerComplianceProfileEntity) return { findOneBy: async () => profile };
       if (entity === WorkerDocumentEntity) return { findBy: async () => documents };
-      if (entity === WorkerIdentityImageEntity) return { countBy: async () => 2 };
       throw new Error('Unexpected repository');
     },
   } as unknown as EntityManager;
@@ -150,8 +100,6 @@ test('missing legacy documents, expiry, incomplete identity and manual suspensio
     gender: 'MALE',
     address: 'Synthetic address',
   };
-  await assert.rejects(requireWorkerDocuments(manager, worker), denied);
-  profile.phoneNumber = '0900000001';
   await requireWorkerDocuments(manager, worker);
   await assert.rejects(requireWorkerDocuments(manager, { ...worker, isActive: false }), denied);
 });
@@ -214,32 +162,4 @@ test('future issues and malformed dates cannot establish validity; uploads requi
   assert.throws(() =>
     validateWorkerDocument({ buffer, size: buffer.length + 1, mimetype: 'application/pdf' }),
   );
-});
-
-test('document adapters reject malformed IDs, invalid dates and unavailable engines', async () => {
-  const local = new LocalDocumentOcr(createTestConfig());
-  const adapter = new DocumentOcrService(local);
-  const bytes = Buffer.from('synthetic');
-  const identityResult = {
-    status: 'READ',
-    issuedOn: null,
-    expiresOn: null,
-    warnings: [],
-    nationalIds: ['012345678901', '012345678901'],
-  };
-  local.run = async () => identityResult;
-  assert.deepEqual((await adapter.read(bytes, 'image/jpeg')).nationalIds, ['012345678901']);
-  for (const nationalIds of [['123456789'], [123456789012], '012345678901']) {
-    local.run = async () => ({ ...identityResult, nationalIds });
-    assert.equal((await adapter.read(bytes, 'image/jpeg')).status, 'UNAVAILABLE');
-  }
-  local.run = async () => ({
-    status: 'READ',
-    issuedOn: '2026-02-30',
-    expiresOn: '2028-10-17',
-    warnings: [],
-  });
-  assert.equal((await adapter.read(bytes, 'image/jpeg')).status, 'UNAVAILABLE');
-  local.run = async () => null;
-  assert.equal((await adapter.read(bytes, 'image/jpeg')).status, 'UNAVAILABLE');
 });

@@ -106,6 +106,8 @@ export const MAIN_AUTHORITY_CUTOVER_RELEASE_FILES = [
   'modules/workforce/directory/contractor-operations.controller.ts',
   'modules/workforce/directory/contractor-worker-accounts.controller.ts',
   'modules/workforce/directory/contractor-worker-accounts.service.ts',
+  'modules/workforce/directory/worker-onboarding.controller.ts',
+  'modules/workforce/directory/worker-onboarding.service.ts',
   'modules/workforce/documents/worker-documents.controller.ts',
   'modules/workforce/documents/worker-documents.service.ts',
   'modules/workforce/directory/worker-assignment.controller.ts',

@@ -1,1276 +1,703 @@
-import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
-import { isWorkerDocumentDate } from '@smartsite/api-client';
-import { userErrorMessage } from '../../../i18n/messages';
-import { translate as tr, uiLanguage } from '../../../i18n';
-import { useTranslation } from 'react-i18next';
-import React, { useId, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  type WorkerResponse,
-  type WorkerDocumentKind,
-  type ContractorWorkerAccountResponse,
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import type {
+  SaveWorkerOnboardingDraftCommand,
+  SmartSiteManagementClient,
+  WorkerDocumentKind,
+  WorkerOnboardingBatchResult,
+  WorkerOnboardingDraft,
 } from '@smartsite/api-client';
-import { DocumentFileInputs, WorkerDocumentsPanel } from './WorkerDocumentsPanel';
-import { documentKinds, validDocumentFile } from './worker-document-files';
-import { DocumentMediaPicker } from './DocumentMediaPicker';
-import { useManagementClient, useAuth, useCurrentUser } from '../../../features/auth/auth-session';
-import { WorkerEnrollmentView } from '../../access/enrollment/WorkerEnrollmentView';
+import { useAuth, useCurrentUser, useManagementClient } from '../../../features/auth/auth-session';
+import { translate as tr, uiLanguage } from '../../../i18n';
+import { userErrorMessage } from '../../../i18n/messages';
+import { ActionDrawer } from '../../shared/ActionDrawer';
+import { WorksitePicker } from '../../shared/WorksitePicker';
+import { SmartDatePicker } from '../../ui';
+import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { loadAllPages } from '../load-all-pages';
+import { BatchDocumentAnalysis } from './BatchDocumentAnalysis';
 import {
-  IconAlertTriangle,
-  IconBuilding2,
-  IconCheck,
-  IconRefresh,
-  IconSearch,
-  IconShield,
-  IconUser,
-  IconUsers,
-} from '../../icons';
+  DocumentAttachmentInput,
+  DocumentFilePreview,
+  DocumentRequestError,
+  documentButton,
+  documentField,
+  documentPrimaryButton,
+} from './DocumentAttachmentInput';
+import { documentKinds } from './worker-document-files';
 
 export function WorkerOnboardingView({ apiUrl }: { apiUrl: string }) {
   useTranslation();
-
   const { accessToken } = useAuth();
   const profile = useCurrentUser(apiUrl);
   const client = useManagementClient(apiUrl);
   const [selectedSiteId, setSelectedSiteId] = useState('');
-  const user = profile.data;
   const siteIds =
-    user?.roleAssignments
-      .filter((r) => r.role === 'CONTRACTOR_REPRESENTATIVE')
-      .map((r) => r.siteId) ?? [];
-  const allowed = !!accessToken && !user?.mustChangePassword && siteIds.length > 0;
+    profile.data?.roleAssignments
+      .filter((role) => role.role === 'CONTRACTOR_REPRESENTATIVE')
+      .map((role) => role.siteId) ?? [];
+  const allowed = !!accessToken && !profile.data?.mustChangePassword && siteIds.length > 0;
+  const scope = apiUrl + ':' + (profile.data?.id ?? '');
   const sites = useQuery({
-    queryKey: ['worker-onboarding', apiUrl, user?.id, 'sites'],
+    queryKey: ['worker-onboarding', scope, 'sites'],
     enabled: allowed,
     queryFn: ({ signal }) =>
       loadAllPages((options) => client.listSites(accessToken!, options), signal),
   });
-  const choices = sites.data?.items.filter((s) => siteIds.includes(s.id)) ?? [];
-  const siteId = choices.some((s) => s.id === selectedSiteId)
+  const choices = sites.data?.items.filter((site) => siteIds.includes(site.id)) ?? [];
+  const siteId = choices.some((site) => site.id === selectedSiteId)
     ? selectedSiteId
     : (choices[0]?.id ?? '');
 
-  if (profile.isPending) {
-    return (
-      <div className="flex items-center justify-center p-12 text-slate-500 gap-3">
-        <IconRefresh className="w-5 h-5 animate-spin text-[#F66B17]" />
-        <p role="status" className="text-sm font-semibold">
-          {tr('common.loading_your_account_8fa5b7')}
-        </p>
-      </div>
-    );
+  if (profile.isError || sites.isError) {
+    const query = profile.isError ? profile : sites;
+    return <DocumentRequestError error={query.error} reload={() => void query.refetch()} />;
   }
-
-  if (profile.isError) {
-    return (
-      <div
-        role="alert"
-        className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800 flex flex-wrap items-center justify-between gap-4 shadow-xs"
-      >
-        <div className="flex items-center gap-3">
-          <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-          <span className="font-semibold">{tr('app.could_not_load_your_account')}</span>
-        </div>
-        <button
-          onClick={() => void profile.refetch()}
-          className="px-4 py-2 rounded-xl bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 transition-colors shadow-2xs"
-        >
-          {tr('common.retry')}
-        </button>
-      </div>
-    );
+  if (profile.isPending || (allowed && sites.isPending)) {
+    return <p role="status">{tr('common.loading')}</p>;
   }
-
-  if (!allowed) {
-    return (
-      <div
-        role="alert"
-        className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900 flex items-start gap-3 shadow-xs"
-      >
-        <IconShield className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-        <p className="font-medium leading-relaxed">
-          {tr(
-            'worker_onboarding_view.worker_onboarding_requires_a_contractor_representative_role_for_this_site_and_a_co',
-          )}
-        </p>
-      </div>
-    );
-  }
-
-  if (sites.isPending) {
-    return (
-      <div className="flex items-center justify-center p-12 text-slate-500 gap-3">
-        <IconRefresh className="w-5 h-5 animate-spin text-[#F66B17]" />
-        <p role="status" className="text-sm font-semibold">
-          {tr('common.loading_your_sites')}
-        </p>
-      </div>
-    );
-  }
-
-  if (sites.isError) {
-    return (
-      <div
-        role="alert"
-        className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800 flex flex-wrap items-center justify-between gap-4 shadow-xs"
-      >
-        <div className="flex items-center gap-3">
-          <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-          <span className="font-semibold">{tr('worker_onboarding_view.could_not_load_sites')}</span>
-        </div>
-        <button
-          onClick={() => void sites.refetch()}
-          className="px-4 py-2 rounded-xl bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 transition-colors shadow-2xs"
-        >
-          {tr('common.retry')}
-        </button>
-      </div>
-    );
-  }
+  if (!allowed) return <p role="alert">{tr('errors.forbidden')}</p>;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 pb-12">
-      {/* Hero Header */}
-      <header className="rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-[#041D2E] tracking-tight">
-              {tr('common.worker_onboarding')}
-            </h1>
-          </div>
-
-          {/* Site Selector Card */}
-          {choices.length > 0 && (
-            <div className="shrink-0 w-full sm:w-72 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3.5 space-y-1.5 shadow-2xs">
-              <label
-                htmlFor="worker-onboarding-site-select"
-                className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500"
-              >
-                <IconBuilding2 className="w-3.5 h-3.5 text-slate-400" />
-                <span>{tr('common.site_fa7955')}</span>
-              </label>
-              <SmartNativeSelect
-                id="worker-onboarding-site-select"
-                aria-label={tr('common.site_fa7955')}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-2xs focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all cursor-pointer"
-                value={siteId}
-                onChange={(e) => setSelectedSiteId(e.target.value)}
-              >
-                {choices.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </SmartNativeSelect>
-            </div>
-          )}
-        </div>
+    <section className="mx-auto max-w-7xl space-y-5 pb-10">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          {tr('workerIntake.title')}
+        </h1>
+        {siteId && (
+          <WorksitePicker
+            id="worker-intake-site-select"
+            value={siteId}
+            sites={choices}
+            onChange={setSelectedSiteId}
+          />
+        )}
       </header>
-
-      {!choices.length ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 space-y-2 shadow-xs">
-          <IconBuilding2 className="w-8 h-8 text-slate-400 mx-auto" />
-          <p role="status" className="text-sm font-semibold">
-            {tr('worker_onboarding_view.no_assigned_sites_are_available')}
-          </p>
-        </div>
+      {siteId ? (
+        <IntakeContractor
+          key={scope + ':' + siteId}
+          client={client}
+          token={accessToken!}
+          siteId={siteId}
+          scope={scope}
+        />
       ) : (
-        <>
-          {/* Worker Account Provisioning Form & Roster */}
-          <WorkerAccountForm
-            key={`${apiUrl}:${user!.id}:${siteId}`}
-            apiUrl={apiUrl}
-            token={accessToken!}
-            siteId={siteId}
-            sessionScope={user!.id}
-          />
-
-          {/* Worker Face Biometrics & Consent Enrollment */}
-          <WorkerEnrollmentView
-            key={`enrollment:${user!.id}:${siteId}`}
-            apiUrl={apiUrl}
-            token={accessToken!}
-            siteId={siteId}
-            sessionScope={user!.id}
-            canManageAccounts={false}
-          />
-        </>
-      )}
-    </div>
-  );
-}
-
-function WorkerAccountForm({
-  apiUrl,
-  token,
-  siteId,
-  sessionScope,
-}: {
-  apiUrl: string;
-  token: string;
-  siteId: string;
-  sessionScope: string;
-}) {
-  useTranslation();
-
-  const client = useManagementClient(apiUrl);
-  const cache = useQueryClient();
-  const options = useQuery({
-    queryKey: ['worker-onboarding', apiUrl, sessionScope, siteId, 'contractors'],
-    queryFn: () => client.contractorWorkerAccountOptions(token, siteId),
-  });
-  const [contractorId, setContractorId] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [nationalId, setNationalId] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER' | ''>('');
-  const [address, setAddress] = useState('');
-  const [safetyCardRequired, setSafetyCardRequired] = useState<'' | 'true' | 'false'>('');
-  const [submissionId, setSubmissionId] = useState(() => crypto.randomUUID());
-  const [identityFiles, setIdentityFiles] = useState<Partial<Record<'FRONT' | 'BACK', File>>>({});
-  const [files, setFiles] = useState<Partial<Record<WorkerDocumentKind, File>>>({});
-  const [expiries, setExpiries] = useState<Partial<Record<WorkerDocumentKind, string>>>({});
-  const [pendingVersion, setPendingVersion] = useState<number | null>(null);
-  const [pendingAccount, setPendingAccount] = useState<ContractorWorkerAccountResponse | null>(
-    null,
-  );
-  const [fileVersion, setFileVersion] = useState(0);
-  const [attempted, setAttempted] = useState(false);
-  const formId = useId();
-  const contractors = options.data?.contractors ?? [];
-  const selected = contractors.some((c) => c.id === contractorId)
-    ? contractorId
-    : (contractors[0]?.id ?? '');
-  const validationErrors: Record<string, string> = {};
-  for (const [key, value, label] of [
-    ['displayName', displayName, tr('common.full_name')],
-    ['username', username, tr('common.username')],
-    ['email', email, tr('worker_onboarding_view.email')],
-    ['nationalId', nationalId, tr('documents.nationalId')],
-    ['phoneNumber', phoneNumber, tr('documents.phoneNumber')],
-    ['gender', gender, tr('documents.gender')],
-    ['address', address, tr('documents.address')],
-    ['safetyCardRequired', safetyCardRequired, tr('documents.safetyCardRequired')],
-  ] as const) {
-    if (!value.trim())
-      validationErrors[key] = tr('worker_onboarding_view.missingField', { field: label });
-  }
-  if (username.trim() && !/^[a-zA-Z0-9][a-zA-Z0-9._-]{2,63}$/.test(username.trim()))
-    validationErrors.username = tr('worker_onboarding_view.invalidUsername');
-  if (
-    email.trim() &&
-    (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.trim().length > 254)
-  )
-    validationErrors.email = tr('worker_onboarding_view.invalidEmail');
-  if (nationalId && !/^[0-9]{12}$/.test(nationalId))
-    validationErrors.nationalId = tr('worker_onboarding_view.invalidNationalId');
-  if (phoneNumber && !/^\+?[0-9]{9,15}$/.test(phoneNumber))
-    validationErrors.phoneNumber = tr('worker_onboarding_view.invalidPhone');
-  for (const [key, value, label, max] of [
-    ['displayName', displayName, tr('common.full_name'), 255],
-    ['address', address, tr('documents.address'), 1000],
-  ] as const) {
-    if (value.trim().length > max || /[\p{Cc}\p{Cs}]/u.test(value.trim()))
-      validationErrors[key] = tr('worker_onboarding_view.invalidText', { field: label, max });
-  }
-  for (const side of ['FRONT', 'BACK'] as const)
-    if (!identityFiles[side])
-      validationErrors[side] = tr('worker_onboarding_view.missingField', {
-        field: tr(`documents.${side}`),
-      });
-  for (const kind of documentKinds) {
-    const required = kind !== 'SAFETY_CARD' || safetyCardRequired !== 'false';
-    if (required && !files[kind])
-      validationErrors[`${kind}-file`] = tr('worker_onboarding_view.missingField', {
-        field: tr(`documents.${kind}`),
-      });
-    if ((required || files[kind]) && !isWorkerDocumentDate(expiries[kind]))
-      validationErrors[`${kind}-date`] = tr('worker_onboarding_view.invalidDocumentDate', {
-        field: tr(`documents.${kind}`),
-      });
-  }
-  const invalidFields = [
-    'displayName',
-    'username',
-    'email',
-    'nationalId',
-    'phoneNumber',
-    'gender',
-    'address',
-    'FRONT',
-    'BACK',
-    'safetyCardRequired',
-    ...documentKinds.flatMap((kind) => [`${kind}-date`, `${kind}-file`]),
-  ].filter((key) => !!validationErrors[key]);
-  const visibleErrors = attempted ? validationErrors : {};
-  const fieldId = (key: string) => `${formId}-${key}`;
-  const feedback = (key: string, label: string) => ({
-    id: fieldId(key),
-    'aria-label': label,
-    'aria-invalid': visibleErrors[key] ? true : undefined,
-    'aria-describedby': visibleErrors[key] ? `${fieldId(key)}-error` : undefined,
-  });
-  const fieldError = (key: string) =>
-    visibleErrors[key] ? (
-      <span
-        id={`${fieldId(key)}-error`}
-        className="mt-2 block text-xs font-medium normal-case leading-5 tracking-normal text-rose-700"
-      >
-        {visibleErrors[key]}
-      </span>
-    ) : null;
-  const focusField = (key: string) => {
-    const element = document.getElementById(fieldId(key));
-    element?.focus({ preventScroll: true });
-    element?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-  };
-  const validateImage = async (file: File) => {
-    const result = await client.checkDocumentImageQuality(token, siteId, selected, file);
-    return result;
-  };
-
-  const create = useMutation({
-    mutationFn: async () => {
-      const recipient = email.trim().toLowerCase();
-      const firstError = invalidFields[0] ? validationErrors[invalidFields[0]] : undefined;
-      if (firstError || !gender)
-        throw new Error(
-          firstError ??
-            tr('worker_onboarding_view.missingField', { field: tr('documents.gender') }),
-        );
-      for (const file of Object.values(files))
-        if (file && !validDocumentFile(file)) throw new Error(tr('documents.invalidFile'));
-      const account =
-        pendingAccount ??
-        (await client.createContractorWorkerAccount(token, selected, {
-          siteId,
-          displayName: displayName.trim(),
-          username: username.trim().toLowerCase(),
-          email: recipient,
-          language: uiLanguage(),
-          nationalId,
-          phoneNumber,
-          gender,
-          address: address.trim(),
-        }));
-      setPendingAccount(account);
-      const current = await client.workerCompliance(token, siteId, account.worker.id);
-      const expectedVersion = pendingVersion ?? current.version ?? 0;
-      setPendingVersion(expectedVersion);
-      const documents: import('@smartsite/api-client').SubmitWorkerDocumentsCommand['documents'] =
-        {};
-      for (const kind of documentKinds)
-        if (files[kind])
-          documents[kind] =
-            kind === 'HEALTH_CERTIFICATE'
-              ? { submittedIssuedOn: expiries[kind]! }
-              : { submittedExpiresOn: expiries[kind]! };
-      await client.submitWorkerDocuments(
-        token,
-        siteId,
-        account.worker.id,
-        {
-          requestId: submissionId,
-          expectedVersion,
-          safetyCardRequired: safetyCardRequired === 'true',
-          documents,
-        },
-        { ...files, ...identityFiles },
-      );
-      return account;
-    },
-    onSuccess: () => {
-      setAttempted(false);
-      setDisplayName('');
-      setUsername('');
-      setEmail('');
-      setNationalId('');
-      setPhoneNumber('');
-      setFiles({});
-      setExpiries({});
-      setPendingAccount(null);
-      setPendingVersion(null);
-      setFileVersion((v) => v + 1);
-      setSafetyCardRequired('');
-      setSubmissionId(crypto.randomUUID());
-      setGender('');
-      setAddress('');
-      setIdentityFiles({});
-      void cache.invalidateQueries({ queryKey: ['access-control', apiUrl, sessionScope, siteId] });
-      void cache.invalidateQueries({ queryKey: ['workers', siteId] });
-      void cache.invalidateQueries({
-        queryKey: ['worker-onboarding', apiUrl, sessionScope, siteId, 'workers'],
-      });
-    },
-  });
-
-  const field =
-    'mt-1.5 block w-full rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all aria-[invalid=true]:border-rose-400 aria-[invalid=true]:bg-rose-50/40';
-
-  if (options.isPending) {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-xs flex items-center justify-center gap-3">
-        <IconRefresh className="w-5 h-5 animate-spin text-[#F66B17]" />
-        <p role="status" className="text-sm font-semibold">
-          {tr('common.loading_your_contractors')}
-        </p>
-      </div>
-    );
-  }
-
-  if (options.isError) {
-    return (
-      <div
-        role="alert"
-        className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-800 flex flex-wrap items-center justify-between gap-4 shadow-xs"
-      >
-        <div className="flex items-center gap-3">
-          <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-          <span className="font-semibold">
-            {tr('worker_onboarding_view.could_not_load_your_contractors')}
-          </span>
-        </div>
-        <button
-          onClick={() => void options.refetch()}
-          className="px-4 py-2 rounded-xl bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 transition-colors shadow-2xs"
-        >
-          {tr('common.retry')}
-        </button>
-      </div>
-    );
-  }
-
-  if (!contractors.length) {
-    return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900 shadow-xs flex items-start gap-3">
-        <IconAlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-        <p role="status" className="font-medium leading-relaxed">
-          {tr(
-            'worker_onboarding_view.no_active_contractor_participation_is_assigned_to_you_at_this_site_contact_your_si',
-          )}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-8">
-      {/* Registration Section Card */}
-      <section className="space-y-6 rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs">
-        {/* Section Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-5">
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-[#F66B17] border border-orange-200/70 shadow-2xs">
-              <IconUser className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black text-[#041D2E] tracking-tight">
-                {tr('common.create_worker_account')}
-              </h2>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                {tr(
-                  'worker_onboarding_view.the_account_receives_the_worker_role_at_this_site_and_can_sign_in_immediately_pass',
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Creation Form */}
-        <form
-          noValidate
-          className="space-y-6"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (create.isPending || !selected) return;
-            setAttempted(true);
-            const firstInvalid = invalidFields[0];
-            if (firstInvalid) {
-              focusField(firstInvalid);
-              return;
-            }
-            create.mutate();
-          }}
-        >
-          <fieldset disabled={create.isPending} className="grid gap-5 xl:grid-cols-2">
-            {/* Step 1: Đơn vị nhà thầu & Tài khoản đăng nhập */}
-            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-              <div className="flex items-center gap-3 pb-3 border-b border-slate-200/70">
-                <div className="w-7 h-7 rounded-lg bg-orange-100 text-[#F66B17] flex items-center justify-center font-black text-xs">
-                  1
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#041D2E]">
-                    {tr('common.contractor')} & {tr('common.account')}
-                  </h3>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  {tr('common.contractor')}
-                  <SmartNativeSelect
-                    className={field}
-                    value={selected}
-                    disabled={!!pendingAccount}
-                    onChange={(e) => setContractorId(e.target.value)}
-                  >
-                    {contractors.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </SmartNativeSelect>
-                </label>
-
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  {tr('common.full_name')}
-                  <input
-                    {...feedback('displayName', tr('common.full_name'))}
-                    className={field}
-                    required
-                    maxLength={255}
-                    autoComplete="name"
-                    placeholder={tr('common.full_name')}
-                    value={displayName}
-                    disabled={!!pendingAccount}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                  />
-                  {fieldError('displayName')}
-                </label>
-
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 sm:col-span-2">
-                  {tr('common.username')}
-                  <input
-                    {...feedback('username', tr('common.username'))}
-                    className={field}
-                    required
-                    minLength={3}
-                    maxLength={64}
-                    pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{2,63}"
-                    autoComplete="off"
-                    placeholder={tr('common.username')}
-                    value={username}
-                    disabled={!!pendingAccount}
-                    onChange={(e) => setUsername(e.target.value)}
-                  />
-                  {fieldError('username')}
-                </label>
-              </div>
-
-              {/* Password credentials callout */}
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                {tr('worker_onboarding_view.email')}
-                <input
-                  {...feedback('email', tr('worker_onboarding_view.email'))}
-                  className={field}
-                  type="email"
-                  aria-label={tr('worker_onboarding_view.email')}
-                  aria-describedby={[
-                    'worker-onboarding-email-hint',
-                    visibleErrors.email ? `${fieldId('email')}-error` : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  required
-                  maxLength={254}
-                  autoComplete="email"
-                  value={email}
-                  disabled={!!pendingAccount}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-                {fieldError('email')}
-                <span
-                  id="worker-onboarding-email-hint"
-                  className="mt-2 block text-xs font-medium normal-case tracking-normal text-slate-500"
-                >
-                  {tr('worker_onboarding_view.emailHint')}
-                </span>
-              </label>
-              <p className="text-xs leading-5 text-slate-500">{tr('documents.accountHint')}</p>
-            </div>
-
-            {/* Step 2: Thông tin định danh & Liên hệ */}
-            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-              <div className="flex items-center gap-3 pb-3 border-b border-slate-200/70">
-                <div className="w-7 h-7 rounded-lg bg-orange-100 text-[#F66B17] flex items-center justify-center font-black text-xs">
-                  2
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#041D2E]">
-                    {tr('documents.nationalId')} & {tr('documents.address')}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    {tr(
-                      'worker_onboarding_view.worker_onboarding_requires_a_contractor_representative_role_for_this_site_and_a_co',
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  {tr('documents.nationalId')}
-                  <input
-                    {...feedback('nationalId', tr('documents.nationalId'))}
-                    className={field}
-                    required
-                    inputMode="numeric"
-                    maxLength={12}
-                    pattern="[0-9]{12}"
-                    placeholder="000000000000"
-                    value={nationalId}
-                    disabled={!!pendingAccount}
-                    onChange={(e) => setNationalId(e.target.value.trim())}
-                  />
-                  {fieldError('nationalId')}
-                </label>
-
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  {tr('documents.phoneNumber')}
-                  <input
-                    {...feedback('phoneNumber', tr('documents.phoneNumber'))}
-                    className={field}
-                    required
-                    type="tel"
-                    maxLength={16}
-                    pattern="\+?[0-9]{9,15}"
-                    placeholder="0901234567"
-                    value={phoneNumber}
-                    disabled={!!pendingAccount}
-                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\s/g, ''))}
-                  />
-                  {fieldError('phoneNumber')}
-                </label>
-
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 sm:col-span-2">
-                  {tr('documents.gender')}
-                  <SmartNativeSelect
-                    {...feedback('gender', tr('documents.gender'))}
-                    className={field}
-                    required
-                    disabled={!!pendingAccount}
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value as typeof gender)}
-                  >
-                    <option value="">{tr('documents.chooseGender')}</option>
-                    {(['MALE', 'FEMALE', 'OTHER'] as const).map((value) => (
-                      <option key={value} value={value}>
-                        {tr(`documents.${value}`)}
-                      </option>
-                    ))}
-                  </SmartNativeSelect>
-                  {fieldError('gender')}
-                </label>
-
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 sm:col-span-2">
-                  {tr('documents.address')}
-                  <textarea
-                    {...feedback('address', tr('documents.address'))}
-                    className={`${field} min-h-[72px] resize-y`}
-                    required
-                    maxLength={1000}
-                    placeholder={tr('documents.address')}
-                    value={address}
-                    disabled={!!pendingAccount}
-                    onChange={(e) => setAddress(e.target.value)}
-                  />
-                  {fieldError('address')}
-                </label>
-              </div>
-            </div>
-
-            {/* Step 3: Căn cước công dân & Hồ sơ an toàn */}
-            <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5 xl:col-span-2">
-              <div className="flex items-center gap-3 pb-3 border-b border-slate-200/70">
-                <div className="w-7 h-7 rounded-lg bg-orange-100 text-[#F66B17] flex items-center justify-center font-black text-xs">
-                  3
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#041D2E]">{tr('documents.title')}</h3>
-                  <p className="text-xs text-slate-500">{tr('documents.hint')}</p>
-                </div>
-              </div>
-
-              {/* CCCD Front & Back */}
-              <div className="space-y-2">
-                <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  {tr('documents.nationalId')} (2 {tr('common.details').toLowerCase()})
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {(['FRONT', 'BACK'] as const).map((side) => (
-                    <DocumentMediaPicker
-                      inputId={fieldId(side)}
-                      fieldError={visibleErrors[side]}
-                      key={`${fileVersion}:${side}`}
-                      label={tr(`documents.${side}`)}
-                      allowPdf={false}
-                      referenceNationalId={nationalId}
-                      file={identityFiles[side]}
-                      validate={validateImage}
-                      onSelect={(file) => {
-                        setIdentityFiles((previous) => ({ ...previous, [side]: file }));
-                        setSubmissionId(crypto.randomUUID());
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* 3 Safety & Health Documents */}
-              <div className="space-y-4 border-t border-slate-200/70 pt-4">
-                <label className="block space-y-2 text-sm font-semibold text-slate-700">
-                  <span>{tr('documents.safetyCardRequired')}</span>
-                  <SmartNativeSelect
-                    {...feedback('safetyCardRequired', tr('documents.safetyCardRequired'))}
-                    required
-                    className={field}
-                    value={safetyCardRequired}
-                    disabled={create.isPending}
-                    onChange={(event) => {
-                      setSafetyCardRequired(event.target.value as typeof safetyCardRequired);
-                      setSubmissionId(crypto.randomUUID());
-                    }}
-                  >
-                    <option value="">—</option>
-                    <option value="true">{tr('documents.cardRequired')}</option>
-                    <option value="false">{tr('documents.cardNotRequired')}</option>
-                  </SmartNativeSelect>
-                  {fieldError('safetyCardRequired')}
-                </label>
-                <DocumentFileInputs
-                  inputIdPrefix={formId}
-                  validationErrors={visibleErrors}
-                  key={fileVersion}
-                  nationalId={nationalId}
-                  safetyCardRequired={safetyCardRequired !== 'false'}
-                  files={files}
-                  expiries={expiries}
-                  onExpiryChange={(kind, value, preserveExisting) => {
-                    setExpiries((previous) => ({
-                      ...previous,
-                      [kind]: preserveExisting ? previous[kind] || value : value,
-                    }));
-                    setSubmissionId(crypto.randomUUID());
-                  }}
-                  validate={validateImage}
-                  onChange={(kind, file) => {
-                    setFiles((previous) => ({ ...previous, [kind]: file }));
-                    setSubmissionId(crypto.randomUUID());
-                  }}
-                />
-              </div>
-            </div>
-
-            {pendingAccount && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-900 shadow-2xs flex items-center gap-2.5">
-                <IconAlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <p>{tr('documents.accountPending')}</p>
-              </div>
-            )}
-
-            {/* Submit Action Bar */}
-            {attempted && Object.keys(validationErrors).length > 0 && (
-              <div
-                role="alert"
-                aria-label={tr('worker_onboarding_view.validationTitle')}
-                className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 text-sm text-rose-800 xl:col-span-2"
-              >
-                <p className="font-semibold">{tr('worker_onboarding_view.validationTitle')}</p>
-                <ul className="mt-3 grid gap-x-5 gap-y-2 sm:grid-cols-2">
-                  {invalidFields.map((key) => (
-                    <li key={key} className="flex min-w-0 items-start gap-2 text-xs leading-5">
-                      <span
-                        aria-hidden="true"
-                        className="mt-2 h-1 w-1 shrink-0 rounded-full bg-rose-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => focusField(key)}
-                        className="min-w-0 flex-1 text-left underline decoration-rose-300 underline-offset-2 [overflow-wrap:anywhere] hover:decoration-rose-700 focus-visible:outline-2 focus-visible:outline-rose-500"
-                      >
-                        {validationErrors[key]}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="grid w-full gap-4 border-t border-slate-100 pt-5 xl:col-span-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-slate-500">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${
-                      displayName.trim() &&
-                      username.trim() &&
-                      nationalId &&
-                      phoneNumber &&
-                      gender &&
-                      address.trim()
-                        ? 'bg-emerald-500'
-                        : 'bg-slate-300'
-                    }`}
-                  />
-                  <span>
-                    {tr('common.full_name')} & {tr('common.username')}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${
-                      identityFiles.FRONT &&
-                      identityFiles.BACK &&
-                      documentKinds
-                        .filter((kind) => kind !== 'SAFETY_CARD' || safetyCardRequired === 'true')
-                        .every((kind) => !!files[kind])
-                        ? 'bg-emerald-500'
-                        : 'bg-slate-300'
-                    }`}
-                  />
-                  <span>{tr('documents.title')}</span>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="flex min-h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#F66B17] px-8 py-3 text-sm font-bold text-white shadow-xs transition-all hover:bg-[#E05A0B] hover:shadow-sm active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 md:min-w-64 md:w-auto"
-                disabled={!selected || create.isPending}
-              >
-                {create.isPending ? (
-                  <>
-                    <IconRefresh className="w-4 h-4 animate-spin" />
-                    <span>{tr('common.creating')}</span>
-                  </>
-                ) : (
-                  <>
-                    <IconCheck className="w-4 h-4" />
-                    <span>{tr('documents.sendBundle')}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </fieldset>
-        </form>
-
-        {/* Error Banner */}
-        {create.isError && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 sm:p-5 shadow-xs">
-            <div className="flex items-start gap-3">
-              <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-red-900">
-                  {tr('common.error')}
-                </p>
-                <p role="alert" className="text-sm font-semibold text-red-800 mt-0.5">
-                  {userErrorMessage(create.error)}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Success Notification Banner */}
-        {create.isSuccess && (
-          <div className="rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50/90 to-emerald-100/50 p-6 shadow-xs">
-            <div className="flex items-start gap-4">
-              <div className="h-10 w-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
-                <IconCheck className="w-6 h-6" />
-              </div>
-              <div className="space-y-3 flex-1">
-                <div>
-                  <h4 className="text-base font-black text-emerald-950">{tr('documents.saved')}</h4>
-                  <p
-                    role="status"
-                    className="text-xs leading-relaxed text-emerald-900 font-medium mt-1"
-                  >
-                    {tr('worker_onboarding_view.createdWithEmail', {
-                      username: create.data.account.username,
-                      email: create.data.account.email ?? '',
-                    })}{' '}
-                    {tr('worker_onboarding_view.then_register_their_face_below_worker_code')}{' '}
-                    <strong className="font-mono bg-white px-1.5 py-0.5 rounded border border-emerald-200 text-emerald-950 font-bold">
-                      {create.data.worker.externalId}
-                    </strong>
-                    .
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 text-xs pt-1">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-emerald-200 font-semibold text-emerald-900 shadow-2xs">
-                    👤 {create.data.worker.displayName}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-emerald-200 font-mono font-bold text-emerald-900 shadow-2xs">
-                    🏷️ {create.data.worker.externalId}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white border border-emerald-200 font-mono font-bold text-emerald-900 shadow-2xs">
-                    {create.data.account.email}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Standalone Contractor Worker Roster Section */}
-      <ContractorWorkerRoster
-        key={selected}
-        apiUrl={apiUrl}
-        token={token}
-        siteId={siteId}
-        sessionScope={sessionScope}
-        contractorId={selected}
-      />
-    </div>
-  );
-}
-
-function ContractorWorkerRoster({
-  apiUrl,
-  token,
-  siteId,
-  sessionScope,
-  contractorId,
-}: {
-  apiUrl: string;
-  token: string;
-  siteId: string;
-  sessionScope: string;
-  contractorId: string;
-}) {
-  useTranslation();
-
-  const client = useManagementClient(apiUrl);
-  const [search, setSearch] = useState('');
-  const [editingId, setEditingId] = useState('');
-  const workers = useQuery({
-    queryKey: ['worker-onboarding', apiUrl, sessionScope, siteId, 'workers'],
-    queryFn: ({ signal }) =>
-      loadAllPages((options) => client.listWorkers(token, siteId, options), signal),
-  });
-
-  const ownedWorkers = workers.data?.items.filter((w) => w.contractorId === contractorId) ?? [];
-  const term = search.trim().toLocaleLowerCase();
-  const filtered = ownedWorkers.filter((w) =>
-    `${w.externalId} ${w.displayName}`.toLocaleLowerCase().includes(term),
-  );
-
-  return (
-    <section className="rounded-2xl border border-slate-200/90 bg-white p-6 sm:p-8 shadow-xs space-y-6">
-      {/* Roster Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-        <div className="flex items-center gap-3.5">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 border border-blue-200/70 shadow-2xs">
-            <IconUsers className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-xl sm:text-2xl font-black text-[#041D2E] tracking-tight">
-                {tr('common.your_contractor_s_workers')}
-              </h2>
-              <span className="rounded-full bg-blue-100 text-blue-800 px-2.5 py-0.5 text-xs font-bold font-mono">
-                {ownedWorkers.length}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              {tr(
-                'worker_onboarding_view.workers_belonging_to_the_selected_contractor_at_this_site_including_those_created',
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* Refresh button */}
-        <button
-          type="button"
-          onClick={() => void workers.refetch()}
-          disabled={workers.isFetching}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-all shadow-2xs self-start sm:self-auto cursor-pointer"
-        >
-          <IconRefresh
-            className={`w-3.5 h-3.5 ${workers.isFetching ? 'animate-spin text-[#F66B17]' : 'text-slate-500'}`}
-          />
-          <span>{tr('common.refresh')}</span>
-        </button>
-      </div>
-
-      {workers.isPending ? (
-        <div className="p-12 text-center text-slate-500 flex items-center justify-center gap-3">
-          <IconRefresh className="w-5 h-5 animate-spin text-[#F66B17]" />
-          <p role="status" className="text-sm font-semibold">
-            {tr('common.loading_workers_52a28c')}
-          </p>
-        </div>
-      ) : workers.isError ? (
-        <div
-          role="alert"
-          className="rounded-2xl border border-red-200 bg-red-50 p-4 sm:p-5 text-sm font-semibold text-red-800 flex items-center justify-between gap-4 shadow-xs"
-        >
-          <div className="flex items-center gap-2.5">
-            <IconAlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-            <span>{tr('worker_onboarding_view.could_not_load_workers')}</span>
-          </div>
-          <button
-            onClick={() => void workers.refetch()}
-            className="px-4 py-2 rounded-xl bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100 transition-colors shadow-2xs"
-          >
-            {tr('common.retry')}
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Search Box */}
-          <div className="relative">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-              {tr('worker_onboarding_view.search_workers_by_code_or_name')}
-              <div className="relative mt-1.5">
-                <IconSearch className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:border-[#F66B17] focus:bg-white focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all shadow-2xs"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  type="search"
-                  placeholder={tr('worker_onboarding_view.search_workers_by_code_or_name')}
-                />
-              </div>
-            </label>
-          </div>
-
-          {!ownedWorkers.length ? (
-            <div className="p-12 rounded-2xl border border-slate-200/80 bg-slate-50/50 text-center text-slate-500 space-y-2">
-              <IconUsers className="w-8 h-8 text-slate-400 mx-auto" />
-              <p role="status" className="text-sm font-semibold">
-                {tr('worker_onboarding_view.no_workers_belong_to_this_contractor_at_this_site_yet')}
-              </p>
-            </div>
-          ) : !filtered.length ? (
-            <div className="p-12 rounded-2xl border border-slate-200/80 bg-slate-50/50 text-center text-slate-500 space-y-1">
-              <IconSearch className="w-6 h-6 text-slate-400 mx-auto mb-1" />
-              <p role="status" className="text-sm font-semibold">
-                {tr('worker_onboarding_view.no_workers_match_your_search')}
-              </p>
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {filtered.map((worker) => (
-                <li
-                  key={worker.id}
-                  className="p-4 sm:p-5 rounded-2xl border border-slate-200/80 bg-white hover:border-slate-300 hover:shadow-2xs transition-all space-y-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200/70 border border-slate-200 flex items-center justify-center font-extrabold text-sm text-[#041D2E] shrink-0 shadow-2xs">
-                        {worker.displayName.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 break-words space-y-0.5">
-                        <p className="font-bold text-sm text-slate-900 leading-tight">
-                          {worker.displayName}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200/80">
-                            {worker.externalId}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold border ${
-                          worker.isActive && worker.documentStatus === 'ACTIVE'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border-amber-200'
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${worker.isActive && worker.documentStatus === 'ACTIVE' ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                        />
-                        {!worker.isActive
-                          ? tr('common.suspended')
-                          : worker.documentStatus === 'ACTIVE'
-                            ? tr('common.active')
-                            : tr(`documents.${worker.documentStatus ?? 'PENDING'}`)}
-                      </span>
-
-                      <span
-                        className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold border ${
-                          worker.userId
-                            ? 'bg-blue-50 text-blue-700 border-blue-200'
-                            : 'bg-slate-50 text-slate-500 border-slate-200'
-                        }`}
-                      >
-                        {worker.userId
-                          ? tr('common.login_account_linked')
-                          : tr('worker_onboarding_view.no_login_account_linked')}
-                      </span>
-
-                      <button
-                        className="rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 px-4 py-1.5 text-xs font-bold transition-all shadow-2xs hover:shadow-xs cursor-pointer ml-1 active:scale-95"
-                        onClick={() => setEditingId(editingId === worker.id ? '' : worker.id)}
-                        aria-label={tr('common.manage_value', { value1: worker.displayName })}
-                      >
-                        {tr('common.manage')}
-                      </button>
-                    </div>
-                  </div>
-
-                  {editingId === worker.id && (
-                    <WorkerProfileForm
-                      key={worker.id}
-                      apiUrl={apiUrl}
-                      token={token}
-                      worker={worker}
-                      sessionScope={sessionScope}
-                      onClose={() => setEditingId('')}
-                    />
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <p role="status">{tr('worker_onboarding_view.no_assigned_sites_are_available')}</p>
       )}
     </section>
   );
 }
 
-function WorkerProfileForm({
-  apiUrl,
-  token,
-  worker,
-  sessionScope,
-  onClose,
-}: {
-  apiUrl: string;
+type IntakeScope = {
+  client: SmartSiteManagementClient;
   token: string;
-  worker: WorkerResponse;
-  sessionScope: string;
-  onClose: () => void;
-}) {
-  useTranslation();
+  siteId: string;
+  scope: string;
+};
 
-  const client = useManagementClient(apiUrl);
+function IntakeContractor(p: IntakeScope) {
+  const [selected, setSelected] = useState('');
+  const options = useQuery({
+    queryKey: ['worker-onboarding', p.scope, p.siteId, 'contractors'],
+    queryFn: () => p.client.contractorWorkerAccountOptions(p.token, p.siteId),
+  });
+  const contractors = options.data?.contractors ?? [];
+  const contractorId = contractors.some((item) => item.id === selected)
+    ? selected
+    : (contractors[0]?.id ?? '');
+  if (options.isPending) return <p role="status">{tr('common.loading_your_contractors')}</p>;
+  if (options.isError) {
+    return <DocumentRequestError error={options.error} reload={() => void options.refetch()} />;
+  }
+  if (!contractorId) {
+    return (
+      <p role="status">
+        {tr(
+          'worker_onboarding_view.no_active_contractor_participation_is_assigned_to_you_at_this_site_contact_your_si',
+        )}
+      </p>
+    );
+  }
+  return (
+    <IntakeTable
+      key={contractorId}
+      {...p}
+      contractorId={contractorId}
+      contractors={contractors}
+      onContractorChange={setSelected}
+    />
+  );
+}
+
+function batchError(code: string | undefined) {
+  if (code === 'CONFLICT' || code === 'USERNAME_CONFLICT' || code === 'EMAIL_CONFLICT')
+    return tr('errors.conflict');
+  if (code === 'FORBIDDEN') return tr('errors.forbidden');
+  if (code === 'NOT_FOUND') return tr('errors.notFound');
+  if (code === 'VALIDATION_FAILED' || code === 'BAD_REQUEST') return tr('errors.validation');
+  return tr('errors.unexpected');
+}
+
+function IntakeTable(
+  p: IntakeScope & {
+    contractorId: string;
+    contractors: { id: string; name: string }[];
+    onContractorChange: (id: string) => void;
+  },
+) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const [results, setResults] = useState<Record<string, WorkerOnboardingBatchResult>>({});
+  const [editing, setEditing] = useState<{ formId: string; draft?: WorkerOnboardingDraft }>();
   const cache = useQueryClient();
-  const [original] = useState(worker);
-  const [displayName, setDisplayName] = useState(worker.displayName);
-  const [isActive, setIsActive] = useState(worker.isActive);
-  const queryKey = ['worker-onboarding', apiUrl, sessionScope, worker.siteId, 'workers'];
-
-  const update = useMutation({
-    mutationFn: () =>
-      client.updateContractorWorker(token, worker.siteId, worker.contractorId!, worker.id, {
-        externalId: original.externalId,
-        displayName: displayName.trim(),
-        isActive,
-        expectedSnapshot: {
-          externalId: original.externalId,
-          displayName: original.displayName,
-          isActive: original.isActive,
-        },
-      }),
-    onSuccess: () => {
-      void cache.invalidateQueries({ queryKey });
-      void cache.invalidateQueries({
-        queryKey: ['access-control', apiUrl, sessionScope, worker.siteId],
-      });
-      void cache.invalidateQueries({ queryKey: ['workers', worker.siteId] });
-      onClose();
+  const key = ['worker-intake-drafts', p.scope, p.siteId, p.contractorId];
+  const query = useQuery({
+    queryKey: key,
+    queryFn: () => p.client.listWorkerOnboardingDrafts(p.token, p.siteId, p.contractorId),
+  });
+  const rows = query.data?.items ?? [];
+  const chosen = rows.filter((row) => selected.includes(row.id));
+  const provisionable = chosen.filter((row) => row.canProvision);
+  const sendable = chosen.filter(
+    (row) => row.canSubmit && row.workerId && row.workerVersion !== null,
+  );
+  const selectedAll = rows.length > 0 && rows.every((row) => selected.includes(row.id));
+  const batch = useMutation({
+    mutationFn: async (operation: 'provision' | 'send') => {
+      const attempted = operation === 'provision' ? provisionable : sendable;
+      const rows =
+        operation === 'provision'
+          ? attempted.map(({ id, version }) => ({ id, version }))
+          : attempted.map(({ workerId, workerVersion }) => ({
+              id: workerId!,
+              version: workerVersion!,
+            }));
+      const items: WorkerOnboardingBatchResult[] = [];
+      for (let offset = 0; offset < rows.length; offset += 50) {
+        const batchRows = rows.slice(offset, offset + 50);
+        try {
+          const result =
+            operation === 'provision'
+              ? await p.client.provisionWorkerOnboardingBatch(
+                  p.token,
+                  p.siteId,
+                  p.contractorId,
+                  batchRows,
+                )
+              : await p.client.sendWorkerDocumentsBatch(
+                  p.token,
+                  p.siteId,
+                  p.contractorId,
+                  batchRows,
+                );
+          items.push(...result.items);
+        } catch (error) {
+          if (!items.length) throw error;
+          items.push(...rows.slice(offset).map(({ id }) => ({ id, status: 'FAILED' as const })));
+          break;
+        }
+      }
+      return { items, attempted };
+    },
+    onSuccess: ({ items, attempted }, operation) => {
+      const next: Record<string, WorkerOnboardingBatchResult> = {};
+      for (const row of attempted) {
+        const item = items.find(
+          ({ id }) => id === (operation === 'provision' ? row.id : row.workerId),
+        );
+        if (item) next[row.id] = item;
+      }
+      setResults((current) => ({ ...current, ...next }));
+      setSelected((current) => current.filter((id) => next[id]?.status !== 'SUCCEEDED'));
+      void cache.invalidateQueries({ queryKey: key });
+      void cache.invalidateQueries({ queryKey: ['worker-documents'] });
+      void cache.invalidateQueries({ queryKey: ['worker-document-queue'] });
+      void cache.invalidateQueries({ queryKey: ['worker-roster'] });
     },
   });
-
-  const field =
-    'mt-1.5 block w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-800 focus:border-[#F66B17] focus:ring-2 focus:ring-[#F66B17]/15 focus:outline-none transition-all';
+  const openNew = () => setEditing({ formId: crypto.randomUUID() });
+  const close = () => setEditing(undefined);
 
   return (
-    <form
-      className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/90 p-4 sm:p-5 shadow-2xs"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!update.isPending && displayName.trim()) update.mutate();
-      }}
-    >
-      <fieldset className="grid gap-3 sm:grid-cols-2" disabled={update.isPending}>
-        <div className="sm:col-span-2 flex items-center justify-between border-b border-slate-200/70 pb-2">
-          <p className="text-xs font-bold text-slate-700">
-            {tr('common.worker_code_value', { value1: original.externalId })}
-          </p>
-        </div>
-
-        <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-          {tr('common.edit_full_name')}
-          <input
-            className={field}
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            required
-            maxLength={255}
-          />
-        </label>
-
-        <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-          {tr('common.worker_status')}
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <label className="grid w-full max-w-xs gap-1 text-sm font-medium text-slate-700">
+          {tr('common.contractor')}
           <SmartNativeSelect
-            className={field}
-            value={isActive ? 'active' : 'suspended'}
-            onChange={(event) => setIsActive(event.target.value === 'active')}
+            className={documentField}
+            value={p.contractorId}
+            onChange={(event) => p.onContractorChange(event.target.value)}
           >
-            <option value="active">{tr('common.active')}</option>
-            <option value="suspended">{tr('common.suspended')}</option>
+            {p.contractors.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
           </SmartNativeSelect>
         </label>
-
-        <p className="text-xs text-slate-500 sm:col-span-2 leading-relaxed">
-          {tr(
-            'worker_onboarding_view.suspension_prevents_gate_access_and_keeps_the_worker_s_history_restoring_a_worker',
-          )}
-        </p>
-
-        <div className="sm:col-span-2 flex flex-wrap gap-2 pt-1">
-          <button
-            className="rounded-xl bg-[#F66B17] hover:bg-[#E05A0B] px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:shadow-sm transition-all cursor-pointer disabled:opacity-50"
-            type="submit"
-            disabled={update.isPending || !displayName.trim()}
+        <div className="flex flex-wrap gap-2">
+          <Link
+            className={documentButton}
+            to={'/worker-documents?' + new URLSearchParams({ siteId: p.siteId })}
           >
-            {update.isPending ? tr('common.saving') : tr('common.save_worker_profile')}
-          </button>
+            {tr('workerIntake.recordTitle')}
+          </Link>
           <button
-            className="rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2.5 text-xs font-bold transition-all shadow-2xs cursor-pointer"
             type="button"
-            onClick={onClose}
+            className={documentPrimaryButton}
+            disabled={batch.isPending}
+            onClick={openNew}
           >
-            {tr('common.cancel')}
+            {tr('workerIntake.add')}
           </button>
         </div>
-      </fieldset>
-
-      {update.isError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 flex items-center justify-between gap-3 text-xs text-red-800">
-          <p role="alert" className="font-semibold">
-            {userErrorMessage(update.error)}
+      </div>
+      <div className="min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span aria-live="polite" className="mx-1 text-sm text-slate-600">
+            {tr('workerIntake.selected', { count: chosen.length })}
+          </span>
+          <button
+            type="button"
+            className={documentButton}
+            disabled={batch.isPending || !provisionable.length}
+            onClick={() => batch.mutate('provision')}
+          >
+            {tr('workerIntake.provisionCount', { count: provisionable.length })}
+          </button>
+          <button
+            type="button"
+            className={documentButton + ' ml-auto'}
+            disabled={batch.isPending || !sendable.length}
+            onClick={() => batch.mutate('send')}
+          >
+            {tr('workerIntake.sendCount', { count: sendable.length })}
+          </button>
+          <BatchDocumentAnalysis
+            client={p.client}
+            token={p.token}
+            siteId={p.siteId}
+            workers={chosen.flatMap((row) =>
+              row.workerId
+                ? [{ id: row.workerId, name: row.displayName || row.workerCode || row.username }]
+                : [],
+            )}
+            disabled={batch.isPending}
+          />
+        </div>
+        {batch.isPending && (
+          <p role="status" className="text-sm text-slate-600">
+            {tr('common.loading')}
           </p>
-          <button
-            type="button"
-            className="px-2.5 py-1 rounded bg-white border border-red-200 text-red-700 font-bold hover:bg-red-100"
-            onClick={() => {
-              void cache.invalidateQueries({ queryKey });
-              onClose();
+        )}
+        {batch.isError && (
+          <p role="alert" className="text-sm text-red-700">
+            {userErrorMessage(batch.error)}
+          </p>
+        )}
+        {query.isPending && (
+          <p role="status" className="text-sm text-slate-600">
+            {tr('common.loading')}
+          </p>
+        )}
+        {query.isError && (
+          <DocumentRequestError error={query.error} reload={() => void query.refetch()} />
+        )}
+        {rows.length ? (
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full min-w-[37rem] border-collapse text-left text-sm">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th scope="col" className="w-10 px-3 py-2">
+                    <input
+                      className="size-4 accent-[#F66B17]"
+                      type="checkbox"
+                      aria-label={tr('documents.selectPage')}
+                      checked={selectedAll}
+                      disabled={batch.isPending}
+                      onChange={(event) =>
+                        setSelected(event.target.checked ? rows.map((r) => r.id) : [])
+                      }
+                    />
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    {tr('common.full_name')}
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    {tr('workerIntake.account')}
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    {tr('workerIntake.certificates')}
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    {tr('workerIntake.actions')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const name =
+                    row.displayName || row.username || row.email || tr('workerIntake.unnamed');
+                  const result = results[row.id];
+                  return (
+                    <tr
+                      key={row.id}
+                      className={
+                        selected.includes(row.id)
+                          ? 'border-t border-slate-200 bg-orange-50'
+                          : 'border-t border-slate-200'
+                      }
+                    >
+                      <td className="px-3 py-2">
+                        <input
+                          className="size-4 accent-[#F66B17]"
+                          type="checkbox"
+                          disabled={batch.isPending}
+                          aria-label={tr('documents.selectWorker', {
+                            name,
+                            code: row.workerCode ?? '',
+                          })}
+                          checked={selected.includes(row.id)}
+                          onChange={() =>
+                            setSelected((current) =>
+                              current.includes(row.id)
+                                ? current.filter((id) => id !== row.id)
+                                : [...current, row.id],
+                            )
+                          }
+                        />
+                      </td>
+                      <th scope="row" className="px-3 py-2 font-semibold text-slate-900">
+                        {name}
+                        {row.workerCode && (
+                          <span className="block font-mono text-xs text-slate-500">
+                            {row.workerCode}
+                          </span>
+                        )}
+                      </th>
+                      <td className="px-3 py-2">
+                        {tr(row.workerId ? 'workerIntake.accountReady' : 'workerIntake.draft')}
+                        {row.email && (
+                          <span className="block text-xs text-slate-500">{row.email}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={
+                            row.canSubmit || row.canProvision
+                              ? 'font-medium text-emerald-800'
+                              : 'text-slate-700'
+                          }
+                        >
+                          {tr(
+                            row.canSubmit
+                              ? 'workerIntake.readyToSend'
+                              : row.canProvision
+                                ? 'workerIntake.readyToProvision'
+                                : row.workerId
+                                  ? 'documents.' + row.submissionStatus
+                                  : 'workerIntake.incomplete',
+                          )}
+                        </span>
+                        {row.missingKinds.length > 0 && (
+                          <div className="text-xs text-amber-800">
+                            {tr('workerIntake.missing', {
+                              documents: row.missingKinds
+                                .map((kind) => tr('documents.' + kind))
+                                .join(', '),
+                            })}
+                          </div>
+                        )}
+                        {result && (
+                          <div
+                            role="status"
+                            className={
+                              result.status === 'SUCCEEDED'
+                                ? 'text-xs text-emerald-800'
+                                : 'text-xs text-red-700'
+                            }
+                          >
+                            {result.status === 'SUCCEEDED'
+                              ? tr('workerIntake.success')
+                              : batchError(result.error?.code)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {row.workerId ? (
+                          <Link
+                            className="font-semibold text-orange-800 underline"
+                            to={
+                              '/worker-documents?' +
+                              new URLSearchParams({
+                                siteId: p.siteId,
+                                workerId: row.workerId,
+                                tab: 'documents',
+                              })
+                            }
+                          >
+                            {tr('workerIntake.openRecord')}
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            className={documentButton}
+                            disabled={batch.isPending}
+                            onClick={() => setEditing({ formId: row.id, draft: row })}
+                          >
+                            {tr('workerIntake.edit')}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          query.isSuccess && <p className="text-sm text-slate-600">{tr('workerIntake.empty')}</p>
+        )}
+      </div>
+      <ActionDrawer
+        isOpen={!!editing}
+        title={tr(editing?.draft ? 'workerIntake.edit' : 'workerIntake.add')}
+        onClose={close}
+        panelClassName="max-sm:max-w-none"
+      >
+        {editing && (
+          <IntakeDraftForm
+            key={editing.formId}
+            {...p}
+            id={editing.formId}
+            draft={editing.draft}
+            onClose={close}
+            onSaved={(next) => {
+              void cache.invalidateQueries({ queryKey: key });
+              const newForm = next ? { formId: crypto.randomUUID() } : undefined;
+              setEditing((current) => (current?.formId === editing.formId ? newForm : current));
             }}
-          >
-            {tr('common.reload_worker')}
-          </button>
-        </div>
-      )}
-      <WorkerDocumentsPanel
-        client={client}
-        token={token}
-        siteId={worker.siteId}
-        workerId={worker.id}
-        scope={sessionScope}
-        canUpload
-      />
-    </form>
+          />
+        )}
+      </ActionDrawer>
+    </section>
+  );
+}
+
+function IntakeDraftForm(
+  p: IntakeScope & {
+    contractorId: string;
+    id: string;
+    draft?: WorkerOnboardingDraft;
+    onClose: () => void;
+    onSaved: (next: boolean) => void;
+  },
+) {
+  const nameField = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    nameField.current?.focus();
+  }, []);
+  const [fields, setFields] = useState({
+    displayName: p.draft?.displayName ?? '',
+    username: p.draft?.username ?? '',
+    email: p.draft?.email ?? '',
+  });
+  const [required, setRequired] = useState(p.draft?.safetyCardRequired ?? null);
+  const [files, setFiles] = useState<Partial<Record<WorkerDocumentKind, File>>>({});
+  const [dates, setDates] = useState<SaveWorkerOnboardingDraftCommand['documents']>(() => {
+    const initial: SaveWorkerOnboardingDraftCommand['documents'] = {};
+    for (const kind of documentKinds) {
+      const stored = p.draft?.documents[kind];
+      if (stored) {
+        initial[kind] = { submittedIssuedOn: stored.submittedIssuedOn ?? undefined };
+        if (kind !== 'HEALTH_CERTIFICATE')
+          initial[kind].submittedExpiresOn = stored.submittedExpiresOn ?? undefined;
+      }
+    }
+    return initial;
+  });
+  const preview = useMutation({
+    mutationFn: async (kind: WorkerDocumentKind) => {
+      const doc = p.draft?.documents[kind];
+      if (!doc?.originalName || !doc.mediaType) throw new Error(tr('errors.notFound'));
+      const blob = await p.client.workerOnboardingDraftFile(
+        p.token,
+        p.siteId,
+        p.contractorId,
+        p.id,
+        kind,
+      );
+      return { blob, title: doc.originalName, type: doc.mediaType };
+    },
+  });
+  const save = useMutation<WorkerOnboardingDraft, Error, boolean>({
+    mutationFn: () => {
+      const documents = { ...dates };
+      for (const kind of documentKinds) {
+        if (files[kind]) documents[kind] ??= {};
+      }
+      return p.client.saveWorkerOnboardingDraft(
+        p.token,
+        p.siteId,
+        p.contractorId,
+        p.id,
+        {
+          expectedVersion: p.draft?.version ?? 0,
+          displayName: fields.displayName.trim(),
+          username: fields.username.trim(),
+          email: fields.email.trim(),
+          safetyCardRequired: required,
+          language: uiLanguage(),
+          documents,
+        },
+        files,
+      );
+    },
+    onSuccess: (_, next) => p.onSaved(next),
+  });
+  const changeDate = (
+    kind: WorkerDocumentKind,
+    field: 'submittedIssuedOn' | 'submittedExpiresOn',
+    date: string,
+  ) =>
+    setDates((current) => ({
+      ...current,
+      [kind]: { ...current[kind], [field]: date || undefined },
+    }));
+
+  return (
+    <>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          save.mutate(false);
+        }}
+      >
+        <fieldset disabled={save.isPending} className="grid gap-4">
+          {(
+            [
+              ['displayName', 'common.full_name', 255],
+              ['username', 'common.username', 64],
+              ['email', 'worker_onboarding_view.email', 254],
+            ] as const
+          ).map(([field, label, limit]) => (
+            <label key={field} className="grid gap-1 text-sm font-medium text-slate-700">
+              {tr(label)}
+              <input
+                className={documentField}
+                ref={field === 'displayName' ? nameField : undefined}
+                value={fields[field]}
+                maxLength={limit}
+                inputMode={field === 'email' ? 'email' : undefined}
+                onChange={(event) =>
+                  setFields((current) => ({ ...current, [field]: event.target.value }))
+                }
+              />
+            </label>
+          ))}
+          <label className="grid gap-1 text-sm font-medium text-slate-700">
+            {tr('documents.safetyCardRequired')}
+            <SmartNativeSelect
+              value={required === null ? '' : String(required)}
+              className={documentField}
+              onChange={(event) =>
+                setRequired(event.target.value === '' ? null : event.target.value === 'true')
+              }
+            >
+              <option value="">{tr('workerIntake.choose')}</option>
+              <option value="true">{tr('documents.cardRequired')}</option>
+              <option value="false">{tr('documents.cardNotRequired')}</option>
+            </SmartNativeSelect>
+          </label>
+          <div className="divide-y divide-slate-200 rounded-xl border border-slate-200">
+            {documentKinds
+              .filter((kind) => kind !== 'SAFETY_CARD' || required !== false)
+              .map((kind) => {
+                const existing = p.draft?.documents[kind];
+                const savedName = existing?.originalName;
+                const health = kind === 'HEALTH_CERTIFICATE';
+                return (
+                  <div key={kind} className="grid gap-2 p-3">
+                    <DocumentAttachmentInput
+                      label={tr('documents.' + kind)}
+                      file={files[kind]}
+                      savedName={savedName}
+                      onChange={(file) => setFiles((current) => ({ ...current, [kind]: file }))}
+                    />
+                    {savedName && !files[kind] && (
+                      <button
+                        type="button"
+                        className="justify-self-start text-xs font-semibold text-orange-800 underline"
+                        disabled={preview.isPending}
+                        onClick={() => preview.mutate(kind)}
+                      >
+                        {tr('documents.view')}
+                      </button>
+                    )}
+                    <SmartDatePicker
+                      label={tr(
+                        health
+                          ? 'documents.submittedIssuedOn'
+                          : kind === 'PERSONAL_INSURANCE'
+                            ? 'documents.coverageStartsOn'
+                            : 'documents.cardIssuedOn',
+                      )}
+                      className={documentField}
+                      disablePast={false}
+                      clearable
+                      value={dates[kind]?.submittedIssuedOn ?? ''}
+                      onChange={(date) => changeDate(kind, 'submittedIssuedOn', date)}
+                    />
+                    {!health && (
+                      <SmartDatePicker
+                        label={tr('documents.expiresOn')}
+                        className={documentField}
+                        disablePast={false}
+                        clearable
+                        value={dates[kind]?.submittedExpiresOn ?? ''}
+                        onChange={(date) => changeDate(kind, 'submittedExpiresOn', date)}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+          {save.isError && (
+            <p role="alert" className="text-sm text-red-700">
+              {userErrorMessage(save.error)}
+            </p>
+          )}
+          {preview.isError && (
+            <p role="alert" className="text-sm text-red-700">
+              {userErrorMessage(preview.error)}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" className={documentButton}>
+              {tr('workerIntake.save')}
+            </button>
+            {!p.draft && (
+              <button
+                type="button"
+                className={documentPrimaryButton}
+                onClick={() => save.mutate(true)}
+              >
+                {tr('workerIntake.saveNext')}
+              </button>
+            )}
+            <button type="button" className={documentButton} onClick={p.onClose}>
+              {tr('common.cancel')}
+            </button>
+          </div>
+        </fieldset>
+      </form>
+      {preview.data &&
+        createPortal(
+          <DocumentFilePreview {...preview.data} onClose={preview.reset} />,
+          document.body,
+        )}
+    </>
   );
 }

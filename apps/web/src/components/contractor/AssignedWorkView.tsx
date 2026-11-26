@@ -1,4 +1,3 @@
-import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +6,7 @@ import type { AccountResponse } from '@smartsite/api-client';
 import { useManagementClient } from '../../features/auth/auth-session';
 import { IncidentView } from '../safety/IncidentView';
 import { SafetyChecklistsView } from '../safety/SafetyChecklistsView';
+import { WorksitePicker } from '../shared/WorksitePicker';
 
 export function AssignedWorkView({
   apiUrl,
@@ -55,23 +55,15 @@ export function AssignedWorkView({
   const workflow = { client, apiUrl, token, user, siteId, scope: user.id };
   return (
     <section className="assigned-work-workspace">
-      <h1 className="text-xl font-bold">{t('shell.assignedWork')}</h1>
-      <label className="block min-w-0 text-sm">
-        {t('common.site')}{' '}
-        <SmartNativeSelect
-          className="mt-1 block w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white p-2"
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold">{t('shell.assignedWork')}</h1>
+        <WorksitePicker
+          id="assigned-work-site-select"
           value={siteId}
-          onChange={(e) => {
-            setParams({ siteId: e.target.value });
-          }}
-        >
-          {allowed.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </SmartNativeSelect>
-      </label>
+          sites={allowed}
+          onChange={(siteId) => setParams({ siteId })}
+        />
+      </header>
       <div
         role="tablist"
         aria-label={t('shell.assignedWork')}

@@ -56,7 +56,7 @@ export type NavigationTarget = {
 
 function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
   const { t } = useTranslation();
-  const { scope, client, token, queryKey } = useWorkspace();
+  const { scope, client, token, queryKey, canSwitchScope } = useWorkspace();
   const [navigation, setNavigation] = useState<NavigationTarget>({ route: 'home' });
   const [selectedTeam, setSelectedTeam] = useState<ContractorTeamResponse | null>(null);
   const navigate = (target: NavigationTarget) => {
@@ -152,10 +152,10 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
                 avatarRole={scope.role}
                 showAvatar={contractor && route !== 'home'}
                 showTagline={!contractor}
-                showSiteInfo={false}
+                showSiteInfo={contractor}
                 unreadCount={notices.data?.unreadCount ?? 0}
                 onBack={!main ? back : undefined}
-                onScopeChange={onScopeChange}
+                onScopeChange={contractor && !canSwitchScope ? undefined : onScopeChange}
                 onNotificationPress={() => navigate({ route: 'notifications' })}
                 onAvatarPress={() => navigate({ route: 'profile' })}
               />
@@ -188,7 +188,10 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
                 />
               )}
               {route === 'workforce' && contractor && (
-                <WorkforceScreen initialWorkerId={navigation.id} />
+                <WorkforceScreen
+                  initialWorkerId={navigation.id}
+                  initialOnboarding={navigation.kind === 'onboarding'}
+                />
               )}
               {route === 'teams' && contractor && (
                 <TeamsScreen selectedTeam={selectedTeam} onSelectTeam={setSelectedTeam} />
@@ -199,6 +202,7 @@ function WorkspaceApp({ onScopeChange }: { onScopeChange: () => void }) {
                   initialId={navigation.id}
                   initialKind={navigation.kind}
                   initialActionId={navigation.actionId}
+                  onScopeChange={canSwitchScope ? onScopeChange : undefined}
                   onBack={back}
                 />
               )}

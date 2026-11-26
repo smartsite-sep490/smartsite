@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
-import { SmartSiteLogo, IconBell, IconChevronLeft } from './Icons';
+import { SmartSiteLogo, IconBell, IconChevronDown, IconChevronLeft, IconMapPin } from './Icons';
 import { WorkerAvatar } from './WorkerAvatar';
 import { useTranslation, setLanguage, uiLanguage } from '../../i18n';
 
@@ -47,38 +47,60 @@ export function ScreenHeader({
   const toggleLanguage = () => {
     void setLanguage(currentLang === 'vi' ? 'en' : 'vi');
   };
+  const siteContext = scopeLabel ? `${siteName} · ${scopeLabel}` : siteName;
+  const siteInfo = showSiteInfo && siteName && (
+    <Pressable
+      accessibilityRole={onScopeChange ? 'button' : undefined}
+      accessibilityLabel={
+        onScopeChange ? `${t('header.switchScopeTooltip')}: ${siteContext}` : undefined
+      }
+      disabled={!onScopeChange}
+      onPress={onScopeChange}
+      style={({ pressed }) => [styles.siteInfoBar, pressed && { opacity: 0.75 }]}
+    >
+      <IconMapPin size={16} color={colors.primary} />
+      <Text numberOfLines={1} style={styles.siteInfoText}>
+        {siteContext}
+      </Text>
+      {onScopeChange && <IconChevronDown size={15} />}
+    </Pressable>
+  );
+  const brandScopeChange = showSiteInfo ? undefined : onScopeChange;
 
   if (mode === 'detail') {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.detailContainer}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('common.back')}
-          hitSlop={12}
-          onPress={onBack}
-          style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.6 }]}
-        >
-          <IconChevronLeft size={24} color={colors.textPrimary} />
-        </Pressable>
-        <View style={styles.detailCenter}>
-          <Text numberOfLines={2} ellipsizeMode="tail" style={styles.detailBrand}>
-            {title ?? (
-              <>
-                Smart<Text style={styles.brandOrange}>Site</Text>
-              </>
-            )}
-          </Text>
-        </View>
-        <View style={styles.detailRight}>
+        <View style={styles.detailRow}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t('header.language')}
-            onPress={toggleLanguage}
-            style={styles.langPill}
+            accessibilityLabel={t('common.back')}
+            hitSlop={12}
+            onPress={onBack}
+            style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.6 }]}
           >
-            <Text style={styles.langPillText}>{currentLang.toUpperCase()}</Text>
+            <IconChevronLeft size={24} color={colors.textPrimary} />
           </Pressable>
+          <View style={styles.detailCenter}>
+            <Text numberOfLines={2} ellipsizeMode="tail" style={styles.detailBrand}>
+              {title ?? (
+                <>
+                  Smart<Text style={styles.brandOrange}>Site</Text>
+                </>
+              )}
+            </Text>
+          </View>
+          <View style={styles.detailRight}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('header.language')}
+              onPress={toggleLanguage}
+              style={styles.langPill}
+            >
+              <Text style={styles.langPillText}>{currentLang.toUpperCase()}</Text>
+            </Pressable>
+          </View>
         </View>
+        {siteInfo}
       </SafeAreaView>
     );
   }
@@ -87,9 +109,9 @@ export function ScreenHeader({
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.rootContainer}>
       <View style={styles.topRow}>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('header.switchScopeTooltip')}
-          onPress={onScopeChange}
+          accessibilityRole={brandScopeChange ? 'button' : undefined}
+          accessibilityLabel={brandScopeChange ? t('header.switchScopeTooltip') : undefined}
+          onPress={brandScopeChange}
           style={styles.brandGroup}
         >
           {showLogoIcon && <SmartSiteLogo size={28} />}
@@ -98,7 +120,7 @@ export function ScreenHeader({
               <Text style={styles.brandName}>
                 Smart<Text style={styles.brandOrange}>Site</Text>
               </Text>
-              {onScopeChange && <Text style={styles.scopeArrow}> ▾</Text>}
+              {brandScopeChange && <Text style={styles.scopeArrow}> ▾</Text>}
             </View>
             {showTagline && (
               <Text numberOfLines={1} ellipsizeMode="tail" style={styles.tagline}>
@@ -152,14 +174,7 @@ export function ScreenHeader({
         </View>
       </View>
 
-      {showSiteInfo && (siteName || scopeLabel) && (
-        <View style={styles.siteInfoBar}>
-          <Text numberOfLines={1} style={styles.siteInfoText}>
-            {siteName}
-            {scopeLabel ? ` · ${scopeLabel}` : ''}
-          </Text>
-        </View>
-      )}
+      {siteInfo}
     </SafeAreaView>
   );
 }
@@ -279,25 +294,36 @@ const styles = StyleSheet.create({
   },
   siteInfoBar: {
     marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-  },
-  siteInfoText: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
-  },
-  detailContainer: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  siteInfoText: {
+    flexShrink: 1,
+    fontSize: 12,
+    color: colors.textPrimary,
+    fontWeight: '600',
+  },
+  detailContainer: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     minHeight: 52,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#EEF2F6',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   backButton: {
     padding: 6,

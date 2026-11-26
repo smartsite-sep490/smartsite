@@ -6,12 +6,14 @@ import { useQuery } from '@tanstack/react-query';
 import { ApiError } from '@smartsite/api-client';
 import { useAuth } from '../auth/auth-context';
 import { useWorkspace } from './workspace-context';
+import { ownWorkerComplianceOptions } from './own-worker-compliance';
 import { allPages, displayShiftTime, localDate, minutes, useCommand } from '../shared/data';
 import { Button, ErrorNotice, Field, Page, QueryState, palette } from '../shared/ui';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import { WorkerQrModal } from '../../components/worker/WorkerQrModal';
 import { WorkerRequestModal } from '../../components/modals/WorkerRequestModal';
-import { ProfileDetails, WorkerDocuments } from '../contractor/worker-documents';
+import { WorkerDocuments } from '../contractor/worker-documents';
+import { WorkerIdentityForm } from './worker-identity-form';
 import { FormSection } from '../shared/form-section';
 import { AccountEmailCard } from '../auth/account-email-card';
 import { LogoutConfirmation } from '../auth/logout-confirmation';
@@ -459,23 +461,15 @@ export function ProfileScreen({
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [documents, setDocuments] = useState(initialDocuments);
   const [accountDetails, setAccountDetails] = useState(false);
+  const [editingIdentity, setEditingIdentity] = useState(false);
 
   const worker = useQuery({
-    queryKey: [...queryKey, 'own-worker'],
+    ...ownWorkerComplianceOptions(client, token, scope.siteId, queryKey),
     enabled: scope.role === 'worker',
-    queryFn: async ({ signal }) =>
-      (await allPages((p) => client.listWorkers(token, scope.siteId, p), signal)).find(
-        (w) => w.userId === user.id,
-      ) ?? null,
-  });
-  const personal = useQuery({
-    queryKey: [...queryKey, 'worker-documents', worker.data?.id],
-    enabled: accountDetails && scope.role === 'worker' && !!worker.data?.id,
-    queryFn: () => client.workerCompliance(token, scope.siteId, worker.data!.id),
   });
   const face = useQuery({
-    queryKey: [...queryKey, 'own-face-status', worker.data?.id],
-    enabled: scope.role === 'worker' && !!worker.data?.id,
+    queryKey: [...queryKey, 'own-face-status', worker.data?.workerId],
+    enabled: scope.role === 'worker' && !!worker.data?.workerId,
     queryFn: () => client.myWorkerFaceStatus(token, scope.siteId),
     refetchOnMount: 'always',
     refetchInterval: 60000,
@@ -494,12 +488,12 @@ export function ProfileScreen({
     return (
       <SafeAreaView edges={['top']} style={{ flex: 1 }}>
         <Page title={t('documents.title')} onBack={() => setDocuments(false)}>
-          <WorkerDocuments workerId={worker.data.id} />
+          <WorkerDocuments workerId={worker.data.workerId} />
         </Page>
       </SafeAreaView>
     );
 
-  const docStatus = worker.data?.documentStatus ?? 'PENDING';
+  const docStatus = worker.data?.status ?? 'PENDING';
   const isApproved = docStatus === 'ACTIVE';
   const isPending = docStatus === 'PENDING';
   const isExpired = docStatus === 'EXPIRED';
@@ -865,7 +859,8 @@ export function ProfileScreen({
         {accountDetails && (
           <RequestSheet
             visible
-            variant="compact"
+            variant={scope.role === 'worker' ? 'form' : 'compact'}
+            busy={editingIdentity}
             title={t('profile.personalInfo')}
             icon={<IconUser size={21} color={colors.primary} />}
             onClose={() => setAccountDetails(false)}
@@ -897,15 +892,11 @@ export function ProfileScreen({
             </FormSection>
             {scope.role === 'worker' && (
               <QueryState query={worker}>
-                {(data) =>
-                  data ? (
-                    <QueryState query={personal}>
-                      {(profile) => (
-                        <FormSection number="02" title={t('profile.personalInfo')}>
-                          <ProfileDetails data={profile} />
-                        </FormSection>
-                      )}
-                    </QueryState>
+                {(profile) =>
+                  profile ? (
+                    <FormSection number="02" title={t('profile.personalInfo')}>
+                      <WorkerIdentityForm profile={profile} onBusyChange={setEditingIdentity} />
+                    </FormSection>
                   ) : (
                     <Text>{t('profile.noWorkerProfile')}</Text>
                   )

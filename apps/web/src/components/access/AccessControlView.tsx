@@ -1,4 +1,5 @@
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
+import { WorksitePicker } from '../shared/WorksitePicker';
 import { loadAllPages } from '../workforce/load-all-pages';
 import { userErrorMessage } from '../../i18n/messages';
 import { translate as tr } from '../../i18n';
@@ -338,31 +339,41 @@ export function AccessControlView({ apiUrl }: AccessControlViewProps) {
       {/* Unified Global Site Selector Strip (hidden on gate-desk since SecurityGateDeskView owns site/gate selector) */}
       {activeTab !== 'gate-desk' && (
         <section className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#EAEAEA] bg-white p-3.5 shadow-xs">
-          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-[#F66B17] border border-orange-200/60">
-              <IconBuilding2 className="h-4 w-4" />
+          {siteRoles.includes('CONTRACTOR_REPRESENTATIVE') &&
+          !siteRoles.includes('SITE_MANAGER') ? (
+            <WorksitePicker
+              id="access-site-select"
+              value={siteId}
+              sites={scopedSites}
+              onChange={setRequestedSiteId}
+            />
+          ) : (
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-[#F66B17] border border-orange-200/60">
+                <IconBuilding2 className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 max-w-full">
+                <label
+                  htmlFor="access-site-select"
+                  className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]"
+                >
+                  {tr('common.active_managed_site')}
+                </label>
+                <SmartNativeSelect
+                  id="access-site-select"
+                  value={siteId}
+                  onChange={(event) => setRequestedSiteId(event.target.value)}
+                  className="mt-0.5 min-w-0 max-w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1 text-xs font-bold text-[#2F3437] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
+                >
+                  {scopedSites.map((site) => (
+                    <option key={site.id} value={site.id}>
+                      {site.name}
+                    </option>
+                  ))}
+                </SmartNativeSelect>
+              </div>
             </div>
-            <div className="min-w-0 max-w-full">
-              <label
-                htmlFor="access-site-select"
-                className="block text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]"
-              >
-                {tr('common.active_managed_site')}
-              </label>
-              <SmartNativeSelect
-                id="access-site-select"
-                value={siteId}
-                onChange={(event) => setRequestedSiteId(event.target.value)}
-                className="mt-0.5 min-w-0 max-w-full rounded-lg border border-[#EAEAEA] bg-white px-2.5 py-1 text-xs font-bold text-[#2F3437] focus:border-[#F66B17] focus:ring-2 focus:ring-orange-100 focus:outline-none"
-              >
-                {scopedSites.map((site) => (
-                  <option key={site.id} value={site.id}>
-                    {site.name}
-                  </option>
-                ))}
-              </SmartNativeSelect>
-            </div>
-          </div>
+          )}
 
           {/* Status Indicators & Refresh */}
           <div className="flex items-center gap-3">

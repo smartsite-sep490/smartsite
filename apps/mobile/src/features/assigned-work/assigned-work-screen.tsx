@@ -39,11 +39,13 @@ export function AssignedWorkScreen({
   initialKind,
   initialActionId,
   onBack,
+  onScopeChange,
 }: {
   initialId?: string;
   initialKind?: string;
   initialActionId?: string;
   onBack: () => void;
+  onScopeChange?: () => void;
 }) {
   useTranslation();
   const { scope, client, token, user, queryKey } = useWorkspace();
@@ -89,6 +91,10 @@ export function AssignedWorkScreen({
   const header = (
     <ScreenHeader
       mode="detail"
+      showSiteInfo
+      siteName={scope.siteName}
+      scopeLabel={scope.contractorName}
+      onScopeChange={onScopeChange}
       title={tr(
         id
           ? kind === 'checklist'

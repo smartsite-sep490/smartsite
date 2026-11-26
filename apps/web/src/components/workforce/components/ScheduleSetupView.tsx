@@ -2,6 +2,7 @@ import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
 import { localizedError, localizeMessage, userErrorMessage } from '../../../i18n/messages';
 import { uiLocale } from '../../../i18n';
 import { translate as tr } from '../../../i18n';
+import { WorksitePicker } from '../../shared/WorksitePicker';
 import { useTranslation } from 'react-i18next';
 import { ScheduleAssignmentForm } from './ScheduleAssignmentForm';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -633,22 +634,31 @@ export function ScheduleSetupView({ apiUrl }: ScheduleSetupViewProps) {
     <div className="space-y-5 animate-in fade-in duration-300">
       {/* 1. Quick Actions */}
       <div className="flex flex-wrap items-center justify-end gap-2.5 pb-4 border-b border-slate-200/80">
-        {availableSites.length > 1 && (
-          <div className="flex items-center gap-1.5 min-w-[200px]">
-            <span className="text-xs font-semibold text-slate-500 hidden sm:inline shrink-0">
-              {tr('common.site')}
-            </span>
-            <SmartSelect
-              size="sm"
-              value={activeSiteId || ''}
-              onChange={(val) => setSelectedSiteId(val)}
-              className="w-full"
-              options={availableSites.map((site) => ({
-                value: site.id,
-                label: site.name,
-              }))}
-            />
-          </div>
+        {isContractorRep && !isManager ? (
+          <WorksitePicker
+            id="contractor-schedule-site-select"
+            value={activeSiteId ?? ''}
+            sites={availableSites}
+            onChange={setSelectedSiteId}
+          />
+        ) : (
+          availableSites.length > 1 && (
+            <div className="flex items-center gap-1.5 min-w-[200px]">
+              <span className="text-xs font-semibold text-slate-500 hidden sm:inline shrink-0">
+                {tr('common.site')}
+              </span>
+              <SmartSelect
+                size="sm"
+                value={activeSiteId || ''}
+                onChange={(val) => setSelectedSiteId(val)}
+                className="w-full"
+                options={availableSites.map((site) => ({
+                  value: site.id,
+                  label: site.name,
+                }))}
+              />
+            </div>
+          )
         )}
 
         <Button

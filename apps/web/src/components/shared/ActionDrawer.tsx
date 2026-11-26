@@ -10,6 +10,7 @@ export interface ActionDrawerProps {
   description?: string;
   badge?: string;
   badgeType?: 'error' | 'warning' | 'info';
+  panelClassName?: string;
   children: React.ReactNode;
 }
 
@@ -223,6 +224,7 @@ export function ActionDrawer({
   description,
   badge,
   badgeType = 'info',
+  panelClassName = '',
   children,
 }: ActionDrawerProps) {
   useTranslation();
@@ -379,7 +381,7 @@ export function ActionDrawer({
         aria-describedby={description ? descriptionId : undefined}
         inert={!isOpen || undefined}
         tabIndex={-1}
-        className={`relative w-full max-w-md h-full bg-[#FBFBFA] border-l border-[#EAEAEA] transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] outline-none ${
+        className={`relative w-full max-w-md h-full bg-[#FBFBFA] border-l border-[#EAEAEA] transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] outline-none ${panelClassName} ${
           isOpen ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
         }`}
       >

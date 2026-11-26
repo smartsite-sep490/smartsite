@@ -23,14 +23,11 @@ Repo không quyết định máy chủ. Web, Backend và AI có thể build/depl
 
 Compose tích hợp đặt trong `smartsite/infra`. Dùng image AI theo phiên bản khi chạy tích hợp; override local có thể build từ checkout `../smartsite-ai`. Chỉ tạo Compose chạy thật khi có Dockerfile, entrypoint và healthcheck của các service.
 
-### Worker document OCR, 2026-10-18
+### Phân tích chứng từ công nhân
 
-Theo yêu cầu gộp OCR vào Backend, phần quét giấy tờ công nhân được đóng gói trong
-`smartsite/apps/backend/ocr`. NestJS gọi bộ xử lý Python/Tesseract/Poppler qua stdin/stdout
-với giới hạn kích thước, thời gian và một lượt xử lý CPU tại mỗi thời điểm. Không mở thêm
-HTTP service hoặc yêu cầu chạy repo AI cho OCR giấy tờ. Mọi quyết định duyệt, cảnh báo CCCD
-và hiệu lực hồ sơ vẫn thuộc Backend/Safety Officer. Luồng camera, khuôn mặt, PPE và video
-vẫn giữ ranh giới hai repo như trên.
+Backend kiểm tra ảnh và PDF trước khi lưu. Đại diện nhà thầu chủ động yêu cầu phân tích AI cho
+chứng từ nháp. Công nhân tự cập nhật hồ sơ cá nhân và ảnh CCCD. Safety quyết định duyệt chứng từ
+và xác nhận ngày hiệu lực từ bản gốc. Luồng camera, khuôn mặt, PPE và video giữ ranh giới hai repo.
 
 ## Hệ quả
 

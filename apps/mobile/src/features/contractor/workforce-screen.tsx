@@ -7,7 +7,7 @@ import { allPages, required, useCommand } from '../shared/data';
 import { Button, CompactTabs, ErrorNotice, Field, Page, Pager, QueryState } from '../shared/ui';
 import { RequestSheet } from '../shared/request-sheet';
 import { FormSection } from '../shared/form-section';
-import { CreateWorkerModal } from '../../components/modals/CreateWorkerModal';
+import { WorkerOnboarding } from './worker-onboarding';
 import { WorkerDocuments } from './worker-documents';
 import { WorkerAvatar } from '../../components/common/WorkerAvatar';
 import {
@@ -24,7 +24,13 @@ import { colors } from '../../theme/colors';
 import { ManagementBadge } from '../shared/management-ui';
 import { EmptyState } from './contractor-presentation';
 
-export function WorkforceScreen({ initialWorkerId }: { initialWorkerId?: string } = {}) {
+export function WorkforceScreen({
+  initialWorkerId,
+  initialOnboarding = false,
+}: {
+  initialWorkerId?: string;
+  initialOnboarding?: boolean;
+} = {}) {
   const { t } = useTranslation();
   const { scope, client, token, queryKey } = useWorkspace();
   const [requestedWorker, setRequestedWorker] = useState(initialWorkerId ?? '');
@@ -32,198 +38,269 @@ export function WorkforceScreen({ initialWorkerId }: { initialWorkerId?: string 
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<WorkerResponse | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [tab, setTab] = useState(initialOnboarding ? 'onboarding' : 'roster');
+  const [openIntakeEditor, setOpenIntakeEditor] = useState(initialOnboarding);
   const workers = useQuery({
     queryKey: [...queryKey, 'workers'],
     queryFn: ({ signal }) =>
       allPages((page) => client.listWorkers(token, scope.siteId, page), signal),
+  });
+  const documentFilter = useQuery({
+    queryKey: [...queryKey, 'worker-document-filter', statusFilter],
+    enabled: tab === 'roster' && statusFilter !== 'ALL',
+    queryFn: ({ signal }) =>
+      allPages(
+        (page) =>
+          client.listWorkerCompliance(token, scope.siteId, {
+            ...page,
+            contractorId: scope.contractorId,
+            ...(statusFilter === 'PENDING' && { submissionStatus: 'PENDING_REVIEW' }),
+            ...(statusFilter === 'SUPPLEMENT' && { needsSupplement: true }),
+            ...(statusFilter === 'EXPIRING' && { expiringOnly: true }),
+          }),
+        signal,
+      ),
+    select: (data) =>
+      new Set(
+        data
+          .filter((row) => row.contractorId === scope.contractorId)
+          .filter((row) => statusFilter !== 'EXPIRING' || row.expiringKinds.length > 0)
+          .map((row) => row.workerId),
+      ),
   });
   const opened =
     selected ??
     workers.data?.find(
       (worker) => worker.id === requestedWorker && worker.contractorId === scope.contractorId,
     );
-  if (opened)
-    return (
-      <WorkerDetail
-        key={opened.id}
-        worker={opened}
-        initialDocuments={!!requestedWorker}
-        onBack={() => {
-          setSelected(null);
-          setRequestedWorker('');
-        }}
-      />
-    );
+  const detail = opened ? (
+    <WorkerDetail
+      key={opened.id}
+      worker={opened}
+      initialDocuments={!!requestedWorker}
+      onBack={() => {
+        setSelected(null);
+        setRequestedWorker('');
+      }}
+    />
+  ) : null;
+  if (detail && tab === 'roster') return detail;
   return (
-    <Page title={t('workforce.title')}>
-      <Text style={styles.subtitle}>
-        {scope.contractorName} {'\u00b7'} {scope.siteName}
-      </Text>
-      <QueryState query={workers}>
-        {(allData) => {
-          const people = allData.filter((worker) => worker.contractorId === scope.contractorId);
-          const operational = (worker: WorkerResponse) =>
-            worker.isActive && worker.documentStatus === 'ACTIVE';
-          const activeCount = people.filter(operational).length;
-          const filtered = people.filter(
-            (worker) =>
-              `${worker.displayName} ${worker.externalId}`
-                .toLocaleLowerCase()
-                .includes(search.trim().toLocaleLowerCase()) &&
-              (statusFilter === 'ALL' ||
-                (statusFilter === 'ACTIVE' ? operational(worker) : !operational(worker))),
-          );
-          return (
-            <>
-              <View style={styles.stats}>
-                {[
-                  { label: t('profile.totalWorkforce'), value: people.length, attention: false },
-                  { label: t('workforce.statusActive'), value: activeCount, attention: false },
-                  {
-                    label: t('contractorHome.needsAction'),
-                    value: people.length - activeCount,
-                    attention: true,
-                  },
-                ].map((item) => (
-                  <View key={item.label} style={styles.stat}>
-                    <Text
-                      style={[
-                        styles.statValue,
-                        item.attention && item.value > 0 && styles.attentionText,
-                      ]}
-                    >
-                      {item.value}
-                    </Text>
-                    <Text style={styles.statLabel}>{item.label}</Text>
-                  </View>
-                ))}
-              </View>
-              <View style={styles.toolbar}>
-                <View style={styles.searchBox}>
-                  <IconSearch size={17} color={colors.textMuted} />
-                  <TextInput
-                    accessibilityLabel={t('workforce.searchPlaceholder')}
-                    placeholder={t('workforce.searchPlaceholder')}
-                    placeholderTextColor={colors.textTertiary}
-                    style={styles.searchInput}
-                    value={search}
-                    autoCorrect={false}
-                    onChangeText={(value) => {
-                      setSearch(value);
-                      setOffset(0);
-                    }}
-                  />
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t('workforce.createAccount')}
-                  onPress={() => setCreating(true)}
-                  style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
-                >
-                  <IconPlus size={17} color={colors.textWhite} />
-                  <Text style={styles.addText}>{t('contractorUi.addWorkerShort')}</Text>
-                </Pressable>
-              </View>
-              <CompactTabs
-                value={statusFilter}
-                options={[
-                  { value: 'ALL', label: t('common.all') },
-                  { value: 'ACTIVE', label: t('workforce.statusActive') },
-                  { value: 'PENDING', label: t('contractorHome.needsAction') },
-                ]}
-                onChange={(value) => {
-                  setStatusFilter(value);
-                  setOffset(0);
-                }}
-              />
-              <Text style={styles.caption}>
-                {t('contractorUi.workerCount', { count: filtered.length })}
-              </Text>
-              {!filtered.length && (
-                <EmptyState
-                  icon={<IconUsers size={25} color={colors.textMuted} />}
-                  title={t('workforce.noWorkers')}
-                  hint={t('contractorUi.workerEmptyHint')}
-                />
-              )}
-              {!!filtered.length && (
-                <View style={styles.roster}>
-                  {filtered.slice(offset, offset + 8).map((worker, index) => (
-                    <Pressable
-                      key={worker.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${t('workforce.workerProfile')}: ${worker.displayName}`}
-                      onPress={() => setSelected(worker)}
-                      style={({ pressed }) => [
-                        styles.rosterRow,
-                        index > 0 && styles.rowDivider,
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <View style={styles.initials}>
-                        <Text style={styles.initialsText}>
-                          {worker.displayName
-                            .split(' ')
-                            .map((part) => part[0])
-                            .filter(Boolean)
-                            .slice(-2)
-                            .join('')
-                            .toUpperCase() || 'W'}
-                        </Text>
-                      </View>
-                      <View style={styles.copy}>
-                        <Text numberOfLines={1} style={styles.rosterName}>
-                          {worker.displayName}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.caption}>
-                          {worker.externalId} {'\u00b7'}{' '}
-                          {t(worker.userId ? 'workforce.hasAccount' : 'workforce.noAccount')}
-                        </Text>
-                        <View style={styles.rosterStatus}>
-                          <ManagementBadge
-                            label={
-                              !worker.isActive
-                                ? t('workforce.statusInactive')
-                                : worker.documentStatus === 'ACTIVE'
-                                  ? t('workforce.statusActive')
-                                  : t(`documents.${worker.documentStatus ?? 'PENDING'}`)
-                            }
-                            tone={
-                              !worker.isActive
-                                ? 'neutral'
-                                : operational(worker)
-                                  ? 'success'
-                                  : worker.documentStatus === 'EXPIRED'
-                                    ? 'danger'
-                                    : 'warning'
-                            }
-                          />
+    <>
+      <View style={[styles.content, detail && styles.hidden]}>
+        <Page title={t(tab === 'onboarding' ? 'onboarding.title' : 'onboarding.roster')}>
+          <Text style={styles.subtitle}>
+            {scope.contractorName} {'\u00b7'} {scope.siteName}
+          </Text>
+          <CompactTabs
+            value={tab}
+            options={[
+              { value: 'roster', label: t('onboarding.rosterTab') },
+              { value: 'onboarding', label: t('onboarding.intakeTab') },
+            ]}
+            onChange={(value) => {
+              setOpenIntakeEditor(false);
+              setTab(value);
+            }}
+          />
+          {tab === 'onboarding' ? (
+            <WorkerOnboarding
+              openAdd={openIntakeEditor}
+              onOpenWorker={(workerId) => {
+                setOpenIntakeEditor(false);
+                setRequestedWorker(workerId);
+              }}
+            />
+          ) : (
+            <QueryState query={workers}>
+              {(allData) => {
+                const people = allData.filter(
+                  (worker) => worker.contractorId === scope.contractorId,
+                );
+                const operational = (worker: WorkerResponse) =>
+                  worker.isActive && worker.documentStatus === 'ACTIVE';
+                const activeCount = people.filter(operational).length;
+                const filtered = people.filter(
+                  (worker) =>
+                    `${worker.displayName} ${worker.externalId}`
+                      .toLocaleLowerCase()
+                      .includes(search.trim().toLocaleLowerCase()) &&
+                    (statusFilter === 'ALL' || documentFilter.data?.has(worker.id)),
+                );
+                return (
+                  <>
+                    <View style={styles.stats}>
+                      {[
+                        {
+                          label: t('profile.totalWorkforce'),
+                          value: people.length,
+                          attention: false,
+                        },
+                        {
+                          label: t('workforce.statusActive'),
+                          value: activeCount,
+                          attention: false,
+                        },
+                        {
+                          label: t('contractorHome.needsAction'),
+                          value: people.length - activeCount,
+                          attention: true,
+                        },
+                      ].map((item) => (
+                        <View key={item.label} style={styles.stat}>
+                          <Text
+                            style={[
+                              styles.statValue,
+                              item.attention && item.value > 0 && styles.attentionText,
+                            ]}
+                          >
+                            {item.value}
+                          </Text>
+                          <Text style={styles.statLabel}>{item.label}</Text>
                         </View>
+                      ))}
+                    </View>
+                    <View style={styles.toolbar}>
+                      <View style={styles.searchBox}>
+                        <IconSearch size={17} color={colors.textMuted} />
+                        <TextInput
+                          accessibilityLabel={t('workforce.searchPlaceholder')}
+                          placeholder={t('workforce.searchPlaceholder')}
+                          placeholderTextColor={colors.textTertiary}
+                          style={styles.searchInput}
+                          value={search}
+                          autoCorrect={false}
+                          onChangeText={(value) => {
+                            setSearch(value);
+                            setOffset(0);
+                          }}
+                        />
                       </View>
-                      <IconChevronRight size={16} color={colors.textTertiary} />
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-              {(filtered.length > 8 || offset > 0) && (
-                <Pager offset={offset} total={filtered.length} size={8} onChange={setOffset} />
-              )}
-            </>
-          );
-        }}
-      </QueryState>
-      <CreateWorkerModal
-        visible={creating}
-        onClose={() => setCreating(false)}
-        onSuccess={() => void workers.refetch()}
-      />
-    </Page>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('onboarding.title')}
+                        onPress={() => setTab('onboarding')}
+                        style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
+                      >
+                        <IconPlus size={17} color={colors.textWhite} />
+                        <Text style={styles.addText}>{t('onboarding.intakeTab')}</Text>
+                      </Pressable>
+                    </View>
+                    <CompactTabs
+                      value={statusFilter}
+                      options={[
+                        { value: 'ALL', label: t('common.all') },
+                        { value: 'SUPPLEMENT', label: t('documents.needsSupplement') },
+                        { value: 'PENDING', label: t('documents.PENDING') },
+                        { value: 'EXPIRING', label: t('onboarding.expiring') },
+                      ]}
+                      onChange={(value) => {
+                        setStatusFilter(value);
+                        setOffset(0);
+                      }}
+                    />
+                    {statusFilter !== 'ALL' && documentFilter.isPending && (
+                      <Text style={styles.caption}>{t('common.loading')}</Text>
+                    )}
+                    {statusFilter !== 'ALL' && documentFilter.isError && (
+                      <>
+                        <ErrorNotice error={documentFilter.error} />
+                        <Button
+                          secondary
+                          label={t('common.retry')}
+                          onPress={() => void documentFilter.refetch()}
+                        />
+                      </>
+                    )}
+                    {(statusFilter === 'ALL' || documentFilter.isSuccess) && (
+                      <Text style={styles.caption}>
+                        {t('contractorUi.workerCount', { count: filtered.length })}
+                      </Text>
+                    )}
+                    {!filtered.length && (statusFilter === 'ALL' || documentFilter.isSuccess) && (
+                      <EmptyState
+                        icon={<IconUsers size={25} color={colors.textMuted} />}
+                        title={t('workforce.noWorkers')}
+                        hint={t('contractorUi.workerEmptyHint')}
+                      />
+                    )}
+                    {!!filtered.length && (
+                      <View style={styles.roster}>
+                        {filtered.slice(offset, offset + 8).map((worker, index) => (
+                          <Pressable
+                            key={worker.id}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${t('workforce.workerProfile')}: ${worker.displayName}`}
+                            onPress={() => setSelected(worker)}
+                            style={({ pressed }) => [
+                              styles.rosterRow,
+                              index > 0 && styles.rowDivider,
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            <View style={styles.initials}>
+                              <Text style={styles.initialsText}>
+                                {worker.displayName
+                                  .split(' ')
+                                  .map((part) => part[0])
+                                  .filter(Boolean)
+                                  .slice(-2)
+                                  .join('')
+                                  .toUpperCase() || 'W'}
+                              </Text>
+                            </View>
+                            <View style={styles.copy}>
+                              <Text numberOfLines={1} style={styles.rosterName}>
+                                {worker.displayName}
+                              </Text>
+                              <Text numberOfLines={1} style={styles.caption}>
+                                {worker.externalId} {'\u00b7'}{' '}
+                                {t(worker.userId ? 'workforce.hasAccount' : 'workforce.noAccount')}
+                              </Text>
+                              <View style={styles.rosterStatus}>
+                                <ManagementBadge
+                                  label={
+                                    !worker.isActive
+                                      ? t('workforce.statusInactive')
+                                      : worker.documentStatus === 'ACTIVE'
+                                        ? t('workforce.statusActive')
+                                        : t(`documents.${worker.documentStatus ?? 'PENDING'}`)
+                                  }
+                                  tone={
+                                    !worker.isActive
+                                      ? 'neutral'
+                                      : operational(worker)
+                                        ? 'success'
+                                        : worker.documentStatus === 'EXPIRED'
+                                          ? 'danger'
+                                          : 'warning'
+                                  }
+                                />
+                              </View>
+                            </View>
+                            <IconChevronRight size={16} color={colors.textTertiary} />
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    {(filtered.length > 8 || offset > 0) && (
+                      <Pager
+                        offset={offset}
+                        total={filtered.length}
+                        size={8}
+                        onChange={setOffset}
+                      />
+                    )}
+                  </>
+                );
+              }}
+            </QueryState>
+          )}
+        </Page>
+      </View>
+      {detail}
+    </>
   );
-}
-
-export function CreateWorker({ onBack }: { onBack: () => void }) {
-  return <CreateWorkerModal visible onClose={onBack} onSuccess={onBack} />;
 }
 
 export function WorkerDetail({
@@ -358,6 +435,8 @@ export function WorkerDetail({
 }
 
 const styles = StyleSheet.create({
+  content: { flex: 1 },
+  hidden: { display: 'none' },
   stats: { flexDirection: 'row', gap: 9 },
   stat: {
     flex: 1,

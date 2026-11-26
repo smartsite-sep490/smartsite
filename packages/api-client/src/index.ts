@@ -44,8 +44,6 @@ export type {
 } from '@smartsite/contracts/management';
 export type {
   AccountResponse,
-  CreateContractorWorkerAccountCommand,
-  ContractorWorkerAccountResponse,
   ContractorWorkerAccountOptionsResponse,
   WorkerProfileSnapshot,
   UpdateContractorWorkerCommand,
@@ -173,13 +171,12 @@ export {
 export type {
   WorkerDocumentKind,
   WorkerDocumentStatus,
-  DocumentOcrResult,
   WorkerDocumentResponse,
   WorkerComplianceStatus,
   WorkerComplianceResponse,
   ReviewWorkerDocumentCommand,
 } from '@smartsite/contracts';
-export type { DocumentImageQuality, WorkerIdentityImageResponse } from '@smartsite/contracts';
+export type { WorkerIdentityImageResponse } from '@smartsite/contracts';
 
 export type {
   SafetyEpisode,
@@ -252,6 +249,11 @@ export type {
 
 export type {
   SubmitWorkerDocumentsCommand,
+  SaveWorkerOnboardingDraftCommand,
+  WorkerIdentityUpdateCommand,
+  WorkerOnboardingBatchItem,
+  WorkerOnboardingBatchResult,
+  WorkerOnboardingDraft,
   WorkerDocumentSubmissionResponse,
   WorkerDocumentAiSummary,
 } from '@smartsite/contracts';

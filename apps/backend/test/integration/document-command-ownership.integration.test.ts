@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
+import sharp from 'sharp';
 import { JwtService } from '@nestjs/jwt';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { createTestConfig } from '../support/config.js';
@@ -59,7 +60,6 @@ test('document review rechecks original Officer session and keeps document, noti
       new WorkerDocumentsService(
         db,
         new ContractorOperationsService(db),
-        {} as never,
         {} as never,
         notify,
         {} as never,
@@ -231,6 +231,8 @@ test('document bundle rechecks the original Representative session and scope aft
     let prepared = 0;
     const storage = {
       save: async (buffer: Buffer, mediaType: string) => {
+        prepared++;
+        await interrupt();
         const storageKey = randomUUID();
         stored.add(storageKey);
         return {
@@ -245,25 +247,18 @@ test('document bundle rechecks the original Representative session and scope aft
         stored.delete(file.storageKey);
       },
     };
-    const ocr = {
-      inspect: async () => {
-        prepared++;
-        await interrupt();
-        return {
-          quality: { status: 'UNAVAILABLE', reason: 'OCR_ENGINE_UNAVAILABLE' },
-          ocr: { status: 'UNAVAILABLE', issuedOn: null, expiresOn: null, warnings: [] },
-        };
-      },
-    };
     const service = new WorkerDocumentsService(
       db,
       new ContractorOperationsService(db),
       storage as never,
-      ocr as never,
       new DocumentNotificationsService(db, config),
       {} as never,
     );
-    const buffer = Buffer.from([255, 216, 255, 1, 255, 217]);
+    const buffer = await sharp({
+      create: { width: 10, height: 10, channels: 3, background: 'white' },
+    })
+      .jpeg()
+      .toBuffer();
     const file = { buffer, size: buffer.length, mimetype: 'image/jpeg' };
     const files = { HEALTH_CERTIFICATE: file, PERSONAL_INSURANCE: file };
     const command = {

@@ -171,6 +171,7 @@ export const ENTITIES = [
   WorkerComplianceProfileEntity,
   WorkerIdentityImageEntity,
   WorkerDocumentEntity,
+  WorkerOnboardingDraftEntity,
   SafetyChecklistAssignmentEntity,
   SafetyChecklistItemEntity,
   SafetyChecklistSubmissionEntity,
@@ -242,4 +243,5 @@ import {
   WorkerDocumentEntity,
   WorkerIdentityImageEntity,
 } from './worker-document.entity.js';
+import { WorkerOnboardingDraftEntity } from './worker-onboarding-draft.entity.js';
 export * from './worker-document.entity.js';

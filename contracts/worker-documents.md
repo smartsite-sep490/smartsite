@@ -1,131 +1,67 @@
 # Worker documents and Safety review (MF01)
 
-Contractor Representatives own initial collection, supplements and renewals. Workers read their
-own profile, originals, review state and notifications. Only Safety assigned to the same Site
-can approve or reject individual certificates. OCR and AI results are advisory.
+Representatives own certificates, including replacements and renewals. Workers update and read
+their own personal information. A scoped Representative or Safety Officer can view personal
+information and protected originals. Identity completion is separate from certificate approval,
+gate access, scheduling and attendance.
 
-## Submit a document bundle
+## Draft certificates and batch submission
 
-POST /api/v1/sites/:siteId/workers/:workerId/document-submissions accepts authenticated multipart
-with one JSON metadata field and up to five files. Allowed file fields are FRONT, BACK,
-SAFETY_CARD, HEALTH_CERTIFICATE and PERSONAL_INSURANCE.
+All routes are relative to `/api/v1`. Representative writes require an active Contractor grant
+and valid Site participation for the selected Worker.
 
-Example metadata for an existing Worker with complete identity evidence:
+- `POST /sites/:siteId/workers/:workerId/document-submissions` saves certificate drafts. The
+  multipart `metadata` includes `requestId`, `expectedVersion`, `safetyCardRequired` and
+  `documents`. File fields have certificate kind names. An existing draft can be updated with new
+  date metadata and its original file. Matching retries return the same receipt.
+- `POST /sites/:siteId/contractors/:contractorId/worker-document-submissions/batch` accepts
+  `{ items: [{ id, version }] }` with up to 50 unique Worker IDs and their compliance versions.
+  It returns success or a public error per Worker. An exact successful retry does not create a
+  second review or notification.
+- `GET /sites/:siteId/workers/:workerId/compliance` shows the certificate versions and status
+  available to the caller. Unsent drafts are scoped to the Representative. The Safety review
+  list surfaces submitted and reviewed records in the authorized Site.
 
-    {
-      "requestId": "55555555-5555-4555-8555-555555555555",
-      "expectedVersion": 1,
-      "safetyCardRequired": false,
-      "documents": {
-        "HEALTH_CERTIFICATE": { "submittedIssuedOn": "2026-11-01" },
-        "PERSONAL_INSURANCE": { "submittedExpiresOn": "2027-11-01" }
-      }
-    }
+Sending a Worker requires at least one draft and coverage of all required certificate kinds
+through a draft, pending certificate or valid approved original. The proposed Group 3 card
+requirement takes effect on submission. Safety reviews the pending version using the original.
+Representatives declare the examination date for health certificates, and can declare the issue
+date for Group 3 cards or the start of coverage for labor insurance in addition to the expiry
+date. Safety can approve using the declared dates after reviewing the original, or supply corrected
+or missing dates. A reason is required when returning a certificate. Approved originals remain
+effective through their inclusive expiry date in Asia/Ho_Chi_Minh or until a replacement is
+approved. Health certificate expiry is one calendar year after the examination date, with 29
+February clamped to 28 February. Pending or rejected renewals preserve the current approval.
 
-Attach files named HEALTH_CERTIFICATE and PERSONAL_INSURANCE for this example.
-Optional identity metadata contains nationalId (12 digits), phoneNumber, gender and address.
-CCCD sides accept JPEG/PNG, certificates accept JPEG/PNG/PDF, at most 5 MiB per file.
-PDFs may have at most four pages. Backend validates file signatures and decodability.
-Unknown fields, wrong date fields, missing dates and impossible dates are rejected.
+## Worker self-service identity
 
-Initial collection includes both required ID images, health, labor insurance, and safety card
-when declared required. Supplements include replacements and any missing required documents,
-reusing unchanged pending documents or valid approvals.
+`GET /sites/:siteId/workers/me/compliance` finds the Worker linked to the login without
+requiring an active team assignment or contractor participation.
 
-The receipt contains requestId, version and documentIds. Exact retries reuse the existing
-audit receipt before OCR/storage. Changed payloads with the same request ID or stale versions
-return 409. Worker locking serializes submission and review. Storage happens before a short
-database transaction. New unused files are cleaned after failure or deduplication. Existing
-certificate revisions and protected references to replaced ID originals remain in history/audit.
+`PUT /sites/:siteId/workers/me/identity` takes multipart metadata with `expectedVersion`,
+`nationalId`, `phoneNumber`, `gender` and `address`, plus the `FRONT` and `BACK` file fields.
+Both sides are required for the first completed setup. Later changes can reuse a stored side.
+The Backend derives the Worker from the signed-in account and serializes concurrent updates.
+Personal fields and images are available through scoped, protected reads.
 
-Account creation keeps its existing endpoint. If submission fails after account creation,
-complete the same Worker instead of creating another account. Upgrade Web/Mobile together with
-this backend before permitting document writes. Individual certificate/identity upload and
-submitted-expiry mutation endpoints/client methods are retired.
+## File validation and optional AI
 
-## Required documents and review
+CCCD accepts JPEG/PNG. Certificates also accept PDF, with at most four pages. All files are
+limited to 5 MiB and validated before storage. Native Backend development requires Poppler
+`pdfinfo` and `pdftoppm` on PATH. The Backend image includes the tools. OCR evidence and its
+historical database columns remain available for data retention only.
 
-Representatives explicitly declare whether a Group 3 safety card is required. This declaration
-takes effect immediately. Health and labor insurance remain required. Old profiles and
-Workers without a profile default to requiring the safety card. The PERSONAL_INSURANCE
-enum and stored historical data remain unchanged while the interface calls it labor insurance.
-
-Profile responses include version and safetyCardRequired. Approved, current required documents
-determine eligibility across gate, scheduling, queue filters, missing-kind labels and reminders.
-Missing required identity or manual suspension still denies operational permission.
-Uploading, OCR, AI and proposed dates never approve documents or extend an existing approval.
-
-Safety confirms issue/examination and expiry against the original. Health expiry remains one
-calendar year after the confirmed examination date, clamping 29 February to 28 February.
-Expiry is inclusive in Asia/Ho_Chi_Minh. A valid approved original continues during a pending or
-rejected renewal until its replacement is approved or the original expires.
-
-Rejection requires a note, retains history and notifies the Representative to submit corrections.
-Identity corrections and replacement ID images are version checked and audited. Existing
-approved certificates retain their status until Safety approves a replacement.
-
-## OCR preflight
-
-These authenticated preflight endpoints remain available:
-
-- POST /sites/:siteId/contractors/:contractorId/document-image-quality
-- POST /sites/:siteId/workers/:workerId/document-image-quality
-- POST /sites/:siteId/workers/:workerId/documents/:kind/check
-
-The quality response includes optional OCR evidence. Certificate checks return quality, ocr
-and dateCheck without persistence. Scoped Representatives may preflight. Workers cannot
-preflight or write documents.
-
-Combined helper inspection checks quality and reads text once, sharing rendered PDF pages.
-PDF pages with useful native text use that extraction first, with OCR for the other pages.
-Changing only a date compares it with the existing OCR result instead of uploading again.
-
-The backend keeps at most 64 cached results for five minutes per instance, keyed by actor,
-Site, Contractor, media type, original hash and processing revision. Only evidence/metadata
-is cached. A cache miss safely recomputes. Originals remain protected and unchanged.
-
-Malformed, corrupt, oversized and excessive-page files are rejected. Blur, exposure issues,
-unreadable text, expiry and field mismatches are advisory and may be sent for human review.
-Unavailable mandatory file validation requires retry. OCR availability never establishes
-identity, document authenticity or permission.
-
-Keep WORKER_DOCUMENT_PYTHON, WORKER_DOCUMENT_TESSERACT, WORKER_DOCUMENT_PDFTOPPM,
-pnpm ocr:setup and pnpm test:ocr. The Backend owns the bounded helper, uses no separate HTTP
-service and passes no application secrets to child processes.
-
-## On-demand Safety AI scan
-
-Safety selects profiles on the current queue page and presses Quick AI scan. Changing Site,
-filters or page clears selection. The screen previews profile/document counts, scans pending
-documents sequentially, and reuses COMPLETE results. Stop prevents the next request.
-Leaving the screen stops future requests while persisted results remain available.
-
-POST /sites/:siteId/workers/:workerId/documents/:id/ai-analysis reads the protected stored
-original and returns 204 after saving evidence. Only scoped Safety can call it.
-Concurrent claims and stale attempts are fenced by a lease. Opening originals never invokes AI.
-Reviewed documents cannot start a new analysis.
-
-The backend uses OpenAI Responses API structured outputs with store:false. OPENAI_API_KEY
-remains server-side. WORKER_DOCUMENT_OPENAI_MODEL defaults to gpt-4.1-mini.
-WORKER_DOCUMENT_OPENAI_TIMEOUT_MS defaults to 30000. The default client waits at most 40000 ms.
-No automatic client retry occurs. Safety can request another scan after failure.
-
-aiSummary on the Safety queue considers current pending documents only and prioritizes
-discrepancies while retaining unresolved counts. Statuses are NOT_SCANNED, ANALYZING,
-ATTENTION, NO_DISCREPANCY and INSUFFICIENT. Detail includes persisted extraction plus
-computed date, identity, type and validity comparisons. A favorable label is still pending
-human review. Provider failure never prevents original viewing or manual Safety review.
-
-Representatives and Workers do not receive AI extractions. Public directories and logs
-exclude citizen IDs and evidence. There is no automatic AI on upload, Cloud Tasks,
-Scheduler or AI-job table. Existing approved-expiry notifications retain their hourly sweep,
-defaulting to 30 days advance notice and applying the declared safety-card requirement.
+`POST /sites/:siteId/workers/:workerId/documents/:id/ai-analysis` requests advisory analysis of
+a stored draft certificate. The scoped Representative may request it and read its result. The
+analysis uses the existing server-side model configuration. The result is specific to that
+certificate version and its declared dates. AI checks the document type, dates and validity.
+Personal identifiers are excluded from the result. Citizen ID photos are never sent for analysis.
+Safety makes the review decision from the original. Provider failure records an unavailable
+result and returns HTTP 503 while keeping manual submission and review available.
 
 ## Migration and verification
 
-Apply WorkerDocumentReviewWorkflow1795478400000 before this backend, after existing
-WorkerDocumentAiAnalysis1795132800001. It adds safety_card_required (default true) and version
-(default 1) to worker_compliance_profile. Synchronization and startup migrations stay disabled.
-
-Run focused backend/client/Web/Mobile tests, PostgreSQL migrations and integration tests,
-repository checks and OCR tests. Automated provider tests mock OpenAI and use synthetic files.
+Apply `WorkerOnboardingBatch1795737600000` after the existing document-review migrations.
+Deploy the Backend, Web and Mobile clients together for the changed write flow. Test the
+migration on existing approved and pending certificates. Verify permissions, independent
+batch results and retries on PostgreSQL. AI and email verification tests use synthetic inputs.

@@ -226,62 +226,29 @@ service token. It accepts three authenticated JPEG uploads. Completion remains
 honestly `AI_UNAVAILABLE` until a reviewed face model and private template store
 exist; it never creates a simulated biometric profile or grants access.
 
-### Worker documents and Safety approval
+### Worker onboarding and document review
 
-Contractor Representatives create Worker accounts and submit identity images and all selected
-certificates together on Web/Mobile. They handle supplements and renewals; Workers view their
-documents, status and notifications. Health certificates and labor insurance are required.
-The Representative explicitly declares whether a Group 3 safety card is required; existing
-profiles default to requiring it. Safety reviews each document and records a reason for rejection.
-Approved originals remain effective until Safety approves their replacements.
+Contractor Representatives save intake drafts for their Site and Contractor. They select complete
+rows to create linked Worker accounts and queue email credentials. A separate batch action sends
+prepared certificates to Safety. Workers update their own profile and both citizen ID images.
+Safety reviews original certificates independently of the personal profile.
 
-OCR combines quality checks and extraction before submission, tries native PDF text first and
-caches scoped results for five minutes. Blurry images, unclear text and date/identity differences
-are advisory; corrupt files and file limits are enforced. Declared dates are required and Safety
-confirms official dates. Eligibility uses current approved required certificates through the end
-of their expiry date in Vietnam time. The expiry notice defaults to 30 days.
+Labor insurance and a health certificate are required. The Representative declares whether the
+Group 3 safety card is required. Safety confirms the official dates and provides a reason when
+returning a certificate. Approved originals remain effective until they expire or Safety approves
+their replacements. Representatives may request advisory AI analysis of draft certificates.
 
-Safety can select profiles on the current Web queue page and run a sequential quick AI scan.
-Results are saved against pending documents and successful results are reused. AI runs only
-when Safety requests it, never on submission, and cannot approve a document. Failures do not
-prevent manual review. No Cloud Tasks, Scheduler or AI job table is needed.
-See [Worker documents](contracts/worker-documents.md) for the API, setup, privacy and review rules.
-
-Document OCR runs directly under the Backend. Install Python, Tesseract with Vietnamese/English
-language data and Poppler once, configure their paths as described in the contract, then run:
-
-```sh
-pnpm ocr:setup
-pnpm dev:api
-```
-
-`pnpm dev` also includes OCR through the Backend. There is no separate OCR service, port or AI
-repository dependency. Setup does not build an APK; runtime never installs packages or downloads
-models. The Backend container includes the OCR tools. Apply migration
-`WorkerDocuments1792540800000`, then `WorkerDocumentIdentityChecks1792627200000`, with the Backend
-migration command before using the new forms.
-Also apply `WorkerDocumentSubmittedExpiry1792713600000` for manual expiry suggestions,
-then `WorkerHealthIssueDate1792800000000` for health examination/issue dates. Health expiry
-is computed one calendar year after the date Safety confirms (29 February clamps to 28 February).
-Safety must approve a replacement before renewal takes effect; existing approved expiry dates
-are preserved by the migration. Also apply WorkerDocumentReviewWorkflow1795478400000 before
-releasing the new batch-submission clients; the removed individual upload APIs require coordinated
-Backend, Web and Mobile deployment.
+The Backend validates originals in a private store. For native development, put Poppler's
+`pdfinfo` and `pdftoppm` on PATH. The container includes the tools. Apply
+`WorkerOnboardingBatch1795737600000` before deploying the updated Backend, Web and Mobile clients.
+See [Worker onboarding](contracts/mf01-worker-onboarding.md) and
+[Worker documents](contracts/worker-documents.md) for permissions, retries and migration details.
 
 ### Account-linked face enrollment
 
-Contractor Representatives open **Worker Onboarding** in the sidebar to create a Worker profile
-and its linked login account for an active Contractor at their Site. The new account receives
-only the Worker role, starts with the default password `12345678`, and can sign in immediately; password change is optional.
-The form needs no password entry. The Representative
-can view/search their Contractor's workers, edit Worker names, suspend or restore them, and
-use the supervised face-enrollment section on the same page. Scope is shared by authorized
-Representatives of that Contractor; suspension keeps history and prevents entry eligibility. See
-[MF01 Worker onboarding](contracts/mf01-worker-onboarding.md) for scope, API and retry behavior.
-
-Worker codes are generated by the Backend on creation (for example `W000001`), shown after saving
-and in the roster. The Representative does not enter or edit the code in the UI. Apply the
-WorkerCodeSequence migration before running the updated Backend; existing codes remain unchanged.
+Representatives manage worker status and supervised face enrollment in **Manage worker records** on Web.
+The Worker confirms consent during registration. Mobile shows the Worker face status. The Backend
+generates the Worker code on creation and keeps existing codes.
 
 Worker entry is evaluated for the Site through the same Face, QR and manual checks at every gate. An approved current Site assignment, valid Worker documents and Contractor participation remain required. There is no separate Worker gate-permission screen or grant. Gate IDs still identify the place of passage and bind QR fallback sessions; visitor visits remain bound to their approved gate. Zone permissions retain their separate scope and rules. Storage changes are applied through the registered [database migrations](apps/backend/src/database/migrations).
 

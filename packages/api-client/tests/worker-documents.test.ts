@@ -18,25 +18,6 @@ it('requests AI analysis for the stored document through a scoped command withou
   expect(init.body).toBeUndefined();
 });
 
-it('preflights certificate dates through authenticated scoped multipart', async () => {
-  const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
-    Response.json({}),
-  );
-  vi.stubGlobal('fetch', fetch);
-  const client = new SmartSiteManagementClient('https://api.example.test');
-  const file = new File(['synthetic'], 'card.pdf', { type: 'application/pdf' });
-  await client.checkWorkerDocumentDates('token', 'site/a', 'worker/a', 'SAFETY_CARD', file, {
-    submittedExpiresOn: '2030-10-27',
-  });
-  const [url, init] = fetch.mock.calls[0]!;
-  expect(url).toContain('/sites/site%2Fa/workers/worker%2Fa/documents/SAFETY_CARD/check');
-  expect(init.method).toBe('POST');
-  expect(init.headers).toMatchObject({ Authorization: 'Bearer token' });
-  expect(init.headers).not.toHaveProperty('Content-Type');
-  const form = init.body as FormData;
-  expect(form.get('submittedExpiresOn')).toBe('2030-10-27');
-  expect(form.get('file')).toBeInstanceOf(File);
-});
 it('sends document search and pending filters to the Backend before pagination', async () => {
   const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () =>
     Response.json({ items: [], total: 0 }),
@@ -96,7 +77,7 @@ it('loads protected PDF originals using bearer authentication', async () => {
   );
   expect(fetch.mock.calls[0]![1].headers).toMatchObject({ Authorization: 'Bearer token' });
 });
-it('submits a complete versioned bundle using one authenticated multipart request', async () => {
+it('saves versioned certificate drafts using one authenticated multipart request', async () => {
   const fetch = vi.fn(async () =>
     Response.json({ requestId: 'request', version: 2, documentIds: ['doc'] }),
   );

@@ -436,6 +436,11 @@ for (const width of [1920, 1366, 1024]) {
     await install(page, fixture);
     await page.setViewportSize({ width, height: width === 1920 ? 1080 : 768 });
     await page.goto(`/assigned-work?siteId=${siteId}`);
+    const sitePicker = page.locator('[data-select-for=assigned-work-site-select]');
+    await expect(sitePicker).toBeVisible();
+    await sitePicker.click();
+    await expect(page.getByRole('listbox')).toBeVisible();
+    await page.keyboard.press('Escape');
     const actionsTab = page.getByRole('tab', { name: 'Corrective actions', exact: true });
     const checklistsTab = page.getByRole('tab', { name: 'Checklists', exact: true });
     await expect(actionsTab).toHaveAttribute('aria-selected', 'true');
