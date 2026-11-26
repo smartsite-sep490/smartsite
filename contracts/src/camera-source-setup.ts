@@ -7,6 +7,7 @@ export interface SourceHost {
   id: string;
   label: string;
   available: boolean;
+  reason?: 'AGENT_UNAVAILABLE' | 'CAMERA_UNBOUND';
   capabilities?: {
     sourceKinds: CameraSourceKind[];
     webcams: { id: string; label: string }[];

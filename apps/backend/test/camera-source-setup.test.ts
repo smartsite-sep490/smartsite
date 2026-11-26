@@ -154,6 +154,27 @@ test('host list is site-scoped, validates capabilities, and never sends service 
   assert.doesNotMatch(JSON.stringify(result), /server-only-token|62035|other.example/);
 });
 
+test('an explicit missing camera scope is distinct from an unreachable source operator', async () => {
+  for (const [status, body, reason] of [
+    [404, { code: 'SOURCE_SCOPE_NOT_FOUND' }, 'CAMERA_UNBOUND'],
+    [404, { code: 'UNKNOWN_ROUTE' }, 'AGENT_UNAVAILABLE'],
+    [404, { code: 'SOURCE_SCOPE_NOT_FOUND', secret: 'must-not-leak' }, 'AGENT_UNAVAILABLE'],
+    [401, { code: 'SOURCE_SCOPE_NOT_FOUND' }, 'AGENT_UNAVAILABLE'],
+    [503, { code: 'SOURCE_SCOPE_NOT_FOUND' }, 'AGENT_UNAVAILABLE'],
+  ] as const) {
+    const { service } = setup((async () => Response.json(body, { status })) as typeof fetch);
+    assert.deepEqual((await service.list('token', site, camera)).hosts, [
+      { id: 'edge', label: 'Local host', available: false, reason },
+    ]);
+  }
+  const offline = setup((async () => {
+    throw new Error('private connection details');
+  }) as typeof fetch);
+  assert.deepEqual((await offline.service.list('token', site, camera)).hosts, [
+    { id: 'edge', label: 'Local host', available: false, reason: 'AGENT_UNAVAILABLE' },
+  ]);
+});
+
 test('only site manager can test sources; foreign host and arbitrary source fields never reach the agent', async () => {
   let calls = 0;
   const fetcher = (async () => {
