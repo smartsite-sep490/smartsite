@@ -220,9 +220,7 @@ describe('Site Access ERD integration', () => {
     };
     mount();
     await waitFor(() =>
-      expect((screen.getByLabelText(/Active Managed Site/) as HTMLSelectElement).value).toBe(
-        'site-beta',
-      ),
+      expect((screen.getByLabelText(/^Site$/) as HTMLSelectElement).value).toBe('site-beta'),
     );
   });
   it('selects only the explicit site for a mixed Admin and Site Manager', async () => {
