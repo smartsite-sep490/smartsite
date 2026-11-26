@@ -911,52 +911,233 @@ describe('source-specific camera setup', () => {
       expect(probe.mock.calls[1]?.[4]).toBe('edge-b');
     });
 
-    it('distinguishes per-camera unavailable hosts from empty site host list without claiming the physical computer is offline (EN/VI)', async () => {
+    it('distinguishes empty inventory, CAMERA_UNBOUND, AGENT_UNAVAILABLE, mixed, and legacy unavailable states cleanly in EN/VI with technical host details collapsed (no host name in main paragraph) and read-only retry', async () => {
       const user = userEvent.setup();
-      const unavailableHost: SourceHost = {
+      const unboundHost: SourceHost = {
         id: 'edge-cam1-only',
         label: 'Site Main PC',
+        available: false,
+        reason: 'CAMERA_UNBOUND',
+      };
+      const unreachableHost: SourceHost = {
+        id: 'edge-unreachable-2',
+        label: 'Backup Processing PC',
+        available: false,
+        reason: 'AGENT_UNAVAILABLE',
+      };
+      const legacyHost: SourceHost = {
+        id: 'edge-legacy-3',
+        label: 'Legacy Site Box',
         available: false,
       };
       const hostsFn = vi
         .fn<CameraSourceClient['hosts']>()
-        .mockResolvedValueOnce([unavailableHost])
+        .mockResolvedValueOnce([unboundHost])
+        .mockResolvedValueOnce([unreachableHost])
+        .mockResolvedValueOnce([unboundHost, unreachableHost])
+        .mockResolvedValueOnce([legacyHost])
         .mockResolvedValueOnce([]);
+      const probe = vi.fn<CameraSourceClient['probe']>();
+      const apply = vi.fn<NonNullable<CameraSourceClient['apply']>>();
+      const resume = vi.fn<NonNullable<CameraSourceClient['resume']>>();
 
-      setup({ hosts: hostsFn, probe: vi.fn() });
+      setup({ hosts: hostsFn, probe, apply, resume });
 
-      // 1) Non-empty host list where host is unavailable for THIS camera (generic AGENT_UNAVAILABLE)
-      const unavailGate = await screen.findByTestId('camera-source-host-prerequisite');
-      expect(unavailGate.getAttribute('role')).toBe('status');
-      expect(unavailGate.getAttribute('data-host-state')).toBe('unavailable');
+      // 1) All CAMERA_UNBOUND (EN + VI)
+      const unboundGate = await screen.findByTestId('camera-source-host-prerequisite');
+      expect(unboundGate.getAttribute('role')).toBe('status');
+      expect(unboundGate.getAttribute('data-host-state')).toBe('unbound');
       expect(
-        within(unavailGate).getByRole('heading', { name: /Cannot connect this camera yet/i }),
+        within(unboundGate).getByRole('heading', {
+          name: 'Camera is not connected to a video source yet',
+        }),
       ).toBeTruthy();
-      expect(unavailGate.textContent).toMatch(/Site Main PC/);
-      expect(unavailGate.textContent).toMatch(/assign/i);
-      expect(unavailGate.textContent).not.toMatch(/\boffline\b/i);
+      const unboundMsg = within(unboundGate).getByTestId('camera-source-prerequisite-message');
+      expect(unboundMsg.textContent).not.toContain('Site Main PC');
+      expect(unboundMsg.textContent).not.toContain('edge-cam1-only');
+      expect(unboundMsg.textContent).not.toMatch(/\boffline\b|powered off|operational/i);
+      const unboundDetails = within(unboundGate).getByTestId(
+        'camera-source-unavailable-details',
+      ) as HTMLDetailsElement;
+      expect(unboundDetails.tagName).toBe('DETAILS');
+      expect(unboundDetails.open).toBe(false);
+      expect(unboundDetails.textContent).toContain('Site Main PC');
+      expect(unboundDetails.textContent).toContain('edge-cam1-only');
+      expect(unboundDetails.textContent).toContain('CAMERA_UNBOUND');
+      // Only one read-only refresh action (no fake connect/provision button)
+      expect(within(unboundGate).getAllByRole('button')).toHaveLength(1);
+      expect(probe).not.toHaveBeenCalled();
+      expect(apply).not.toHaveBeenCalled();
+      expect(resume).not.toHaveBeenCalled();
 
-      // Vietnamese parity for per-camera unavailable
       await i18n.changeLanguage('vi');
       await waitFor(() => {
         expect(
-          within(unavailGate).getByRole('heading', { name: /Chưa kết nối được camera này/i }),
+          within(unboundGate).getByRole('heading', {
+            name: 'Camera chưa được kết nối với nguồn hình',
+          }),
         ).toBeTruthy();
       });
-      expect(unavailGate.textContent).toMatch(/Site Main PC/);
-      expect(unavailGate.textContent).toMatch(/gán kết nối/i);
-      expect(unavailGate.textContent).not.toMatch(/ngoại tuyến|máy AI/i);
+      expect(
+        within(unboundGate).getByTestId('camera-source-prerequisite-message').textContent,
+      ).not.toContain('Site Main PC');
+      expect(
+        within(unboundGate).getByTestId('camera-source-prerequisite-message').textContent,
+      ).not.toMatch(/ngoại tuyến|tắt nguồn|máy AI/i);
 
-      // 2) Refresh -> empty site host list shows a clearly distinct empty-site gate
-      await user.click(within(unavailGate).getByRole('button', { name: /Kiểm tra lại kết nối/i }));
+      // 2) Refresh -> All AGENT_UNAVAILABLE (VI + EN)
+      await user.click(within(unboundGate).getByRole('button', { name: /Kiểm tra lại kết nối/i }));
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('camera-source-host-prerequisite').getAttribute('data-host-state'),
+        ).toBe('agent-unavailable');
+      });
+      const agentGate = screen.getByTestId('camera-source-host-prerequisite');
+      expect(
+        within(agentGate).getByRole('heading', {
+          name: 'Hiện chưa truy cập được dịch vụ xử lý camera',
+        }),
+      ).toBeTruthy();
+      const agentMsgVi = within(agentGate).getByTestId('camera-source-prerequisite-message');
+      expect(agentMsgVi.textContent).not.toContain('Backup Processing PC');
+      expect(agentMsgVi.textContent).not.toMatch(/ngoại tuyến|tắt nguồn|máy AI/i);
+      const agentDetails = within(agentGate).getByTestId(
+        'camera-source-unavailable-details',
+      ) as HTMLDetailsElement;
+      expect(agentDetails.open).toBe(false);
+      expect(agentDetails.textContent).toContain('Backup Processing PC');
+      expect(agentDetails.textContent).toContain('edge-unreachable-2');
+      expect(agentDetails.textContent).toContain('AGENT_UNAVAILABLE');
+
+      await i18n.changeLanguage('en');
+      await waitFor(() => {
+        expect(
+          within(agentGate).getByRole('heading', {
+            name: 'Camera processing service is currently unreachable',
+          }),
+        ).toBeTruthy();
+      });
+      expect(
+        within(agentGate).getByTestId('camera-source-prerequisite-message').textContent,
+      ).not.toContain('Backup Processing PC');
+      expect(
+        within(agentGate).getByTestId('camera-source-prerequisite-message').textContent,
+      ).not.toMatch(/\boffline\b|powered off/i);
+
+      // 3) Refresh -> Mixed CAMERA_UNBOUND + AGENT_UNAVAILABLE retains safe generic state with per-host details collapsed
+      await user.click(within(agentGate).getByRole('button', { name: /Check connection again/i }));
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('camera-source-host-prerequisite').getAttribute('data-host-state'),
+        ).toBe('unavailable');
+      });
+      const mixedGate = screen.getByTestId('camera-source-host-prerequisite');
+      expect(
+        within(mixedGate).getByRole('heading', { name: 'Cannot connect this camera yet' }),
+      ).toBeTruthy();
+      const mixedMsg = within(mixedGate).getByTestId('camera-source-prerequisite-message');
+      expect(mixedMsg.textContent).not.toContain('Site Main PC');
+      expect(mixedMsg.textContent).not.toContain('Backup Processing PC');
+      expect(mixedMsg.textContent).not.toMatch(/\boffline\b/i);
+      const mixedDetails = within(mixedGate).getByTestId(
+        'camera-source-unavailable-details',
+      ) as HTMLDetailsElement;
+      expect(mixedDetails.open).toBe(false);
+      expect(mixedDetails.textContent).toContain('Site Main PC');
+      expect(mixedDetails.textContent).toContain('CAMERA_UNBOUND');
+      expect(mixedDetails.textContent).toContain('Backup Processing PC');
+      expect(mixedDetails.textContent).toContain('AGENT_UNAVAILABLE');
+
+      // 4) Refresh -> Legacy unavailable (no reason field) stays distinct generic unavailable without claiming offline
+      await user.click(within(mixedGate).getByRole('button', { name: /Check connection again/i }));
+      await waitFor(() => {
+        expect(
+          within(screen.getByTestId('camera-source-host-prerequisite')).getByTestId(
+            'camera-source-unavailable-details',
+          ).textContent,
+        ).toContain('Legacy Site Box');
+      });
+      const legacyGate = screen.getByTestId('camera-source-host-prerequisite');
+      expect(legacyGate.getAttribute('data-host-state')).toBe('unavailable');
+      expect(
+        within(legacyGate).getByTestId('camera-source-prerequisite-message').textContent,
+      ).not.toContain('Legacy Site Box');
+
+      // 5) Refresh -> Empty site host inventory shows distinct empty gate (no technical host list)
+      await user.click(within(legacyGate).getByRole('button', { name: /Check connection again/i }));
       await waitFor(() => {
         expect(
           screen.getByTestId('camera-source-host-prerequisite').getAttribute('data-host-state'),
         ).toBe('empty');
       });
       const emptyGate = screen.getByTestId('camera-source-host-prerequisite');
-      expect(emptyGate.textContent).toMatch(/chưa có kết nối xử lý camera/i);
+      expect(within(emptyGate).queryByTestId('camera-source-unavailable-details')).toBeNull();
+      expect(probe).not.toHaveBeenCalled();
+      expect(apply).not.toHaveBeenCalled();
+      expect(resume).not.toHaveBeenCalled();
+
+      await i18n.changeLanguage('vi');
+      await waitFor(() => {
+        expect(emptyGate.textContent).toMatch(/chưa có kết nối xử lý camera/i);
+      });
       expect(emptyGate.textContent).not.toMatch(/máy AI|ngoại tuyến/i);
+    });
+
+    it('preserves available-host auto-binding alongside a CAMERA_UNBOUND sibling and revokes cleanly on 403 denied without leaking host details', async () => {
+      const user = userEvent.setup();
+      const onUnauthorized = vi.fn();
+      const unboundSibling: SourceHost = {
+        id: 'edge-unbound-sib',
+        label: 'Unbound Sibling PC',
+        available: false,
+        reason: 'CAMERA_UNBOUND',
+      };
+      const hostsFn = vi
+        .fn<CameraSourceClient['hosts']>()
+        .mockResolvedValueOnce([host, unboundSibling])
+        .mockRejectedValueOnce(new SourceSetupError(403));
+
+      const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={cache}>
+          <CameraSourceSetupPanel
+            apiUrl="http://localhost"
+            token="tok"
+            siteId="site-a"
+            camera={{ id: 'cam-a', name: 'Gate camera', configurationVersion: 2 }}
+            setupKey={['avail-then-denied']}
+            canWrite
+            onUnauthorized={onUnauthorized}
+            client={{ hosts: hostsFn, probe: vi.fn() }}
+          />
+        </QueryClientProvider>,
+      );
+
+      // Available host auto-binds cleanly without primary host selector even when an unbound sibling exists
+      expect(await screen.findByLabelText('Device')).toBeTruthy();
+      expect(screen.queryByTestId('camera-source-host-prerequisite')).toBeNull();
+
+      // Inspecting unbound sibling in collapsed Connection details shows CAMERA_UNBOUND reason concisely
+      const details = screen.getByTestId('camera-source-connection-details') as HTMLDetailsElement;
+      expect(details.open).toBe(false);
+      details.open = true;
+      const select = within(details).getByRole('combobox', {
+        name: 'Camera processing computer',
+      });
+      await user.selectOptions(select, 'edge-unbound-sib');
+      expect(screen.getByRole('status').textContent).toMatch(
+        /not connected to a video source yet/i,
+      );
+      expect(screen.getByRole('status').textContent).not.toMatch(/\boffline\b/i);
+
+      // Refresh hitting 403 denied revokes cleanly, calls onUnauthorized once, and hides all host/source details
+      await user.click(within(details).getByRole('button', { name: /Check connection again/i }));
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(/session no longer permits camera setup/i);
+      expect(onUnauthorized).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('camera-source-connection-details')).toBeNull();
+      expect(screen.queryByText(/Unbound Sibling PC/i)).toBeNull();
+      expect(screen.queryByRole('combobox')).toBeNull();
     });
 
     it('clears multi-host selection and pending resume command on camera scope replacement and on 401 auth revocation', async () => {
