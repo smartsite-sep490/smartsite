@@ -150,10 +150,10 @@ const vi: Record<keyof typeof en, string> = {
   referenceRevalidationRequired:
     'Góc nhìn camera hoặc vùng quan sát đang bật cần xác nhận lại trên ảnh tham chiếu mới trước khi lưu thay đổi PPE. Mở phần vùng quan sát để xác nhận rồi quay lại đây — bản nháp vẫn được giữ nguyên.',
   openReference: 'Thiết lập ảnh tham chiếu',
-  refreshWorkerStatus: 'Làm mới trạng thái máy AI',
-  jumpToApplyWorker: 'Đi tới áp dụng trên máy AI',
+  refreshWorkerStatus: 'Làm mới trạng thái áp dụng',
+  jumpToApplyWorker: 'Đi tới áp dụng cấu hình',
   modelCapabilityDistinction:
-    'Phân biệt PPE bắt buộc và năng lực mô hình: thay đổi ở đây chỉ lưu phiên bản chính sách PPE mong muốn trên máy chủ; khả năng nhận diện thực tế vẫn phụ thuộc các lớp PPE mà tệp mô hình trên máy AI đang nạp hỗ trợ (không thay đổi trọng số mô hình theo từng camera).',
+    'Phân biệt PPE bắt buộc và năng lực mô hình: thay đổi ở đây chỉ lưu phiên bản chính sách PPE mong muốn trên máy chủ; khả năng nhận diện thực tế vẫn phụ thuộc các lớp PPE mà tệp mô hình đang nạp trên máy xử lý camera hỗ trợ (không thay đổi trọng số mô hình theo từng camera).',
   target: 'Phạm vi chính sách',
   camera: 'Mặc định camera',
   region: 'Vùng',
@@ -180,7 +180,7 @@ const vi: Record<keyof typeof en, string> = {
   preservedRegionDrafts:
     'Đã giữ nguyên {{count}} bản nháp theo vùng sau khi tải lại — hãy chọn từng vùng tại Phạm vi chính sách để xem và lưu, hoặc nhấn Đặt lại bản nháp.',
   resetDraft: 'Đặt lại bản nháp',
-  saved: 'Đã lưu phiên bản {{revision}}. Xem riêng trạng thái áp dụng trên máy AI.',
+  saved: 'Đã lưu phiên bản {{revision}}. Xem riêng trạng thái áp dụng.',
   current: 'Phiên bản đã lưu {{revision}}',
   absent: 'Phạm vi này chưa có chính sách PPE v2.',
   initialize: 'Khởi tạo chính sách PPE',
@@ -206,8 +206,8 @@ const vi: Record<keyof typeof en, string> = {
   'catalogReason.PRESENT_ONLY_SAFETY_BOUNDARY':
     'Chỉ ghi nhận trang bị; không xác nhận đeo hoặc móc đúng và không tự động báo vi phạm.',
   catalogBoundaryNote:
-    'Tổng {{totalCount}} loại PPE: hiện chọn được {{selectableCount}} loại cho quy tắc giám sát, {{unsupportedCount}} loại chưa thể chọn. Hiển thị tại đây không đồng nghĩa máy AI đã chạy đủ hoặc đạt độ chính xác.',
-  capabilityNoteSummary: 'Lưu ý về chính sách và năng lực máy AI',
+    'Tổng {{totalCount}} loại PPE: hiện chọn được {{selectableCount}} loại cho quy tắc giám sát, {{unsupportedCount}} loại chưa thể chọn. Hiển thị tại đây không đồng nghĩa hệ thống xử lý đã chạy đủ hoặc đạt độ chính xác.',
+  capabilityNoteSummary: 'Lưu ý về chính sách và năng lực nhận diện',
   validationExplicitEmpty: 'Chọn ít nhất một hạng mục PPE trước khi lưu chính sách tùy chỉnh.',
   validationDisabledReasonRequired: 'Nhập lý do tắt kiểm tra PPE trước khi lưu.',
   validationDisabledReasonInvalid:
@@ -253,7 +253,7 @@ const vi: Record<keyof typeof en, string> = {
   technicalRegionId: 'Mã vùng (Region ID): {{id}}',
   technicalZoneId: 'Mã khu vực (Zone ID): {{id}}',
   capabilityTruthNote:
-    'Các lựa chọn PPE đã lưu chỉ ghi nhận cấu hình chính sách mong muốn. Việc giám sát thực tế cần xác nhận máy AI đã áp dụng khớp phiên bản và phụ thuộc các lớp PPE mà mô hình trên máy AI đang chạy hỗ trợ (màn hình này không hiển thị nhãn chất lượng mô hình tĩnh theo từng camera).',
+    'Các lựa chọn PPE đã lưu chỉ ghi nhận cấu hình chính sách mong muốn. Việc giám sát thực tế cần xác nhận cấu hình đã áp dụng khớp phiên bản và phụ thuộc các lớp PPE mà mô hình trên máy xử lý camera đang chạy hỗ trợ (màn hình này không hiển thị nhãn chất lượng mô hình tĩnh theo từng camera).',
   editRegion: 'Chỉnh sửa',
   editRegionAria: 'Chỉnh sửa chính sách cho {{target}}',
   readOnlyNotice:
@@ -264,20 +264,20 @@ const vi: Record<keyof typeof en, string> = {
   syncHeading: 'Trạng thái đã lưu so với đã áp dụng',
   syncSavedVersion: 'Cấu hình đã lưu: v{{version}}',
   syncSavedUnknown: 'Cấu hình đã lưu: chưa có',
-  syncApplied: 'Máy AI đã áp dụng (v{{reported}})',
-  syncNotYetApplied: 'Mới lưu · Chưa áp dụng bản hiện tại (máy AI báo: {{reported}})',
-  syncPending: 'Mới lưu · Đang chờ máy AI áp dụng (đã báo: {{reported}})',
-  syncUnconfirmed: 'Mới lưu · Chưa có xác nhận từ máy AI',
-  syncStale: 'Xác nhận từ máy AI đã cũ · Chưa xác nhận bản hiện tại (gần nhất: {{reported}})',
-  syncRejected: 'Máy AI không áp dụng được cấu hình ({{reason}})',
-  syncUnavailable: 'Chỉ hiển thị cấu hình đã lưu · Chưa lấy được trạng thái máy AI',
-  syncNoContext: 'Chỉ hiển thị cấu hình đã lưu · Xem riêng trạng thái máy AI',
-  syncChecking: 'Đang kiểm tra trạng thái máy AI…',
+  syncApplied: 'Đã áp dụng (v{{reported}})',
+  syncNotYetApplied: 'Mới lưu · Chưa áp dụng bản hiện tại (báo cáo: {{reported}})',
+  syncPending: 'Mới lưu · Đang chờ áp dụng (đã báo: {{reported}})',
+  syncUnconfirmed: 'Mới lưu · Chưa có xác nhận áp dụng',
+  syncStale: 'Xác nhận áp dụng đã cũ · Chưa xác nhận bản hiện tại (gần nhất: {{reported}})',
+  syncRejected: 'Không áp dụng được cấu hình ({{reason}})',
+  syncUnavailable: 'Chỉ hiển thị cấu hình đã lưu · Chưa lấy được trạng thái áp dụng',
+  syncNoContext: 'Chỉ hiển thị cấu hình đã lưu · Xem riêng trạng thái áp dụng',
+  syncChecking: 'Đang kiểm tra trạng thái áp dụng…',
   syncNoneReported: 'chưa có',
-  regionSyncApplied: 'Máy AI đã áp dụng (v{{version}})',
+  regionSyncApplied: 'Đã áp dụng (v{{version}})',
   regionSyncInactive: 'Đã lưu v{{version}} · Vùng đang tắt',
-  regionSyncNotApplied: 'Đã lưu v{{version}} · Máy AI chưa xác nhận áp dụng',
-  regionSyncUnavailable: 'Đã lưu v{{version}} · Chưa có xác nhận từ máy AI',
+  regionSyncNotApplied: 'Đã lưu v{{version}} · Chưa xác nhận áp dụng',
+  regionSyncUnavailable: 'Đã lưu v{{version}} · Chưa có xác nhận áp dụng',
   regionSyncUnconfigured: 'Chưa lưu bản v2',
 };
 

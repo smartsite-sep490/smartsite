@@ -76,8 +76,6 @@ describe('source-specific camera setup', () => {
       resume,
     } as CameraSourceClient);
     const user = userEvent.setup();
-    await screen.findByRole('option', { name: 'AI at Site A' });
-    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
     await user.click(
       await screen.findByRole('button', {
         name: /Apply saved configuration|Áp dụng cấu hình đã lưu/,
@@ -118,8 +116,6 @@ describe('source-specific camera setup', () => {
       resume,
     } as CameraSourceClient);
     const user = userEvent.setup();
-    await screen.findByRole('option', { name: 'AI at Site A' });
-    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
     await user.click(
       await screen.findByRole('button', {
         name: /Apply saved configuration|Áp dụng cấu hình đã lưu/,
@@ -143,7 +139,7 @@ describe('source-specific camera setup', () => {
     await waitFor(() => expect(resume).toHaveBeenCalledTimes(2));
     expect(resume.mock.calls[1]?.[5]).toMatchObject({ expectedConfigurationVersion: 13 });
   });
-  it('applies only a successful live receipt and reports running separately from geometry/PPE setup', async () => {
+  it('applies only a successful live receipt after explicit replacement confirmation and reports running separately from geometry/PPE setup', async () => {
     const user = userEvent.setup();
     const apply = vi.fn().mockResolvedValue({
       state: 'RUNNING',
@@ -173,13 +169,16 @@ describe('source-specific camera setup', () => {
       }),
       apply,
     });
-    await screen.findByRole('option', { name: 'AI at Site A' });
-    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
-    await user.selectOptions(screen.getByLabelText(/Device|Thiết bị/), 'usb0');
+    await user.selectOptions(await screen.findByLabelText(/Device|Thiết bị/), 'usb0');
     expect(screen.queryByRole('button', { name: /Save and activate|Lưu và kích hoạt/ })).toBeNull();
     await user.click(screen.getByRole('button', { name: /Test connection|Kiểm tra kết nối/ }));
     await user.click(
       await screen.findByRole('button', { name: /Save and activate|Lưu và kích hoạt/ }),
+    );
+    expect(apply).not.toHaveBeenCalled();
+    expect(screen.getByTestId('camera-source-apply-confirm')).toBeTruthy();
+    await user.click(
+      screen.getByRole('button', { name: /Confirm source replacement|Xác nhận đổi nguồn/ }),
     );
     await screen.findByText(/Source is running|Nguồn đang chạy/);
     expect(apply.mock.calls[0]?.[5]).toMatchObject({ receiptId: 'receipt', expectedRevision: 0 });
@@ -199,9 +198,7 @@ describe('source-specific camera setup', () => {
         },
       });
     setup({ hosts: async () => [host], probe });
-    await screen.findByRole('option', { name: 'AI at Site A' });
-    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
-    await user.selectOptions(screen.getByLabelText(/Device|Thiết bị/), 'usb0');
+    await user.selectOptions(await screen.findByLabelText(/Device|Thiết bị/), 'usb0');
     expect(screen.queryByLabelText(/RTSP URL|Địa chỉ RTSP/)).toBeNull();
     await user.click(screen.getByRole('button', { name: /Test connection|Kiểm tra kết nối/ }));
     await screen.findByRole('img');
@@ -219,9 +216,7 @@ describe('source-specific camera setup', () => {
     );
     setup({ hosts: async () => [host], probe: probe as CameraSourceClient['probe'] });
     const user = userEvent.setup();
-    await screen.findByRole('option', { name: 'AI at Site A' });
-    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
-    await user.selectOptions(screen.getByLabelText(/Device|Thiết bị/), 'usb0');
+    await user.selectOptions(await screen.findByLabelText(/Device|Thiết bị/), 'usb0');
     await user.click(screen.getByRole('button', { name: /Test connection|Kiểm tra kết nối/ }));
     await user.click(screen.getByRole('radio', { name: /IP camera|Camera IP/ }));
     expect(probe.mock.calls[0]?.[6].aborted).toBe(true);
@@ -257,13 +252,12 @@ describe('source-specific camera setup', () => {
       probe,
       apply: vi.fn(),
     });
-    await screen.findByRole('option', { name: 'AI at Site A' });
+    await screen.findByLabelText(/Device|Thiết bị/);
     const stageSummary = screen.getByTestId('camera-source-stage-summary');
     expect(stageSummary.textContent).toContain('Gate camera (metadata v12)');
     expect(stageSummary.textContent).toContain('Backend v12');
     expect(stageSummary.textContent).toContain('Not tested yet');
 
-    await user.selectOptions(screen.getByRole('combobox', { name: /^(AI host|Máy AI)$/ }), 'edge');
     await user.click(screen.getByRole('radio', { name: /IP camera|Camera IP/ }));
     const pwInput = screen.getByLabelText(/Camera password|Mật khẩu camera/) as HTMLInputElement;
     await user.type(pwInput, 'secret-pass-1');
@@ -315,14 +309,20 @@ describe('source-specific camera setup', () => {
       expect(gate.getAttribute('role')).toBe('status');
       expect(gate.getAttribute('data-host-state')).toBe('empty');
       expect(
-        within(gate).getByRole('heading', { name: /No AI machine is assigned to this Site/i }),
+        within(gate).getByRole('heading', {
+          name: /No camera connection is set up for this site/i,
+        }),
       ).toBeTruthy();
       expect(gate.textContent).toMatch(/Registering a camera only saves its details/i);
-      expect(gate.textContent).toMatch(/Contact the AI operator/i);
+      expect(gate.textContent).toMatch(/Ask your operator/i);
 
       // Must NOT render unusable host selector, source-type radio cards, or fake onboarding links
-      expect(screen.queryByRole('combobox', { name: /^(AI host|Máy AI)$/ })).toBeNull();
-      expect(screen.queryByRole('radio', { name: /USB \/ host webcam/i })).toBeNull();
+      expect(
+        screen.queryByRole('combobox', {
+          name: /^(AI host|Máy AI|Camera processing computer|Máy xử lý camera)$/,
+        }),
+      ).toBeNull();
+      expect(screen.queryByRole('radio', { name: /USB camera connected at site/i })).toBeNull();
       expect(screen.queryByRole('radio', { name: /IP camera/i })).toBeNull();
       expect(screen.queryByRole('link')).toBeNull();
 
@@ -334,8 +334,8 @@ describe('source-specific camera setup', () => {
         /you can test a connection now/i,
       );
 
-      // Keeps one honest recovery action: Refresh hosts
-      const refreshBtn = within(gate).getByRole('button', { name: /Refresh hosts/i });
+      // Keeps one honest recovery action: Check connection again
+      const refreshBtn = within(gate).getByRole('button', { name: /Check connection again/i });
       await user.click(refreshBtn);
       await waitFor(() => expect(hostsFn).toHaveBeenCalledTimes(2));
 
@@ -344,12 +344,14 @@ describe('source-specific camera setup', () => {
       await waitFor(() => {
         const viGate = screen.getByTestId('camera-source-host-prerequisite');
         expect(
-          within(viGate).getByRole('heading', { name: /Công trường này chưa có máy AI/i }),
+          within(viGate).getByRole('heading', {
+            name: /Công trường này chưa có kết nối xử lý camera/i,
+          }),
         ).toBeTruthy();
         expect(viGate.textContent).toMatch(/Đăng ký camera chỉ lưu thông tin/i);
         expect(viGate.textContent).toMatch(/người vận hành/i);
-        expect(viGate.textContent).not.toMatch(/nguồn hình vật lý|do vận hành gắn/i);
-        expect(within(viGate).getByRole('button', { name: /Kiểm tra lại máy AI/i })).toBeTruthy();
+        expect(viGate.textContent).not.toMatch(/nguồn hình vật lý|do vận hành gắn|máy AI/i);
+        expect(within(viGate).getByRole('button', { name: /Kiểm tra lại kết nối/i })).toBeTruthy();
       });
     });
 
@@ -366,17 +368,21 @@ describe('source-specific camera setup', () => {
 
       const loading = await screen.findByTestId('camera-source-host-loading');
       expect(loading.getAttribute('role')).toBe('status');
-      expect(loading.textContent).toMatch(/Checking available AI hosts/i);
+      expect(loading.textContent).toMatch(/Checking camera connection/i);
       expect(screen.queryByTestId('camera-source-host-prerequisite')).toBeNull();
-      expect(screen.queryByRole('combobox', { name: /^(AI host|Máy AI)$/ })).toBeNull();
+      expect(
+        screen.queryByRole('combobox', {
+          name: /^(AI host|Máy AI|Camera processing computer|Máy xử lý camera)$/,
+        }),
+      ).toBeNull();
       expect(screen.queryByRole('radio')).toBeNull();
 
       resolveHosts([host]);
-      expect(await screen.findByRole('option', { name: 'AI at Site A' })).toBeTruthy();
+      expect(await screen.findByLabelText(/Device|Thiết bị/)).toBeTruthy();
       expect(screen.queryByTestId('camera-source-host-loading')).toBeNull();
     });
 
-    it('keeps request error with Retry distinct from empty and offline, hides unusable controls, and reveals source controls once Retry succeeds with an available host', async () => {
+    it('keeps request error with Retry distinct from empty and unavailable, hides unusable controls, reveals source controls once Retry succeeds with an available host, and explains browser camera vs site USB clearly', async () => {
       const user = userEvent.setup();
       const hostsFn = vi
         .fn<CameraSourceClient['hosts']>()
@@ -388,58 +394,84 @@ describe('source-specific camera setup', () => {
       const errorGate = await screen.findByTestId('camera-source-host-prerequisite');
       expect(errorGate.getAttribute('role')).toBe('alert');
       expect(errorGate.getAttribute('data-host-state')).toBe('error');
-      expect(errorGate.textContent).toMatch(/Could not check AI hosts/i);
-      expect(screen.queryByRole('combobox', { name: /^(AI host|Máy AI)$/ })).toBeNull();
+      expect(errorGate.textContent).toMatch(/Could not check camera connection/i);
+      expect(
+        screen.queryByRole('combobox', {
+          name: /^(AI host|Máy AI|Camera processing computer|Máy xử lý camera)$/,
+        }),
+      ).toBeNull();
       expect(screen.queryByRole('radio')).toBeNull();
 
       await user.click(within(errorGate).getByRole('button', { name: /Retry/i }));
-      expect(await screen.findByRole('option', { name: 'AI at Site A' })).toBeTruthy();
+      expect(await screen.findByLabelText(/Device|Thiết bị/)).toBeTruthy();
       expect(screen.queryByTestId('camera-source-host-prerequisite')).toBeNull();
-      expect(screen.getByRole('radio', { name: /USB \/ host webcam/i })).toBeTruthy();
+      expect(screen.getByRole('radio', { name: /USB camera connected at site/i })).toBeTruthy();
       expect(screen.getByRole('radio', { name: /IP camera \/ RTSP/i })).toBeTruthy();
       expect(screen.getByRole('radio', { name: /Recorded video/i })).toBeTruthy();
 
-      // Browser camera option remains explicitly unsupported when an available host exists
+      // Browser camera option remains explicitly unsupported and explains webcam0 belongs to the connected site machine, not viewing computer
       await user.click(screen.getByRole('radio', { name: /This browser camera/i }));
-      expect(screen.getByRole('status').textContent).toMatch(
-        /Browser camera transport to AI is not available/i,
-      );
+      const browserStatus = screen.getByRole('status');
+      expect(browserStatus.textContent).toMatch(/webcam0/i);
+      expect(browserStatus.textContent).toMatch(/connected processing machine/i);
+      expect(browserStatus.textContent).toMatch(/not the computer you are viewing/i);
+
+      await i18n.changeLanguage('vi');
+      await waitFor(() => {
+        expect(screen.getByRole('radio', { name: /Camera USB đã kết nối/i })).toBeTruthy();
+        expect(screen.getByRole('status').textContent).toMatch(/webcam0/i);
+        expect(screen.getByRole('status').textContent).toMatch(/không phải máy bạn đang xem/i);
+      });
     });
 
-    it('keeps all-hosts-offline distinct from empty list, hides unusable controls, and preserves sibling offline selection when another host is online', async () => {
+    it('keeps per-camera unavailable distinct from empty list, hides unusable controls, and preserves sibling unavailable inspection inside connection details when another host is usable', async () => {
       const user = userEvent.setup();
-      const offlineHost: SourceHost = {
+      const unavailableHost: SourceHost = {
         id: 'edge-off',
         label: 'Site A Edge Box',
         available: false,
       };
       const hostsFn = vi
         .fn<CameraSourceClient['hosts']>()
-        .mockResolvedValueOnce([offlineHost])
-        .mockResolvedValueOnce([host, offlineHost]);
+        .mockResolvedValueOnce([unavailableHost])
+        .mockResolvedValueOnce([host, unavailableHost]);
 
       setup({ hosts: hostsFn, probe: vi.fn() });
 
-      const offlineGate = await screen.findByTestId('camera-source-host-prerequisite');
-      expect(offlineGate.getAttribute('role')).toBe('status');
-      expect(offlineGate.getAttribute('data-host-state')).toBe('offline');
+      const unavailGate = await screen.findByTestId('camera-source-host-prerequisite');
+      expect(unavailGate.getAttribute('role')).toBe('status');
+      expect(unavailGate.getAttribute('data-host-state')).toBe('unavailable');
       expect(
-        within(offlineGate).getByRole('heading', {
-          name: /Assigned AI host is currently unavailable/i,
+        within(unavailGate).getByRole('heading', {
+          name: /Cannot connect this camera yet/i,
         }),
       ).toBeTruthy();
-      expect(offlineGate.textContent).toMatch(/Site A Edge Box/);
-      expect(screen.queryByRole('combobox', { name: /^(AI host|Máy AI)$/ })).toBeNull();
+      expect(unavailGate.textContent).toMatch(/Site A Edge Box/);
+      expect(unavailGate.textContent).not.toMatch(/\boffline\b/i);
+      expect(screen.queryByRole('combobox')).toBeNull();
       expect(screen.queryByRole('radio')).toBeNull();
 
-      // Refreshing to a mix of online + offline hosts reveals source controls and still allows inspecting offline sibling status
-      await user.click(within(offlineGate).getByRole('button', { name: /Refresh hosts/i }));
-      const hostSelect = await screen.findByRole('combobox', { name: /^(AI host|Máy AI)$/ });
+      // Refreshing to a mix of 1 usable + 1 unavailable sibling auto-binds the usable host in primary flow and allows inspecting the unavailable sibling inside Connection details
+      await user.click(
+        within(unavailGate).getByRole('button', { name: /Check connection again/i }),
+      );
+      expect(await screen.findByLabelText(/Device|Thiết bị/)).toBeTruthy();
       expect(screen.queryByTestId('camera-source-host-prerequisite')).toBeNull();
+      const details = screen.getByTestId('camera-source-connection-details') as HTMLDetailsElement;
+      expect(details.open).toBe(false);
+      details.open = true;
+      const hostSelect = within(details).getByRole('combobox', {
+        name: 'Camera processing computer',
+      });
       await user.selectOptions(hostSelect, 'edge-off');
       expect(
-        screen.getByText(/The selected AI host is offline or does not support source setup/i),
+        screen.getByText(
+          /Cannot connect this camera through the selected camera processing computer/i,
+        ),
       ).toBeTruthy();
+      expect(screen.getByText(/Cannot connect this camera through/i).textContent).not.toMatch(
+        /\boffline\b/i,
+      );
     });
 
     it('keeps forbidden (403) distinct from error/empty/offline and invokes onUnauthorized', async () => {
@@ -535,8 +567,7 @@ describe('source-specific camera setup', () => {
       resolveHostsA([]);
 
       // Start an in-flight probe on site-b, then replace camera scope -> probe AbortSignal aborts and stale image is ignored
-      await screen.findByRole('option', { name: 'AI at Site A' });
-      await user.selectOptions(screen.getByLabelText(/Device|Thiết bị/), 'usb0');
+      await user.selectOptions(await screen.findByLabelText(/Device|Thiết bị/), 'usb0');
       await user.click(screen.getByRole('button', { name: /Test connection|Kiểm tra kết nối/ }));
       expect(probeASignal?.aborted).toBe(false);
 
@@ -623,8 +654,7 @@ describe('source-specific camera setup', () => {
       );
 
       // 1) Initial load succeeds and user gets a valid LIVE probe receipt
-      await screen.findByRole('option', { name: 'AI at Site A' });
-      await user.selectOptions(screen.getByLabelText(/Device|Thiết bị/), 'usb0');
+      await user.selectOptions(await screen.findByLabelText(/Device|Thiết bị/), 'usb0');
       await user.click(screen.getByRole('button', { name: /Test connection|Kiểm tra kết nối/ }));
       expect(
         await screen.findByRole('button', { name: /Save and activate|Lưu và kích hoạt/ }),
@@ -641,19 +671,23 @@ describe('source-specific camera setup', () => {
       expect(
         screen.queryByRole('button', { name: /Save and activate|Lưu và kích hoạt/ }),
       ).toBeNull();
-      expect(screen.queryByRole('combobox', { name: /^(AI host|Máy AI)$/ })).toBeNull();
+      expect(screen.queryByRole('combobox')).toBeNull();
       expect(screen.queryByRole('radio')).toBeNull();
       expect(screen.queryByTestId('camera-source-resume-card')).toBeNull();
       expect(screen.queryByText(/After connecting the source/i)).toBeNull();
       expect(applyFn).not.toHaveBeenCalled();
 
-      // 3) Retry recovers hosts -> re-test LIVE receipt -> apply rejects with uncertain 503
+      // 3) Retry recovers hosts -> re-test LIVE receipt -> explicit confirmation -> apply rejects with uncertain 503
       await user.click(within(errorGate).getByRole('button', { name: /Retry|Thử lại/i }));
-      await screen.findByRole('option', { name: 'AI at Site A' });
-      await user.selectOptions(screen.getByLabelText(/Device|Thiết bị/), 'usb0');
+      await user.selectOptions(await screen.findByLabelText(/Device|Thiết bị/), 'usb0');
       await user.click(screen.getByRole('button', { name: /Test connection|Kiểm tra kết nối/ }));
       await user.click(
         await screen.findByRole('button', { name: /Save and activate|Lưu và kích hoạt/ }),
+      );
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Confirm source replacement|Xác nhận đổi nguồn/,
+        }),
       );
       await screen.findByText(/Activation was not confirmed/i);
       expect(applyFn).toHaveBeenCalledTimes(1);
@@ -668,6 +702,406 @@ describe('source-specific camera setup', () => {
         screen.queryByRole('button', { name: /Save and activate|Lưu và kích hoạt/ }),
       ).toBeNull();
       expect(applyFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('auto-binds a single usable host without a primary host selector, shows truthful connection status only when proved, avoids automatic mutations, and uses plain VI/EN copy', async () => {
+      const user = userEvent.setup();
+      const probe = vi.fn<CameraSourceClient['probe']>().mockResolvedValue({
+        state: 'TESTED',
+        receiptId: 'live-receipt-1',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        sourceKind: 'LIVE',
+        frame: {
+          width: 640,
+          height: 360,
+          capturedAt: new Date().toISOString(),
+          imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+        },
+      });
+      const apply = vi.fn<NonNullable<CameraSourceClient['apply']>>().mockResolvedValue({
+        state: 'RUNNING',
+        commandId: 'apply-cmd-1',
+        sourceKind: 'LIVE',
+        sourceRevision: 1,
+        currentGenerationId: 'gen-live-1',
+      });
+      const resume = vi.fn<NonNullable<CameraSourceClient['resume']>>();
+      const soleHost: SourceHost = {
+        ...host,
+        id: 'sole-edge',
+        label: 'Site A Processing PC',
+        capabilities: {
+          ...host.capabilities,
+          applySupported: true,
+          configurationResumeSupported: true,
+          sourceRevision: 0,
+        },
+      };
+
+      setup({ hosts: async () => [soleHost], probe, apply, resume });
+
+      // Primary form immediately exposes real device choice without any primary host selector
+      const deviceSelect = await screen.findByLabelText(/Device|Thiết bị/);
+      expect(deviceSelect).toBeTruthy();
+      expect(
+        screen.queryByRole('combobox', {
+          name: /AI host|Máy AI|processing computer|Máy xử lý camera/i,
+        }),
+      ).toBeNull();
+      expect(probe).not.toHaveBeenCalled();
+      expect(apply).not.toHaveBeenCalled();
+      expect(resume).not.toHaveBeenCalled();
+
+      // Connection details live in a collapsed <details> with bound host label and concise explanation
+      const details = screen.getByTestId('camera-source-connection-details') as HTMLDetailsElement;
+      expect(details.tagName).toBe('DETAILS');
+      expect(details.open).toBe(false);
+      expect(within(details).getByTestId('camera-source-bound-host').textContent).toContain(
+        'Site A Processing PC',
+      );
+      expect(details.textContent).toMatch(/camera processing computer/i);
+      expect(details.textContent).toMatch(/stay online/i);
+
+      // Status is neutral Source not checked before running a test in this page session (never false-negative Not connected)
+      const statusPill = screen.getByTestId('camera-source-connection-status');
+      expect(statusPill.textContent).toBe('Source not checked');
+      expect(statusPill.getAttribute('data-connection-status')).toBe('not-checked');
+      expect(statusPill.textContent).not.toMatch(
+        /Not connected|Chưa kết nối|Connected|Đã kết nối/i,
+      );
+
+      await user.selectOptions(deviceSelect, 'usb0');
+      expect(probe).not.toHaveBeenCalled();
+      await user.click(screen.getByRole('button', { name: 'Test connection' }));
+      await screen.findByRole('img');
+      expect(probe).toHaveBeenCalledTimes(1);
+      expect(probe.mock.calls[0]?.[4]).toBe('sole-edge');
+      expect(apply).not.toHaveBeenCalled();
+      expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
+        'Test preview ready',
+      );
+      expect(
+        screen
+          .getByTestId('camera-source-connection-status')
+          .getAttribute('data-connection-status'),
+      ).toBe('tested');
+
+      // Only after explicit confirmation and activation acknowledgement does status update (still not persistent LIVE proof)
+      expect(screen.getByTestId('camera-source-shared-notice').textContent).toMatch(
+        /same saved physical source/i,
+      );
+      await user.click(screen.getByRole('button', { name: 'Save and activate source' }));
+      expect(apply).not.toHaveBeenCalled();
+      const confirmBox = screen.getByTestId('camera-source-apply-confirm');
+      expect(confirmBox.textContent).toMatch(/fresh reference image/i);
+      await user.click(within(confirmBox).getByRole('button', { name: 'Cancel' }));
+      expect(apply).not.toHaveBeenCalled();
+      expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
+        'Test preview ready',
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Save and activate source' }));
+      await user.click(screen.getByRole('button', { name: 'Confirm source replacement' }));
+      await waitFor(() =>
+        expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
+          'Activation acknowledged',
+        ),
+      );
+      expect(
+        screen
+          .getByTestId('camera-source-connection-status')
+          .getAttribute('data-connection-status'),
+      ).toBe('activation-acknowledged');
+      expect(screen.getByText(/does not prove ongoing live monitoring/i)).toBeTruthy();
+
+      // Vietnamese copy parity: heading Kết nối camera, honest page-local activation acknowledgement (not persistent LIVE proof), no máy AI jargon
+      await i18n.changeLanguage('vi');
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { name: 'Kết nối camera' })).toBeTruthy();
+        expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
+          'Đã ghi nhận kích hoạt',
+        );
+        expect(screen.getByRole('button', { name: 'Kiểm tra kết nối' })).toBeTruthy();
+      });
+      const panelText = screen.getByTestId('camera-source-setup-panel').textContent ?? '';
+      expect(panelText).not.toMatch(/máy AI/i);
+      expect(details.textContent).toMatch(/Máy xử lý camera/i);
+      expect(details.textContent).toMatch(/duy trì trực tuyến/i);
+    });
+
+    it('puts multi-host selection inside collapsed connection details with an accessible actionable choice prompt, binds chosen host, cancels in-flight probe on host switch, and surfaces 409 busy honestly (EN/VI)', async () => {
+      const user = userEvent.setup();
+      let resolveProbeA!: (value: unknown) => void;
+      let probeASignal: AbortSignal | undefined;
+      const probe = vi
+        .fn<CameraSourceClient['probe']>()
+        .mockImplementationOnce((_api, _tok, _site, _cam, _hostId, _draft, signal) => {
+          probeASignal = signal;
+          return new Promise<never>((resolve) => {
+            resolveProbeA = resolve as (value: unknown) => void;
+          });
+        })
+        .mockRejectedValueOnce(new SourceSetupError(409));
+
+      const hostA: SourceHost = {
+        ...host,
+        id: 'edge-a',
+        label: 'North Processing PC',
+        capabilities: {
+          ...host.capabilities,
+          webcams: [{ id: 'usb-a', label: 'North USB Cam' }],
+        },
+      };
+      const hostB: SourceHost = {
+        ...host,
+        id: 'edge-b',
+        label: 'South Processing PC',
+        capabilities: {
+          ...host.capabilities,
+          webcams: [{ id: 'usb-b', label: 'South USB Cam' }],
+        },
+      };
+
+      setup({ hosts: async () => [hostA, hostB], probe });
+
+      // Connection details starts collapsed, and an accessible prompt guides the user instead of a blank blocker
+      const prompt = await screen.findByTestId('camera-source-host-choice-required');
+      expect(prompt.getAttribute('role')).toBe('status');
+      const details = screen.getByTestId('camera-source-connection-details') as HTMLDetailsElement;
+      expect(details.open).toBe(false);
+      expect(probe).not.toHaveBeenCalled();
+
+      // Clicking Choose connection opens connection details and focuses the host select
+      await user.click(within(prompt).getByRole('button', { name: 'Choose connection' }));
+      expect(details.open).toBe(true);
+      const hostSelect = within(details).getByRole('combobox', {
+        name: 'Camera processing computer',
+      });
+      expect(document.activeElement).toBe(hostSelect);
+
+      // Select host A, start in-flight probe, then switch to host B -> aborts host A probe & ignores stale result
+      await user.selectOptions(hostSelect, 'edge-a');
+      expect(screen.queryByTestId('camera-source-host-choice-required')).toBeNull();
+      await user.selectOptions(screen.getByLabelText('Device'), 'usb-a');
+      await user.click(screen.getByRole('button', { name: 'Test connection' }));
+      expect(probeASignal?.aborted).toBe(false);
+      expect(probe.mock.calls[0]?.[4]).toBe('edge-a');
+
+      await user.selectOptions(hostSelect, 'edge-b');
+      expect(probeASignal?.aborted).toBe(true);
+      resolveProbeA({
+        state: 'TESTED',
+        receiptId: 'stale-host-a',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        sourceKind: 'LIVE',
+        frame: {
+          width: 640,
+          height: 360,
+          capturedAt: new Date().toISOString(),
+          imageDataUrl: 'data:image/jpeg;base64,/9j/2Q==',
+        },
+      });
+      await waitFor(() => expect(screen.queryByRole('img')).toBeNull());
+
+      // Testing host B with 409 busy surfaces explicit busy alert without taking over another camera's source
+      await user.selectOptions(screen.getByLabelText('Device'), 'usb-b');
+      await user.click(screen.getByRole('button', { name: 'Test connection' }));
+      const busyAlert = await screen.findByRole('alert');
+      expect(busyAlert.textContent).toMatch(/already testing|busy/i);
+      expect(probe.mock.calls[1]?.[4]).toBe('edge-b');
+    });
+
+    it('distinguishes per-camera unavailable hosts from empty site host list without claiming the physical computer is offline (EN/VI)', async () => {
+      const user = userEvent.setup();
+      const unavailableHost: SourceHost = {
+        id: 'edge-cam1-only',
+        label: 'Site Main PC',
+        available: false,
+      };
+      const hostsFn = vi
+        .fn<CameraSourceClient['hosts']>()
+        .mockResolvedValueOnce([unavailableHost])
+        .mockResolvedValueOnce([]);
+
+      setup({ hosts: hostsFn, probe: vi.fn() });
+
+      // 1) Non-empty host list where host is unavailable for THIS camera (generic AGENT_UNAVAILABLE)
+      const unavailGate = await screen.findByTestId('camera-source-host-prerequisite');
+      expect(unavailGate.getAttribute('role')).toBe('status');
+      expect(unavailGate.getAttribute('data-host-state')).toBe('unavailable');
+      expect(
+        within(unavailGate).getByRole('heading', { name: /Cannot connect this camera yet/i }),
+      ).toBeTruthy();
+      expect(unavailGate.textContent).toMatch(/Site Main PC/);
+      expect(unavailGate.textContent).toMatch(/assign/i);
+      expect(unavailGate.textContent).not.toMatch(/\boffline\b/i);
+
+      // Vietnamese parity for per-camera unavailable
+      await i18n.changeLanguage('vi');
+      await waitFor(() => {
+        expect(
+          within(unavailGate).getByRole('heading', { name: /Chưa kết nối được camera này/i }),
+        ).toBeTruthy();
+      });
+      expect(unavailGate.textContent).toMatch(/Site Main PC/);
+      expect(unavailGate.textContent).toMatch(/gán kết nối/i);
+      expect(unavailGate.textContent).not.toMatch(/ngoại tuyến|máy AI/i);
+
+      // 2) Refresh -> empty site host list shows a clearly distinct empty-site gate
+      await user.click(within(unavailGate).getByRole('button', { name: /Kiểm tra lại kết nối/i }));
+      await waitFor(() => {
+        expect(
+          screen.getByTestId('camera-source-host-prerequisite').getAttribute('data-host-state'),
+        ).toBe('empty');
+      });
+      const emptyGate = screen.getByTestId('camera-source-host-prerequisite');
+      expect(emptyGate.textContent).toMatch(/chưa có kết nối xử lý camera/i);
+      expect(emptyGate.textContent).not.toMatch(/máy AI|ngoại tuyến/i);
+    });
+
+    it('clears multi-host selection and pending resume command on camera scope replacement and on 401 auth revocation', async () => {
+      const user = userEvent.setup();
+      const onUnauthorized = vi.fn();
+      const resume = vi
+        .fn<NonNullable<CameraSourceClient['resume']>>()
+        .mockRejectedValueOnce(new SourceSetupError(503))
+        .mockRejectedValueOnce(new SourceSetupError(401));
+      const twoHosts: SourceHost[] = [
+        {
+          ...host,
+          id: 'edge-1',
+          label: 'Host One',
+          capabilities: {
+            ...host.capabilities,
+            configurationResumeSupported: true,
+            sourceRevision: 1,
+          },
+        },
+        {
+          ...host,
+          id: 'edge-2',
+          label: 'Host Two',
+          capabilities: {
+            ...host.capabilities,
+            configurationResumeSupported: true,
+            sourceRevision: 2,
+          },
+        },
+      ];
+      const hostsFn = vi.fn<CameraSourceClient['hosts']>().mockResolvedValue(twoHosts);
+      const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const renderForCam = (camId: string) => (
+        <QueryClientProvider client={cache}>
+          <CameraSourceSetupPanel
+            apiUrl="http://localhost"
+            token="tok"
+            siteId="site-a"
+            camera={{ id: camId, name: `Camera ${camId}`, configurationVersion: 4 }}
+            setupKey={['multi-scope-clear']}
+            canWrite
+            onUnauthorized={onUnauthorized}
+            client={{ hosts: hostsFn, probe: vi.fn(), resume }}
+          />
+        </QueryClientProvider>
+      );
+
+      const view = render(renderForCam('cam-1'));
+      const prompt1 = await screen.findByTestId('camera-source-host-choice-required');
+      await user.click(within(prompt1).getByRole('button', { name: 'Choose connection' }));
+      await user.selectOptions(
+        screen.getByRole('combobox', { name: 'Camera processing computer' }),
+        'edge-2',
+      );
+      await user.click(await screen.findByRole('button', { name: 'Apply saved configuration' }));
+      await screen.findByRole('button', { name: 'Retry the same request' });
+      expect(resume).toHaveBeenCalledTimes(1);
+
+      // Scope replacement to cam-2 must clear host-2 selection and pending retryable command
+      view.rerender(renderForCam('cam-2'));
+      const prompt2 = await screen.findByTestId('camera-source-host-choice-required');
+      expect(prompt2).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Retry the same request' })).toBeNull();
+
+      // Selecting edge-1 on cam-2 and hitting 401 revokes & clears pending command without reusing cam-1 commandId
+      await user.click(within(prompt2).getByRole('button', { name: 'Choose connection' }));
+      await user.selectOptions(
+        screen.getByRole('combobox', { name: 'Camera processing computer' }),
+        'edge-1',
+      );
+      await user.click(await screen.findByRole('button', { name: 'Apply saved configuration' }));
+      await waitFor(() => expect(onUnauthorized).toHaveBeenCalledTimes(1));
+      expect(resume.mock.calls[1]?.[5].commandId).not.toBe(resume.mock.calls[0]?.[5].commandId);
+      expect(screen.queryByRole('button', { name: 'Apply saved configuration' })).toBeNull();
+    });
+
+    it('renders neutral Source not checked / Chưa kiểm tra nguồn when opening or remounting an existing camera without applying, never false-negative Not connected / Chưa kết nối', async () => {
+      const existingLiveHost: SourceHost = {
+        ...host,
+        id: 'site-cam1-host',
+        label: 'Site CAM1 PC',
+        capabilities: {
+          ...host.capabilities,
+          applySupported: true,
+          configurationResumeSupported: true,
+          sourceRevision: 3,
+        },
+      };
+      const hostsFn = vi.fn<CameraSourceClient['hosts']>().mockResolvedValue([existingLiveHost]);
+      const probe = vi.fn<CameraSourceClient['probe']>();
+      const apply = vi.fn<NonNullable<CameraSourceClient['apply']>>();
+
+      const renderExistingCam = (cache: QueryClient) => (
+        <QueryClientProvider client={cache}>
+          <CameraSourceSetupPanel
+            apiUrl="http://localhost"
+            token="tok"
+            siteId="site-a"
+            camera={{
+              id: 'cam-1-existing',
+              name: 'CAM1',
+              configurationVersion: 5,
+              status: 'ACTIVE',
+            }}
+            setupKey={['existing-cam-remount']}
+            canWrite
+            onUnauthorized={vi.fn()}
+            client={{ hosts: hostsFn, probe, apply }}
+          />
+        </QueryClientProvider>
+      );
+
+      // 1) Initial mount of existing CAM1 without running test or apply
+      const firstMount = render(
+        renderExistingCam(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      );
+      await screen.findByLabelText('Device');
+      const pillEn = screen.getByTestId('camera-source-connection-status');
+      expect(pillEn.getAttribute('data-connection-status')).toBe('not-checked');
+      expect(pillEn.textContent).toBe('Source not checked');
+      expect(pillEn.textContent).not.toMatch(/Not connected|Offline|Connected/i);
+      expect(probe).not.toHaveBeenCalled();
+      expect(apply).not.toHaveBeenCalled();
+
+      // Vietnamese parity on existing camera open
+      await i18n.changeLanguage('vi');
+      await waitFor(() => {
+        expect(screen.getByTestId('camera-source-connection-status').textContent).toBe(
+          'Chưa kiểm tra nguồn',
+        );
+      });
+      expect(screen.getByTestId('camera-source-connection-status').textContent).not.toMatch(
+        /Chưa kết nối|Ngoại tuyến|Đã kết nối/i,
+      );
+
+      // 2) Unmount & remount the same existing camera (simulates navigating back to CAM1)
+      firstMount.unmount();
+      render(renderExistingCam(new QueryClient({ defaultOptions: { queries: { retry: false } } })));
+      await screen.findByLabelText('Thiết bị');
+      const remountPillVi = screen.getByTestId('camera-source-connection-status');
+      expect(remountPillVi.getAttribute('data-connection-status')).toBe('not-checked');
+      expect(remountPillVi.textContent).toBe('Chưa kiểm tra nguồn');
+      expect(remountPillVi.textContent).not.toMatch(/Chưa kết nối|Ngoại tuyến|Đã kết nối/i);
+      expect(apply).not.toHaveBeenCalled();
     });
   });
 });

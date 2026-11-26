@@ -74,20 +74,20 @@ const vi: Record<keyof typeof en, string> = {
     'Phiên bản cấu hình đã lưu v{{version}}; chưa có trạng thái áp dụng của worker.',
   'cameraSetup.appStatus.refresh': 'Làm mới trạng thái',
   'cameraSetup.appStatus.details': 'Chi tiết kỹ thuật',
-  'cameraSetup.appStatus.checking': 'Đang kiểm tra máy AI đã nhận cấu hình chưa…',
-  'cameraSetup.appStatus.error': 'Chưa xác nhận được máy AI đã nhận cấu hình hay chưa.',
+  'cameraSetup.appStatus.checking': 'Đang kiểm tra trạng thái áp dụng cấu hình…',
+  'cameraSetup.appStatus.error': 'Chưa xác nhận được cấu hình đã được áp dụng hay chưa.',
   'cameraSetup.appStatus.forbidden':
-    'Trạng thái áp dụng của máy AI không khả dụng trong phạm vi này.',
+    'Trạng thái áp dụng cấu hình không khả dụng trong phạm vi này.',
   'cameraSetup.appStatus.unavailablePrimary': 'Đã lưu · Chưa xác nhận được',
   'cameraSetup.appStatus.savedOnlyVersion': 'Phiên bản đã lưu: v{{version}}',
   'cameraSetup.appStatus.revisions':
-    'Phiên bản đã lưu: v{{desired}} · Máy AI báo cáo: {{reported}}',
+    'Phiên bản đã lưu: v{{desired}} · Máy xử lý camera báo cáo: {{reported}}',
   'cameraSetup.appStatus.reportedNone': 'chưa có',
   'cameraSetup.appStatus.reportedVersion': 'v{{version}}',
   'cameraSetup.appStatus.state.UNCONFIRMED': 'Đã lưu · Chưa xác nhận được',
-  'cameraSetup.appStatus.state.PENDING': 'Đã lưu · Chờ máy AI áp dụng',
-  'cameraSetup.appStatus.state.LOADED': 'Máy AI đã nhận cấu hình',
-  'cameraSetup.appStatus.state.REJECTED': 'Đã lưu · Máy AI không áp dụng được cấu hình',
+  'cameraSetup.appStatus.state.PENDING': 'Đã lưu · Đang chờ áp dụng',
+  'cameraSetup.appStatus.state.LOADED': 'Đã nhận cấu hình',
+  'cameraSetup.appStatus.state.REJECTED': 'Đã lưu · Không áp dụng được cấu hình',
   'cameraSetup.appStatus.state.STALE': 'Đã lưu · Chưa xác nhận được',
   'cameraSetup.appStatus.viewValidity.UNCONFIRMED':
     'Giữ camera cố định; kiểm tra lại vùng sau khi đổi góc.',
@@ -101,43 +101,43 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSetup.appStatus.reasonLine': 'Lý do: {{reason}}',
   'cameraSetup.appStatus.reason.CAMERA_INACTIVE': 'Camera đang tắt trong cấu hình.',
   'cameraSetup.appStatus.reason.NO_WORKER_GENERATION':
-    'Chưa có phiên máy AI đang hoạt động cho camera này.',
+    'Chưa có phiên xử lý đang hoạt động cho camera này.',
   'cameraSetup.appStatus.reason.WORKER_GENERATION_STALE':
-    'Phiên máy AI trước đó đã hết hạn hoặc bị thay thế.',
+    'Phiên xử lý trước đó đã hết hạn hoặc bị thay thế.',
   'cameraSetup.appStatus.reason.VIEW_UNAVAILABLE': 'Chưa có khung tham chiếu hiện tại.',
   'cameraSetup.appStatus.reason.CONFIGURATION_NOT_ISSUED':
-    'Cấu hình chưa sẵn sàng gửi xuống máy AI.',
+    'Cấu hình chưa sẵn sàng để áp dụng cho camera này.',
   'cameraSetup.appStatus.reason.NO_APPLICATION_RECEIPT':
-    'Máy AI chưa gửi xác nhận đã nhận cấu hình.',
+    'Hệ thống xử lý chưa gửi xác nhận đã nhận cấu hình.',
   'cameraSetup.appStatus.reason.RECEIPT_CONTEXT_STALE':
-    'Xác nhận trước đó của máy AI thuộc phiên hoặc góc nhìn cũ.',
+    'Xác nhận áp dụng trước đó thuộc phiên hoặc góc nhìn cũ.',
   'cameraSetup.appStatus.reason.APPLICATION_RECEIPT_STALE':
-    'Xác nhận gần nhất từ máy AI đã cũ quá 60 giây; không đồng nghĩa camera mất kết nối.',
+    'Xác nhận áp dụng gần nhất đã cũ quá 60 giây; không đồng nghĩa camera mất kết nối.',
   'cameraSetup.appStatus.reason.DESIRED_CONFIGURATION_PENDING':
-    'Máy AI vẫn đang dùng bản cấu hình đã lưu trước đó.',
-  'cameraSetup.appStatus.reason.OTHER': 'Máy AI báo lỗi khi áp dụng cấu hình.',
+    'Hệ thống xử lý vẫn đang dùng bản cấu hình đã lưu trước đó.',
+  'cameraSetup.appStatus.reason.OTHER': 'Hệ thống xử lý báo lỗi khi áp dụng cấu hình.',
   'cameraSetup.appStatus.action.CAMERA_INACTIVE':
-    'Bước tiếp theo: bật camera trong cấu hình trước khi máy AI có thể áp dụng.',
+    'Bước tiếp theo: bật camera trong cấu hình trước khi áp dụng.',
   'cameraSetup.appStatus.action.NO_WORKER_GENERATION':
-    'Bước tiếp theo: kiểm tra máy AI đã kết nối và đang chạy cho nguồn camera này, rồi làm mới trạng thái.',
+    'Bước tiếp theo: kiểm tra kết nối nguồn hình cho camera này trên máy xử lý camera, rồi làm mới trạng thái.',
   'cameraSetup.appStatus.action.WORKER_GENERATION_STALE':
-    'Bước tiếp theo: kiểm tra tình trạng máy AI hoặc khởi động lại phiên camera, sau đó làm mới trạng thái.',
+    'Bước tiếp theo: kiểm tra kết nối máy xử lý camera hoặc khởi động lại phiên camera, sau đó làm mới trạng thái.',
   'cameraSetup.appStatus.action.VIEW_UNAVAILABLE':
     'Bước tiếp theo: kiểm tra nguồn thu hình camera và lấy ảnh cấu hình mới trong mục Vùng quan sát.',
   'cameraSetup.appStatus.action.CONFIGURATION_NOT_ISSUED':
     'Bước tiếp theo: hoàn tất vùng quan sát đang bật và chính sách PPE, rồi làm mới trạng thái.',
   'cameraSetup.appStatus.action.NO_APPLICATION_RECEIPT':
-    'Bước tiếp theo: chờ một chút rồi nhấn Làm mới trạng thái để kiểm tra xác nhận từ máy AI.',
+    'Bước tiếp theo: chờ một chút rồi nhấn Làm mới trạng thái để kiểm tra xác nhận áp dụng.',
   'cameraSetup.appStatus.action.RECEIPT_CONTEXT_STALE':
-    'Bước tiếp theo: kiểm tra lại ảnh góc nhìn tham chiếu hoặc chờ xác nhận mới từ máy AI.',
+    'Bước tiếp theo: kiểm tra lại ảnh góc nhìn tham chiếu hoặc chờ xác nhận mới.',
   'cameraSetup.appStatus.action.APPLICATION_RECEIPT_STALE':
-    'Bước tiếp theo: nhấn Làm mới trạng thái để kiểm tra xác nhận mới hơn từ máy AI (video trực tiếp được kiểm tra riêng).',
+    'Bước tiếp theo: nhấn Làm mới trạng thái để kiểm tra xác nhận mới hơn (video trực tiếp được kiểm tra riêng).',
   'cameraSetup.appStatus.action.DESIRED_CONFIGURATION_PENDING':
-    'Bước tiếp theo: cấu hình bạn vừa lưu mới hơn bản máy AI xác nhận lần cuối; hãy áp dụng hoặc làm mới trạng thái sau ít giây.',
+    'Bước tiếp theo: cấu hình bạn vừa lưu mới hơn bản xác nhận lần cuối; hãy áp dụng hoặc làm mới trạng thái sau ít giây.',
   'cameraSetup.appStatus.action.REJECTED_DEFAULT':
     'Bước tiếp theo: rà lại nguồn camera, đa giác vùng quan sát và chính sách PPE trước khi lưu lại.',
   'cameraSetup.appStatus.action.OTHER':
-    'Bước tiếp theo: kiểm tra nguồn camera và trạng thái máy AI, sau đó làm mới trạng thái.',
+    'Bước tiếp theo: kiểm tra nguồn camera và kết nối máy xử lý camera, sau đó làm mới trạng thái.',
 };
 
 registerFeatureCatalog({ en, vi });

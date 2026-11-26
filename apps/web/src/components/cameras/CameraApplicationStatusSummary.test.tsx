@@ -116,13 +116,15 @@ describe('CameraApplicationStatusSummary plain-language status & technical detai
 
     await i18n.changeLanguage('vi');
     await waitFor(() => {
-      expect(primary.textContent).toBe('Đã lưu · Chờ máy AI áp dụng');
+      expect(primary.textContent).toBe('Đã lưu · Đang chờ áp dụng');
     });
     expect(compactHint.textContent).toContain(
       'Giữ camera cố định; kiểm tra lại vùng sau khi đổi góc.',
     );
     expect(within(details).getByText('Chi tiết kỹ thuật')).toBeTruthy();
-    expect(within(details).getByText('Phiên bản đã lưu: v6 · Máy AI báo cáo: v5')).toBeTruthy();
+    expect(
+      within(details).getByText('Phiên bản đã lưu: v6 · Máy xử lý camera báo cáo: v5'),
+    ).toBeTruthy();
     expect(within(details).getByText('Mã lý do: DESIRED_CONFIGURATION_PENDING')).toBeTruthy();
   });
 
@@ -170,7 +172,7 @@ describe('CameraApplicationStatusSummary plain-language status & technical detai
 
     await i18n.changeLanguage('vi');
     await waitFor(() => {
-      expect(primary.textContent).toBe('Máy AI đã nhận cấu hình');
+      expect(primary.textContent).toBe('Đã nhận cấu hình');
     });
     expect(primary.textContent).not.toMatch(/Sẵn sàng|Đang giám sát|Worker|v6/i);
     expect(angleHint.textContent).toContain(

@@ -151,34 +151,43 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
     // 1) Host capability fetch failure -> distinct alert prerequisite banner with Retry button and hidden unusable source controls
     const errorPrereq = await screen.findByTestId('camera-source-host-prerequisite');
     expect(errorPrereq.getAttribute('role')).toBe('alert');
-    expect(errorPrereq.textContent).toMatch(/Could not check AI hosts/i);
-    expect(screen.queryByRole('radio', { name: /USB \/ host webcam/i })).toBeNull();
-    expect(screen.queryByRole('combobox', { name: /^(AI host|Máy AI)$/ })).toBeNull();
+    expect(errorPrereq.textContent).toMatch(/Could not check camera connection/i);
+    expect(screen.queryByRole('radio', { name: /USB camera connected at site/i })).toBeNull();
+    expect(
+      screen.queryByRole('combobox', {
+        name: /^(AI host|Máy AI|Camera processing computer|Máy xử lý camera)$/,
+      }),
+    ).toBeNull();
 
     // Clicking Retry refetches -> 2) Empty hosts list -> distinct no-host prerequisite gate hiding unusable controls
     await user.click(within(errorPrereq).getByRole('button', { name: /Retry|Thử lại/i }));
     await waitFor(() => {
       const noHostBanner = screen.getByTestId('camera-source-host-prerequisite');
       expect(noHostBanner.getAttribute('role')).toBe('status');
-      expect(noHostBanner.textContent).toMatch(/No AI machine is assigned to this Site/i);
-      expect(noHostBanner.textContent).toMatch(/Contact the AI operator/i);
+      expect(noHostBanner.textContent).toMatch(/No camera connection is set up for this site/i);
+      expect(noHostBanner.textContent).toMatch(/Ask your operator/i);
     });
-    expect(screen.queryByRole('radio', { name: /USB \/ host webcam/i })).toBeNull();
-    expect(screen.queryByRole('combobox', { name: /^(AI host|Máy AI)$/ })).toBeNull();
+    expect(screen.queryByRole('radio', { name: /USB camera connected at site/i })).toBeNull();
+    expect(
+      screen.queryByRole('combobox', {
+        name: /^(AI host|Máy AI|Camera processing computer|Máy xử lý camera)$/,
+      }),
+    ).toBeNull();
 
-    // Refresh -> 3) All assigned hosts offline -> distinct offline-hosts prerequisite naming the host
-    await user.click(screen.getByRole('button', { name: /Refresh hosts/i }));
+    // Refresh -> 3) All assigned hosts unavailable for this camera -> distinct unavailable prerequisite naming the host without claiming offline
+    await user.click(screen.getByRole('button', { name: /Check connection again/i }));
     await waitFor(() => {
-      const offlineBanner = screen.getByTestId('camera-source-host-prerequisite');
-      expect(offlineBanner.textContent).toMatch(/Site A Edge Box/);
-      expect(offlineBanner.textContent).toMatch(/offline/i);
+      const unavailableBanner = screen.getByTestId('camera-source-host-prerequisite');
+      expect(unavailableBanner.textContent).toMatch(/Site A Edge Box/);
+      expect(unavailableBanner.textContent).toMatch(/Cannot connect this camera yet/i);
+      expect(unavailableBanner.textContent).not.toMatch(/\boffline\b/i);
     });
-    expect(screen.queryByRole('radio', { name: /USB \/ host webcam/i })).toBeNull();
+    expect(screen.queryByRole('radio', { name: /USB camera connected at site/i })).toBeNull();
 
     // Refresh -> 4) Online test-only host with 0 webcams and 0 videos -> upfront test-only note + explicit empty device/video hints
-    await user.click(screen.getByRole('button', { name: /Refresh hosts/i }));
+    await user.click(screen.getByRole('button', { name: /Check connection again/i }));
     const testOnlyNote = await screen.findByTestId('camera-source-test-only-note');
-    expect(testOnlyNote.textContent).toMatch(/test-only|cannot activate live AI/i);
+    expect(testOnlyNote.textContent).toMatch(/test-only|cannot activate live/i);
 
     const emptyWebcams = await screen.findByTestId('camera-source-empty-devices');
     expect(emptyWebcams.textContent).toMatch(/No USB webcams found/i);
@@ -334,8 +343,8 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
       );
       expect(viUnsupported.textContent).not.toMatch(/hợp đồng|cứu sinh|ranh giới/i);
       const panelText = screen.getByTestId('camera-ppe-policy-panel').textContent ?? '';
-      expect(panelText).toMatch(/Đã lưu phiên bản 5\. Xem riêng trạng thái áp dụng trên máy AI\./);
-      expect(panelText).not.toMatch(/\bworker\b|\bACK\b/i);
+      expect(panelText).toMatch(/Đã lưu phiên bản 5\. Xem riêng trạng thái áp dụng\./);
+      expect(panelText).not.toMatch(/\bworker\b|\bACK\b|máy AI/i);
     });
   });
 
@@ -483,11 +492,11 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
       /Camera is disabled/i,
     );
     expect((await screen.findByTestId('camera-source-host-prerequisite')).textContent).toMatch(
-      /No AI machine is assigned to this Site/i,
+      /No camera connection is set up for this site/i,
     );
 
     // Refresh to online host -> probe works for connection prep, but live Save & activate / Apply saved config stay blocked
-    await user.click(screen.getByRole('button', { name: /Refresh hosts/i }));
+    await user.click(screen.getByRole('button', { name: /Check connection again/i }));
     await user.selectOptions(await screen.findByLabelText(/Device/i), 'usb0');
     expect(screen.queryByTestId('camera-source-resume-card')).toBeNull();
     await user.click(screen.getByRole('button', { name: /Test connection/i }));
@@ -578,5 +587,181 @@ describe('Camera setup Slice 1: AI-host prerequisites, historical PPE truthfulne
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('shows Site-scoped heading and honest 2 enabled / 6 registered inventory summary, prioritizes ACTIVE camera selection, filters disabled records without hiding them by default, and resets on Site switch (EN/VI)', async () => {
+    const user = userEvent.setup();
+    const SITE_B_ID = '22222222-2222-4222-8222-222222222222';
+    const inactiveDemoCams: CameraResponse[] = [1, 2, 3, 4].map((idx) => ({
+      type: 'ZONE',
+      gateId: null,
+      id: `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa1${idx}`,
+      siteId: SITE_ID,
+      code: `DEMO-0${idx}`,
+      name: `Demo Inactive ${idx}`,
+      externalId: `demo-ext-${idx}`,
+      status: 'INACTIVE',
+      configurationVersion: 1,
+      createdAt: `2026-11-0${idx}T00:00:00.000Z`,
+    }));
+    const activeCam1: CameraResponse = {
+      ...CAM_ACTIVE,
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21',
+      code: 'CAM1',
+      name: 'Main Gate CAM1',
+      status: 'ACTIVE',
+    };
+    const activeCam2: CameraResponse = {
+      ...CAM_ACTIVE,
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa22',
+      code: 'anhtuan123',
+      name: 'tầng3',
+      externalId: 'tang-3-id',
+      status: 'ACTIVE',
+      configurationVersion: 1,
+    };
+    const siteBCam: CameraResponse = {
+      ...CAM_ACTIVE,
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01',
+      siteId: SITE_B_ID,
+      code: 'SITEB-CAM1',
+      name: 'Site B Gate Camera',
+      status: 'ACTIVE',
+    };
+
+    const nowIso = new Date().toISOString();
+    mockUseManagementClient.mockReturnValue({
+      listSites: vi.fn<SmartSiteManagementClient['listSites']>().mockResolvedValue({
+        items: [
+          {
+            id: SITE_ID,
+            code: 'TEST-SITE',
+            name: 'Test Site',
+            createdAt: '2026-11-01T00:00:00.000Z',
+          },
+          {
+            id: SITE_B_ID,
+            code: 'SITE-B',
+            name: 'Site Beta',
+            createdAt: '2026-11-02T00:00:00.000Z',
+          },
+        ],
+        total: 2,
+      } satisfies Page<SiteResponse>),
+      listCameras: vi
+        .fn<SmartSiteManagementClient['listCameras']>()
+        .mockImplementation(async (_tok, targetSiteId) =>
+          targetSiteId === SITE_ID
+            ? ({
+                items: [...inactiveDemoCams, activeCam1, activeCam2],
+                total: 6,
+              } satisfies Page<CameraResponse>)
+            : ({ items: [siteBCam], total: 1 } satisfies Page<CameraResponse>),
+        ),
+      getCamera: vi.fn<SmartSiteManagementClient['getCamera']>().mockResolvedValue(activeCam1),
+      getCameraApplicationStatus: vi
+        .fn<SmartSiteManagementClient['getCameraApplicationStatus']>()
+        .mockImplementation(
+          async (_tok, siteId, cameraId) =>
+            ({
+              siteId,
+              cameraId,
+              desiredRevision: 1,
+              reportedRevision: null,
+              applicationState: 'UNCONFIRMED',
+              viewValidity: 'UNAVAILABLE',
+              reasonCode: 'NO_WORKER_GENERATION',
+              lastReceiptAt: null,
+              observedAt: nowIso,
+            }) satisfies CameraApplicationStatus,
+        ),
+      listZones: vi.fn<SmartSiteManagementClient['listZones']>().mockResolvedValue({
+        items: [],
+        total: 0,
+      } satisfies Page<ZoneResponse>),
+      listRegions: vi.fn<SmartSiteManagementClient['listRegions']>().mockResolvedValue({
+        items: [],
+        total: 0,
+      } satisfies Page<RegionResponse>),
+      readSavedPpePolicy: vi.fn().mockResolvedValue({
+        cameraId: activeCam1.id,
+        regionId: null,
+        configurationVersion: 1,
+        savedRevision: null,
+        policy: null,
+      }),
+    });
+
+    const multiSiteSession: SharedSession = {
+      ...makeManagerSession(),
+      user: {
+        ...makeManagerSession().user,
+        roleAssignments: [
+          { role: 'SITE_MANAGER', siteId: SITE_ID },
+          { role: 'SITE_MANAGER', siteId: SITE_B_ID },
+        ],
+      },
+    };
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[`/camera-setup?siteId=${SITE_ID}`]}>
+          <CameraSetupView apiUrl={API_URL} sharedSession={multiSiteSession} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Clear Site heading and truthful 2 enabled · 6 registered count (never claims 6 connected/live)
+    expect((await screen.findByTestId('camera-setup-site-heading')).textContent).toContain(
+      'TEST-SITE · Test Site',
+    );
+    const inventorySummary = screen.getByTestId('camera-setup-inventory-summary');
+    expect(inventorySummary.textContent).toBe('2 enabled · 6 registered');
+    expect(inventorySummary.textContent).not.toMatch(/connected|live/i);
+
+    // Prioritizes ACTIVE ZONE camera (Main Gate CAM1) by default even though 4 INACTIVE demo records appear earlier
+    const selectedRegion = screen.getByRole('region', { name: 'Selected camera' });
+    expect(selectedRegion.textContent).toContain('Main Gate CAM1');
+
+    // Explicit status filter narrows rail to Enabled (2) or Disabled (4) and resets cleanly
+    const filterGroup = screen.getByTestId('camera-setup-status-filter');
+    const sourceList = screen.getByTestId('camera-setup-source-list');
+    expect(within(sourceList).getAllByRole('listitem')).toHaveLength(6);
+
+    await user.click(within(filterGroup).getByRole('button', { name: 'Enabled (2)' }));
+    expect(within(sourceList).getAllByRole('listitem')).toHaveLength(2);
+    expect(sourceList.textContent).toContain('Main Gate CAM1');
+    expect(sourceList.textContent).toContain('tầng3');
+    expect(sourceList.textContent).not.toContain('Demo Inactive 1');
+
+    await user.click(within(filterGroup).getByRole('button', { name: 'Disabled (4)' }));
+    expect(within(sourceList).getAllByRole('listitem')).toHaveLength(4);
+    expect(sourceList.textContent).toContain('Demo Inactive 1');
+
+    // Vietnamese parity on site heading & inventory summary
+    await i18n.changeLanguage('vi');
+    await waitFor(() => {
+      expect(screen.getByTestId('camera-setup-inventory-summary').textContent).toBe(
+        '2 đang bật · 6 đã đăng ký',
+      );
+    });
+
+    // Switching Site updates heading, resets camera selection/filter, and prevents cross-site bleed
+    await user.selectOptions(screen.getByLabelText('Công trường'), SITE_B_ID);
+    await waitFor(() => {
+      expect(screen.getByTestId('camera-setup-site-heading').textContent).toContain(
+        'SITE-B · Site Beta',
+      );
+    });
+    expect(screen.getByTestId('camera-setup-inventory-summary').textContent).toBe(
+      '1 đang bật · 1 đã đăng ký',
+    );
+    expect(screen.getByTestId('camera-setup-source-list').textContent).toContain(
+      'Site B Gate Camera',
+    );
+    expect(screen.getByTestId('camera-setup-source-list').textContent).not.toContain(
+      'Main Gate CAM1',
+    );
   });
 });
