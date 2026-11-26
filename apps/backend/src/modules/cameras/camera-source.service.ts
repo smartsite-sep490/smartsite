@@ -28,6 +28,7 @@ import {
 } from './camera-source-contract.js';
 
 export const CAMERA_SOURCE_FETCH = Symbol('CAMERA_SOURCE_FETCH');
+class CameraSourceScopeMissing extends Error {}
 const unavailable = (): never => {
   throw new PublicHttpException(503, {
     code: 'SERVICE_UNAVAILABLE',
@@ -141,7 +142,7 @@ export class CameraSourceService {
     path: string,
     body: unknown,
     signal: AbortSignal,
-    optionalMissing = false,
+    expectedMissing?: 'resume' | 'scope',
   ) {
     if (signal.aborted) unavailable();
     const token = this.config.get('SMARTSITE_AI_SERVICE_TOKEN', { infer: true });
@@ -154,7 +155,7 @@ export class CameraSourceService {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
-      if (optionalMissing && response.status === 404) {
+      if (expectedMissing && response.status === 404) {
         const value = await boundedBody(response, signal);
         if (
           value &&
@@ -162,9 +163,12 @@ export class CameraSourceService {
           !Array.isArray(value) &&
           Object.keys(value).length === 1 &&
           Object.hasOwn(value, 'code') &&
-          (value as { code: unknown }).code === 'SOURCE_RESUME_NOT_FOUND'
-        )
+          (value as { code: unknown }).code ===
+            (expectedMissing === 'resume' ? 'SOURCE_RESUME_NOT_FOUND' : 'SOURCE_SCOPE_NOT_FOUND')
+        ) {
+          if (expectedMissing === 'scope') throw new CameraSourceScopeMissing();
           return undefined;
+        }
         unavailable();
       }
       void response.body?.cancel().catch(() => {});
@@ -200,16 +204,20 @@ export class CameraSourceService {
               `/v1/source-control/${siteId}/${encodeURIComponent(camera.externalId)}/capabilities`,
               undefined,
               budget,
+              'scope',
             ),
           );
           if (parsed.hostId !== host.id) unavailable();
           return { id: host.id, label: host.label, available: true as const, capabilities: parsed };
-        } catch {
+        } catch (error) {
           return {
             id: host.id,
             label: host.label,
             available: false as const,
-            reason: 'AGENT_UNAVAILABLE' as const,
+            reason:
+              error instanceof CameraSourceScopeMissing
+                ? ('CAMERA_UNBOUND' as const)
+                : ('AGENT_UNAVAILABLE' as const),
           };
         }
       }),
@@ -498,7 +506,7 @@ export class CameraSourceService {
         path + '/resume-status',
         { commandId: command.data.commandId },
         AbortSignal.timeout(5000),
-        true,
+        'resume',
       );
       if (known !== undefined) {
         const status = sourceResumeStatusSchema.parse(known);
