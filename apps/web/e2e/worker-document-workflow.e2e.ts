@@ -13,6 +13,7 @@ const site = {
   createdAt: '2026-11-21T00:00:00Z',
 };
 const contractor = { id: 'qa-contractor', name: 'Synthetic Contractor' };
+const otherContractor = { id: 'other-contractor', name: 'Other Contractor' };
 const original = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6tCkAAAAASUVORK5CYII=',
   'base64',
@@ -120,6 +121,8 @@ for (const width of [1440, 390]) {
       if (path === '/sites') return json({ items: [site], total: 1 });
       if (path.endsWith('/contractor-worker-account-options'))
         return json({ contractors: [contractor] });
+      if (path.endsWith('/safety-contractors'))
+        return json({ items: [contractor, otherContractor], total: 2 });
       if (path.endsWith('/worker-onboarding-drafts')) return json({ items: drafts });
       if (path.endsWith('/worker-onboarding-drafts/provision')) {
         provision = request.postDataJSON().items;
@@ -165,8 +168,11 @@ for (const width of [1440, 390]) {
         return json({ items });
       }
       if (path.endsWith('/worker-compliance')) {
+        const contractorId = url.searchParams.get('contractorId');
         const filtered = profiles.filter(
-          (profile) => profile.submissionStatus === url.searchParams.get('submissionStatus'),
+          (profile) =>
+            profile.submissionStatus === url.searchParams.get('submissionStatus') &&
+            (!contractorId || profile.contractorId === contractorId),
         );
         return json({ items: filtered, total: filtered.length });
       }
@@ -201,31 +207,45 @@ for (const width of [1440, 390]) {
     await expect(
       page.locator('main').getByRole('link', { name: en['workerIntake.recordTitle'] }),
     ).toHaveAttribute('href', '/worker-documents?siteId=' + site.id);
-    const add = page.getByRole('button', { name: en['workerIntake.add'], exact: true });
+    const form = page.getByRole('region', { name: en['workerIntake.add'] });
     const table = page.getByRole('table');
     await expect(table).toBeVisible();
     await expect(page.locator('[data-select-for=worker-intake-site-select]')).toBeVisible();
-    const tableWidth = (await table.boundingBox())!.width;
-    await add.click();
-    const drawer = page.getByRole('dialog', { name: en['workerIntake.add'] });
-    await expect(drawer).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.body.style.overflow)).toBe('hidden');
-    const drawerBounds = (await drawer.boundingBox())!;
-    expect(drawerBounds.y).toBe(0);
-    expect(drawerBounds.width).toBeLessThanOrEqual(width);
-    if (width === 390) expect(drawerBounds.width).toBe(width);
-    expect((await table.boundingBox())!.width).toBeCloseTo(tableWidth, 0);
+    await expect(form).toBeVisible();
+    expect((await form.boundingBox())!.y).toBeLessThan((await table.boundingBox())!.y);
+    const expiry = form
+      .getByRole('button', { name: en['documents.expiresOn'], exact: true })
+      .last();
+    await expiry.evaluate((field) => field.scrollIntoView({ block: 'end' }));
+    await expiry.click();
+    const calendar = page.getByRole('dialog');
+    await expect(calendar.getByRole('grid')).toBeVisible();
+    const calendarBounds = (await calendar.boundingBox())!;
+    expect(calendarBounds.x).toBeGreaterThanOrEqual(0);
+    expect(calendarBounds.x + calendarBounds.width).toBeLessThanOrEqual(width);
+    expect(calendarBounds.y).toBeGreaterThanOrEqual(0);
+    expect(calendarBounds.y + calendarBounds.height).toBeLessThanOrEqual(960);
+    const day = calendar.getByRole('grid').getByRole('button').filter({ hasText: /^15$/ }).first();
+    await day.click();
+    await expect(calendar).toBeHidden();
+    await form
+      .getByRole('button', {
+        name: en['calendar.clearField'].replace('{{field}}', en['documents.expiresOn']),
+        exact: true,
+      })
+      .focus();
+    await page.keyboard.press('Enter');
+    await expect(expiry).toContainText(en['common.pick_a_date']);
+    await expiry.click();
     await page.keyboard.press('Escape');
-    await expect(drawer).toBeHidden();
-    await expect(add).toBeFocused();
-    await add.click();
-    const nameField = drawer.getByLabel(en['common.full_name'], { exact: true });
-    await expect(nameField).toBeFocused();
+    await expect(calendar).toBeHidden();
+    await expect(expiry).toBeFocused();
+    const nameField = form.getByLabel(en['common.full_name'], { exact: true });
     await nameField.fill('Unfinished Worker');
     await page.getByRole('button', { name: en['workerIntake.saveNext'] }).click();
     await expect.poll(() => draftSaved).toBe(true);
     await expect(nameField).toHaveValue('');
-    await page.getByRole('button', { name: en['common.cancel'], exact: true }).click();
+    await expect(nameField).toBeFocused();
 
     const selectPage = page.getByRole('checkbox', { name: en['documents.selectPage'] });
     await selectPage.check();
@@ -262,9 +282,17 @@ for (const width of [1440, 390]) {
     await assertLayout(page);
 
     role = 'SAFETY_OFFICER';
+    profiles[1]!.contractorId = otherContractor.id;
     await page.goto('/worker-documents?siteId=' + site.id);
     await expect(page.locator('[data-select-for=worker-documents-site-select]')).toBeVisible();
     await expect(page.getByRole('button', { name: /Synthetic Bravo/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: contractor.name, exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: otherContractor.name, exact: true }),
+    ).toBeVisible();
+    await page.locator('[data-select-for=worker-document-contractor-filter]').click();
+    await page.getByRole('option', { name: contractor.name, exact: true }).click();
+    await expect(page.getByRole('button', { name: /Synthetic Bravo/ })).toHaveCount(0);
     await page.getByRole('button', { name: /Synthetic Alpha/ }).click();
     await expect(page.getByRole('button', { name: en['documents.aiRun'] })).toHaveCount(0);
     const approve = page.getByRole('button', { name: en['documents.approve'], exact: true });

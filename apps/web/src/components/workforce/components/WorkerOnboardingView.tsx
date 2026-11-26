@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useId, useRef, useState } from 'react';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -13,7 +12,6 @@ import type {
 import { useAuth, useCurrentUser, useManagementClient } from '../../../features/auth/auth-session';
 import { translate as tr, uiLanguage } from '../../../i18n';
 import { userErrorMessage } from '../../../i18n/messages';
-import { ActionDrawer } from '../../shared/ActionDrawer';
 import { WorksitePicker } from '../../shared/WorksitePicker';
 import { SmartDatePicker } from '../../ui';
 import { SmartNativeSelect } from '../../ui/SmartNativeSelect';
@@ -150,9 +148,19 @@ function IntakeTable(
 ) {
   const [selected, setSelected] = useState<string[]>([]);
   const [results, setResults] = useState<Record<string, WorkerOnboardingBatchResult>>({});
-  const [editing, setEditing] = useState<{ formId: string; draft?: WorkerOnboardingDraft }>();
+  const [editor, setEditor] = useState<{
+    formId: string;
+    draft?: WorkerOnboardingDraft;
+    focusName?: boolean;
+  }>(() => ({ formId: crypto.randomUUID() }));
+  const [saved, setSaved] = useState(false);
+  const editorTitle = useId();
+  const formSection = useRef<HTMLElement>(null);
+  const editTrigger = useRef<HTMLButtonElement>(null);
   const cache = useQueryClient();
   const key = ['worker-intake-drafts', p.scope, p.siteId, p.contractorId];
+  const saveKey = [...key, 'save'];
+  const saving = useIsMutating({ mutationKey: saveKey, exact: true }) > 0;
   const query = useQuery({
     queryKey: key,
     queryFn: () => p.client.listWorkerOnboardingDrafts(p.token, p.siteId, p.contractorId),
@@ -217,8 +225,12 @@ function IntakeTable(
       void cache.invalidateQueries({ queryKey: ['worker-roster'] });
     },
   });
-  const openNew = () => setEditing({ formId: crypto.randomUUID() });
-  const close = () => setEditing(undefined);
+  const resetForm = (focus = false) => {
+    const trigger = editTrigger.current;
+    editTrigger.current = null;
+    setEditor({ formId: crypto.randomUUID(), focusName: focus });
+    if (!focus) trigger?.focus();
+  };
 
   return (
     <section className="space-y-3">
@@ -228,6 +240,7 @@ function IntakeTable(
           <SmartNativeSelect
             className={documentField}
             value={p.contractorId}
+            disabled={saving || batch.isPending}
             onChange={(event) => p.onContractorChange(event.target.value)}
           >
             {p.contractors.map((item) => (
@@ -244,16 +257,40 @@ function IntakeTable(
           >
             {tr('workerIntake.recordTitle')}
           </Link>
-          <button
-            type="button"
-            className={documentPrimaryButton}
-            disabled={batch.isPending}
-            onClick={openNew}
-          >
-            {tr('workerIntake.add')}
-          </button>
         </div>
       </div>
+      <section
+        aria-labelledby={editorTitle}
+        ref={formSection}
+        className="scroll-mt-4 space-y-3 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5"
+      >
+        <h2 id={editorTitle} className="text-lg font-semibold text-slate-900">
+          {tr(editor.draft ? 'workerIntake.edit' : 'workerIntake.add')}
+        </h2>
+        <IntakeDraftForm
+          key={editor.formId}
+          {...p}
+          id={editor.formId}
+          draft={editor.draft}
+          saveKey={saveKey}
+          disabled={batch.isPending}
+          focusName={!!editor.draft || !!editor.focusName}
+          onCancel={() => {
+            setSaved(false);
+            resetForm();
+          }}
+          onSaved={(next) => {
+            void cache.invalidateQueries({ queryKey: key });
+            setSaved(true);
+            resetForm(next);
+          }}
+        />
+        {saved && (
+          <p role="status" className="text-sm text-emerald-800">
+            {tr('workerIntake.intakeDraftSaved')}
+          </p>
+        )}
+      </section>
       <div className="min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
           <span aria-live="polite" className="mx-1 text-sm text-slate-600">
@@ -262,7 +299,7 @@ function IntakeTable(
           <button
             type="button"
             className={documentButton}
-            disabled={batch.isPending || !provisionable.length}
+            disabled={saving || batch.isPending || !provisionable.length}
             onClick={() => batch.mutate('provision')}
           >
             {tr('workerIntake.provisionCount', { count: provisionable.length })}
@@ -270,7 +307,7 @@ function IntakeTable(
           <button
             type="button"
             className={documentButton + ' ml-auto'}
-            disabled={batch.isPending || !sendable.length}
+            disabled={saving || batch.isPending || !sendable.length}
             onClick={() => batch.mutate('send')}
           >
             {tr('workerIntake.sendCount', { count: sendable.length })}
@@ -284,7 +321,7 @@ function IntakeTable(
                 ? [{ id: row.workerId, name: row.displayName || row.workerCode || row.username }]
                 : [],
             )}
-            disabled={batch.isPending}
+            disabled={saving || batch.isPending}
           />
         </div>
         {batch.isPending && (
@@ -444,8 +481,13 @@ function IntakeTable(
                           <button
                             type="button"
                             className={documentButton}
-                            disabled={batch.isPending}
-                            onClick={() => setEditing({ formId: row.id, draft: row })}
+                            disabled={saving || batch.isPending}
+                            onClick={(event) => {
+                              editTrigger.current = event.currentTarget;
+                              setSaved(false);
+                              setEditor({ formId: row.id, draft: row });
+                              formSection.current?.scrollIntoView?.({ block: 'start' });
+                            }}
                           >
                             {tr('workerIntake.edit')}
                           </button>
@@ -461,27 +503,6 @@ function IntakeTable(
           query.isSuccess && <p className="text-sm text-slate-600">{tr('workerIntake.empty')}</p>
         )}
       </div>
-      <ActionDrawer
-        isOpen={!!editing}
-        title={tr(editing?.draft ? 'workerIntake.edit' : 'workerIntake.add')}
-        onClose={close}
-        panelClassName="max-sm:max-w-none"
-      >
-        {editing && (
-          <IntakeDraftForm
-            key={editing.formId}
-            {...p}
-            id={editing.formId}
-            draft={editing.draft}
-            onClose={close}
-            onSaved={(next) => {
-              void cache.invalidateQueries({ queryKey: key });
-              const newForm = next ? { formId: crypto.randomUUID() } : undefined;
-              setEditing((current) => (current?.formId === editing.formId ? newForm : current));
-            }}
-          />
-        )}
-      </ActionDrawer>
     </section>
   );
 }
@@ -491,14 +512,18 @@ function IntakeDraftForm(
     contractorId: string;
     id: string;
     draft?: WorkerOnboardingDraft;
-    onClose: () => void;
+    saveKey: readonly string[];
+    disabled: boolean;
+    focusName: boolean;
+    onCancel: () => void;
     onSaved: (next: boolean) => void;
   },
 ) {
   const nameField = useRef<HTMLInputElement>(null);
+  const { focusName } = p;
   useEffect(() => {
-    nameField.current?.focus();
-  }, []);
+    if (focusName) nameField.current?.focus();
+  }, [focusName]);
   const [fields, setFields] = useState({
     displayName: p.draft?.displayName ?? '',
     username: p.draft?.username ?? '',
@@ -532,7 +557,14 @@ function IntakeDraftForm(
       return { blob, title: doc.originalName, type: doc.mediaType };
     },
   });
+  const canSave =
+    !!p.draft ||
+    required !== null ||
+    Object.values(fields).some((value) => value.trim()) ||
+    Object.values(files).some(Boolean) ||
+    Object.values(dates).some((doc) => doc?.submittedIssuedOn || doc?.submittedExpiresOn);
   const save = useMutation<WorkerOnboardingDraft, Error, boolean>({
+    mutationKey: p.saveKey,
     mutationFn: () => {
       const documents = { ...dates };
       for (const kind of documentKinds) {
@@ -572,46 +604,50 @@ function IntakeDraftForm(
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          save.mutate(false);
+          if (canSave && !p.disabled && !save.isPending) save.mutate(false);
         }}
       >
-        <fieldset disabled={save.isPending} className="grid gap-4">
-          {(
-            [
-              ['displayName', 'common.full_name', 255],
-              ['username', 'common.username', 64],
-              ['email', 'worker_onboarding_view.email', 254],
-            ] as const
-          ).map(([field, label, limit]) => (
-            <label key={field} className="grid gap-1 text-sm font-medium text-slate-700">
-              {tr(label)}
-              <input
+        <fieldset disabled={p.disabled || save.isPending} className="grid min-w-0 gap-3">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {(
+              [
+                ['displayName', 'common.full_name', 255],
+                ['username', 'common.username', 64],
+                ['email', 'worker_onboarding_view.email', 254],
+              ] as const
+            ).map(([field, label, limit]) => (
+              <label key={field} className="grid min-w-0 gap-1 text-sm font-medium text-slate-700">
+                {tr(label)}
+                <input
+                  className={documentField}
+                  ref={field === 'displayName' ? nameField : undefined}
+                  value={fields[field]}
+                  maxLength={limit}
+                  inputMode={field === 'email' ? 'email' : undefined}
+                  onChange={(event) =>
+                    setFields((current) => ({ ...current, [field]: event.target.value }))
+                  }
+                />
+              </label>
+            ))}
+            <label className="grid min-w-0 gap-1 text-sm font-medium text-slate-700">
+              {tr('documents.safetyCardRequired')}
+              <SmartNativeSelect
+                value={required === null ? '' : String(required)}
                 className={documentField}
-                ref={field === 'displayName' ? nameField : undefined}
-                value={fields[field]}
-                maxLength={limit}
-                inputMode={field === 'email' ? 'email' : undefined}
                 onChange={(event) =>
-                  setFields((current) => ({ ...current, [field]: event.target.value }))
+                  setRequired(event.target.value === '' ? null : event.target.value === 'true')
                 }
-              />
+              >
+                <option value="">{tr('workerIntake.choose')}</option>
+                <option value="true">{tr('documents.cardRequired')}</option>
+                <option value="false">{tr('documents.cardNotRequired')}</option>
+              </SmartNativeSelect>
             </label>
-          ))}
-          <label className="grid gap-1 text-sm font-medium text-slate-700">
-            {tr('documents.safetyCardRequired')}
-            <SmartNativeSelect
-              value={required === null ? '' : String(required)}
-              className={documentField}
-              onChange={(event) =>
-                setRequired(event.target.value === '' ? null : event.target.value === 'true')
-              }
-            >
-              <option value="">{tr('workerIntake.choose')}</option>
-              <option value="true">{tr('documents.cardRequired')}</option>
-              <option value="false">{tr('documents.cardNotRequired')}</option>
-            </SmartNativeSelect>
-          </label>
-          <div className="divide-y divide-slate-200 rounded-xl border border-slate-200">
+          </div>
+          <div
+            className={'grid gap-2 ' + (required === false ? 'md:grid-cols-2' : 'lg:grid-cols-3')}
+          >
             {documentKinds
               .filter((kind) => kind !== 'SAFETY_CARD' || required !== false)
               .map((kind) => {
@@ -619,7 +655,10 @@ function IntakeDraftForm(
                 const savedName = existing?.originalName;
                 const health = kind === 'HEALTH_CERTIFICATE';
                 return (
-                  <div key={kind} className="grid gap-2 p-3">
+                  <div
+                    key={kind}
+                    className="grid min-w-0 content-start gap-2 rounded-xl border border-slate-200 p-3"
+                  >
                     <DocumentAttachmentInput
                       label={tr('documents.' + kind)}
                       file={files[kind]}
@@ -675,29 +714,26 @@ function IntakeDraftForm(
             </p>
           )}
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className={documentButton}>
+            <button type="submit" className={documentButton} disabled={!canSave}>
               {tr('workerIntake.save')}
             </button>
             {!p.draft && (
               <button
                 type="button"
                 className={documentPrimaryButton}
+                disabled={!canSave}
                 onClick={() => save.mutate(true)}
               >
                 {tr('workerIntake.saveNext')}
               </button>
             )}
-            <button type="button" className={documentButton} onClick={p.onClose}>
+            <button type="button" className={documentButton} onClick={p.onCancel}>
               {tr('common.cancel')}
             </button>
           </div>
         </fieldset>
       </form>
-      {preview.data &&
-        createPortal(
-          <DocumentFilePreview {...preview.data} onClose={preview.reset} />,
-          document.body,
-        )}
+      {preview.data && <DocumentFilePreview {...preview.data} onClose={preview.reset} />}
     </>
   );
 }
