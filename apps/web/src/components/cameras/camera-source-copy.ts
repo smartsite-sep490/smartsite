@@ -77,7 +77,24 @@ const en = {
   'cameraSource.retryHosts': 'Retry',
   'cameraSource.allHostsOfflineHeading': 'Cannot connect this camera yet',
   'cameraSource.allHostsOffline':
-    'Cannot connect this camera through {{hosts}} right now. This camera may not be assigned for processing yet, or the connection could not be reached. Check again, or ask your operator to verify this camera assignment.',
+    'Cannot connect a video source for this camera right now. Try checking again or inspect the technical details below.',
+  'cameraSource.unboundHeading': 'Camera is not connected to a video source yet',
+  'cameraSource.unboundBody':
+    'This camera record is saved, but no video source is assigned to it yet. Ask your operator to assign a source, then check again.',
+  'cameraSource.agentUnavailableHeading': 'Camera processing service is currently unreachable',
+  'cameraSource.agentUnavailableBody':
+    'Check the network connection or try checking again in a moment.',
+  'cameraSource.technicalDetailsToggle': 'Technical details',
+  'cameraSource.reasonShort.CAMERA_UNBOUND': 'not assigned',
+  'cameraSource.reasonShort.AGENT_UNAVAILABLE': 'unreachable',
+  'cameraSource.reasonDetail.CAMERA_UNBOUND': 'CAMERA_UNBOUND · No video source assigned',
+  'cameraSource.reasonDetail.AGENT_UNAVAILABLE':
+    'AGENT_UNAVAILABLE · Camera processing service unreachable',
+  'cameraSource.reasonDetail.UNKNOWN': 'Unavailable (reason unspecified)',
+  'cameraSource.unboundSelected':
+    'This camera is not connected to a video source yet on the selected connection. Ask your operator to assign it, then check again.',
+  'cameraSource.agentUnavailableSelected':
+    'Camera processing service is currently unreachable on the selected connection. Try checking again in a moment.',
   'cameraSource.testOnlyNote': '{{host}} is test-only (cannot activate live monitoring here).',
   'cameraSource.emptyWebcams':
     'No USB webcams found on {{host}}. Plug in a USB camera or use RTSP.',
@@ -209,7 +226,24 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.retryHosts': 'Thử lại',
   'cameraSource.allHostsOfflineHeading': 'Chưa kết nối được camera này',
   'cameraSource.allHostsOffline':
-    'Hiện chưa kết nối được camera này qua {{hosts}}. Camera có thể chưa được gán kết nối trên máy xử lý camera hoặc chưa liên lạc được. Hãy kiểm tra lại, hoặc nhờ bộ phận vận hành kiểm tra phần gán kết nối cho camera này.',
+    'Hiện chưa kết nối được nguồn hình cho camera này. Hãy thử kiểm tra lại hoặc mở chi tiết kỹ thuật bên dưới.',
+  'cameraSource.unboundHeading': 'Camera chưa được kết nối với nguồn hình',
+  'cameraSource.unboundBody':
+    'Camera mới chỉ lưu thông tin trên hệ thống và chưa được gán nguồn hình. Hãy liên hệ người vận hành để gán nguồn rồi kiểm tra lại.',
+  'cameraSource.agentUnavailableHeading': 'Hiện chưa truy cập được dịch vụ xử lý camera',
+  'cameraSource.agentUnavailableBody':
+    'Hãy kiểm tra kết nối mạng hoặc thử kiểm tra lại sau ít phút.',
+  'cameraSource.technicalDetailsToggle': 'Chi tiết kỹ thuật',
+  'cameraSource.reasonShort.CAMERA_UNBOUND': 'chưa gán nguồn',
+  'cameraSource.reasonShort.AGENT_UNAVAILABLE': 'chưa truy cập được',
+  'cameraSource.reasonDetail.CAMERA_UNBOUND': 'CAMERA_UNBOUND · Chưa gán nguồn hình cho camera',
+  'cameraSource.reasonDetail.AGENT_UNAVAILABLE':
+    'AGENT_UNAVAILABLE · Chưa truy cập được dịch vụ xử lý camera',
+  'cameraSource.reasonDetail.UNKNOWN': 'Chưa khả dụng (chưa rõ lý do)',
+  'cameraSource.unboundSelected':
+    'Camera chưa được kết nối với nguồn hình trên kết nối đã chọn. Hãy liên hệ người vận hành để gán nguồn rồi kiểm tra lại.',
+  'cameraSource.agentUnavailableSelected':
+    'Hiện chưa truy cập được dịch vụ xử lý camera trên kết nối đã chọn. Hãy thử kiểm tra lại sau ít phút.',
   'cameraSource.testOnlyNote':
     '{{host}} chỉ hỗ trợ kiểm tra (chưa kích hoạt giám sát trực tiếp tại đây).',
   'cameraSource.emptyWebcams':
