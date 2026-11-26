@@ -246,10 +246,15 @@ describe('Human Zone/Region labels and honest provisioned-source setup guidance'
   });
 
   it('explains provisioned edge source registration honestly without password/token inputs, rejects RTSP URLs and embedded credentials, and prioritizes human camera names (EN/VI)', async () => {
-    const createCamera = vi.fn<SmartSiteManagementClient['createCamera']>().mockResolvedValue({
-      ...CAMERA_FIXTURE,
-      configurationVersion: 1,
-    });
+    const createCamera = vi
+      .fn<SmartSiteManagementClient['createCamera']>()
+      .mockImplementation(async (_tok, _siteId, payload) => ({
+        ...CAMERA_FIXTURE,
+        name: payload.name,
+        code: payload.code,
+        externalId: payload.externalId ?? CAMERA_FIXTURE.externalId,
+        configurationVersion: 1,
+      }));
     const client = { createCamera } as unknown as SmartSiteManagementClient;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const user = userEvent.setup();
@@ -318,9 +323,11 @@ describe('Human Zone/Region labels and honest provisioned-source setup guidance'
 
     const dialog = screen.getByRole('dialog', { name: 'Register camera' });
     const guidance = within(dialog).getByTestId('camera-registration-source-guidance');
-    expect(guidance.textContent).toMatch(/edge worker/i);
+    expect(guidance.textContent).toMatch(/does not connect video/i);
+    expect(guidance.textContent).toMatch(/connected and ready/i);
+    expect(guidance.textContent).toMatch(/Connect camera/i);
     expect(guidance.textContent).toMatch(/RTSP/i);
-    expect(guidance.textContent).toMatch(/Get configuration image/i);
+    expect(guidance.textContent).not.toMatch(/edge worker|provisioned source/i);
 
     // Never renders password/token inputs or fake worker-start/connect buttons
     expect(dialog.querySelector('input[type="password"]')).toBeNull();
@@ -329,17 +336,17 @@ describe('Human Zone/Region labels and honest provisioned-source setup guidance'
       within(dialog).queryByRole('button', { name: /connect|start worker|provision/i }),
     ).toBeNull();
 
-    // Human Camera name field appears before Camera code and technical Source ID
+    // Human Camera name field appears before Camera code and Camera connection ID
     const inputs = Array.from(dialog.querySelectorAll('input'));
     expect(inputs).toHaveLength(3);
     const nameInput = within(dialog).getByLabelText('Camera name');
     const codeInput = within(dialog).getByLabelText('Camera code');
-    const sourceInput = within(dialog).getByLabelText('Source ID');
+    const sourceInput = within(dialog).getByLabelText('Camera connection ID');
     expect(inputs[0]).toBe(nameInput);
     expect(inputs[1]).toBe(codeInput);
     expect(inputs[2]).toBe(sourceInput);
 
-    // Rejects RTSP URL in Source ID without calling createCamera
+    // Rejects RTSP URL in Camera connection ID without calling createCamera
     await user.type(nameInput, 'North Gate Camera');
     await user.type(codeInput, 'CAM-01');
     await user.type(sourceInput, 'rtsp://192.168.1.50:554/stream1');
@@ -356,7 +363,7 @@ describe('Human Zone/Region labels and honest provisioned-source setup guidance'
     expect(createCamera).not.toHaveBeenCalled();
     expect(sourceInput.getAttribute('aria-invalid')).toBe('true');
 
-    // Accepts opaque edge-provisioned technical Source ID
+    // Accepts opaque camera connection ID and distinguishes saved camera from connected and ready
     await user.clear(sourceInput);
     await user.type(sourceInput, 'camera-a');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Register camera' }));
@@ -369,14 +376,23 @@ describe('Human Zone/Region labels and honest provisioned-source setup guidance'
         gateId: null,
       }),
     );
+    const statusNotice = await within(dialog).findByRole('status');
+    expect(statusNotice.textContent).toMatch(/Camera saved/i);
+    expect(statusNotice.textContent).toMatch(/not connected or ready/i);
+    expect(statusNotice.textContent).toMatch(/Connect camera/i);
+    expect(statusNotice.textContent).not.toMatch(/edge worker/i);
 
-    // Verify Vietnamese honest registration copy
+    // Verify Vietnamese honest registration copy without edge worker / Source ID / máy AI jargon
     await i18n.changeLanguage('vi');
     await waitFor(() => {
-      expect(
-        within(screen.getByRole('dialog')).getByTestId('camera-registration-source-guidance')
-          .textContent,
-      ).toMatch(/edge worker|Lấy ảnh cấu hình/i);
+      const viDialog = screen.getByRole('dialog');
+      const viGuidance = within(viDialog).getByTestId('camera-registration-source-guidance');
+      expect(viGuidance.textContent).toMatch(/chưa kết nối/i);
+      expect(viGuidance.textContent).toMatch(/Kết nối camera/i);
+      expect(viGuidance.textContent).not.toMatch(/edge worker|Source ID|máy AI/i);
+      expect(within(viDialog).getByLabelText('Tên camera')).toBeTruthy();
+      expect(within(viDialog).getByLabelText('Mã camera')).toBeTruthy();
+      expect(within(viDialog).getByLabelText('Mã kết nối camera')).toBeTruthy();
     });
   });
 });

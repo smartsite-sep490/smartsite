@@ -70,7 +70,6 @@ export function useCameraSourceResumeController({
     status: 'idle' | 'refreshing' | 'failed';
   }>({ scope: scopeKey, status: 'idle' });
 
-  const selectedHostId = hostState.scope === scopeKey ? hostState.id : null;
   const revoked = revokedScope === scopeKey;
   const sourceBusy = sourceBusyState.scope === scopeKey ? sourceBusyState.busy : false;
   const refreshingCaps = capsRefreshState.scope === scopeKey && capsRefreshState.status !== 'idle';
@@ -97,23 +96,21 @@ export function useCameraSourceResumeController({
 
   const hostAccessDenied =
     hosts.error instanceof SourceSetupError && [401, 403].includes(hosts.error.status);
+  const isAccessRevoked = revoked || hostAccessDenied;
+  const selectedHostId = !isAccessRevoked && hostState.scope === scopeKey ? hostState.id : null;
 
-  useEffect(() => {
-    if (hostAccessDenied && authFailureScopeRef.current !== scopeKey) {
-      authFailureScopeRef.current = scopeKey;
-      resumeAbortRef.current?.abort();
-      onUnauthorized();
-    }
-  }, [hostAccessDenied, onUnauthorized, scopeKey]);
-
-  const availableHosts = hosts.data?.filter((h) => h.available) ?? [];
-  const hostId =
-    selectedHostId !== null
+  const availableHosts = isAccessRevoked ? [] : (hosts.data?.filter((h) => h.available) ?? []);
+  const isSelectedHostValid =
+    selectedHostId !== null &&
+    (selectedHostId === '' || Boolean(hosts.data?.some((h) => h.id === selectedHostId)));
+  const hostId = isAccessRevoked
+    ? ''
+    : isSelectedHostValid
       ? selectedHostId
       : availableHosts.length === 1
         ? availableHosts[0]!.id
         : '';
-  const host = hosts.data?.find((h) => h.id === hostId);
+  const host = isAccessRevoked ? undefined : hosts.data?.find((h) => h.id === hostId);
   const caps = host?.capabilities;
 
   const resuming = useMutation({
@@ -125,7 +122,7 @@ export function useCameraSourceResumeController({
         caps?.configurationResumeSupported !== true ||
         configVersion === undefined ||
         !canWrite ||
-        revoked ||
+        isAccessRevoked ||
         !hostId ||
         hosts.isError ||
         sourceBusyRef.current ||
@@ -151,6 +148,9 @@ export function useCameraSourceResumeController({
     onError: (e) => {
       if (activeScopeRef.current !== scopeKey) return;
       if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
+        resumeAbortRef.current?.abort();
+        resumeCommand.current = undefined;
+        setHostState({ scope: scopeKey, id: null });
         setRevokedScope(scopeKey);
         onUnauthorized();
       }
@@ -159,6 +159,16 @@ export function useCameraSourceResumeController({
 
   const { isPending: resumePending, reset: resetResume } = resuming;
   const { refetch: refetchHosts } = hosts;
+
+  useEffect(() => {
+    if (hostAccessDenied && authFailureScopeRef.current !== scopeKey) {
+      authFailureScopeRef.current = scopeKey;
+      resumeAbortRef.current?.abort();
+      resumeCommand.current = undefined;
+      resetResume();
+      onUnauthorized();
+    }
+  }, [hostAccessDenied, onUnauthorized, resetResume, scopeKey]);
 
   useEffect(() => {
     activeScopeRef.current = scopeKey;
@@ -215,8 +225,12 @@ export function useCameraSourceResumeController({
   );
 
   const markRevoked = useCallback(() => {
+    resumeAbortRef.current?.abort();
+    resumeCommand.current = undefined;
+    resetResume();
+    setHostState({ scope: scopeKey, id: null });
     setRevokedScope(scopeKey);
-  }, [scopeKey]);
+  }, [resetResume, scopeKey]);
 
   const setSourceBusy = useCallback(
     (busy: boolean) => {

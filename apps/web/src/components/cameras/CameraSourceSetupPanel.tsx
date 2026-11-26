@@ -65,9 +65,12 @@ function SourceWorkspace({
     [password, setPassword] = useState('');
   const [pending, setPending] = useState(false),
     [result, setResult] = useState<SourceTestResult | null>(null);
+  const [confirmApply, setConfirmApply] = useState(false);
   const [error, setError] = useState(''),
     [now, setNow] = useState(() => Date.now());
   const operation = useRef<{ version: number; abort?: AbortController }>({ version: 0 });
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const hostSelectRef = useRef<HTMLSelectElement>(null);
   const cache = useQueryClient();
 
   const internalController = useCameraSourceResumeController({
@@ -85,6 +88,7 @@ function SourceWorkspace({
   const {
     hosts,
     hostAccessDenied,
+    availableHosts,
     hostId,
     host,
     caps,
@@ -131,6 +135,7 @@ function SourceWorkspace({
     },
     retry: false,
     onSuccess: () => {
+      setConfirmApply(false);
       setPassword('');
       onSourceApplied();
       void cache.invalidateQueries({
@@ -139,6 +144,7 @@ function SourceWorkspace({
       });
     },
     onError: (e) => {
+      setConfirmApply(false);
       if (e instanceof SourceSetupError && [401, 403].includes(e.status)) {
         markRevoked();
         setPassword('');
@@ -180,6 +186,7 @@ function SourceWorkspace({
     operation.current.abort?.abort();
     setPending(false);
     setResult(null);
+    setConfirmApply(false);
     setError('');
   };
   const change = (update: () => void) => {
@@ -245,7 +252,7 @@ function SourceWorkspace({
     }
   }
   const blocked = revoked || !canWrite || applying.isPending || resuming.isPending;
-  if (hostAccessDenied) {
+  if (hostAccessDenied || revoked) {
     return (
       <section
         role="alert"
@@ -361,15 +368,54 @@ function SourceWorkspace({
   );
 
   const hasConfiguredHosts = Boolean(hosts.data && hosts.data.length > 0);
-  const hasAvailableHost = Boolean(hosts.data?.some((entry) => entry.available));
+  const hasAvailableHost = availableHosts.length > 0;
   const hasUsableHost = Boolean(!hosts.isPending && !hosts.isError && hasAvailableHost);
   const allHostsOffline = Boolean(hasConfiguredHosts && !hasAvailableHost);
   const isEmptyHostList = Boolean(!hosts.isPending && !hosts.isError && hosts.data?.length === 0);
+  const hasMultipleHosts = (hosts.data?.length ?? 0) > 1;
+  const hasMultipleUsableHosts = availableHosts.length > 1;
+  const needsHostSelection = hasMultipleUsableHosts && !hostId;
   const offlineHostNames =
     hosts.data
       ?.filter((entry) => !entry.available)
       .map((entry) => entry.label)
       .join(', ') ?? '';
+
+  const connectionStatus =
+    hosts.isPending || pending || applying.isPending
+      ? {
+          state: 'checking' as const,
+          dot: 'bg-teal-600 animate-pulse',
+          pill: 'border-teal-200 bg-teal-50 text-teal-900',
+          key: 'cameraSource.statusChecking' as const,
+        }
+      : applying.isSuccess
+        ? {
+            state: 'activation-acknowledged' as const,
+            dot: 'bg-teal-600',
+            pill: 'border-teal-200 bg-teal-50 text-teal-900',
+            key: 'cameraSource.statusConnected' as const,
+          }
+        : activeResult && !isExpired
+          ? {
+              state: 'tested' as const,
+              dot: 'bg-sky-600',
+              pill: 'border-sky-200 bg-sky-50 text-sky-900',
+              key: 'cameraSource.statusTested' as const,
+            }
+          : {
+              state: 'not-checked' as const,
+              dot: 'bg-slate-400',
+              pill: 'border-slate-200 bg-slate-50 text-slate-700',
+              key: 'cameraSource.statusNotConnected' as const,
+            };
+
+  const openConnectionDetailsAndFocus = () => {
+    if (detailsRef.current) {
+      detailsRef.current.open = true;
+    }
+    hostSelectRef.current?.focus();
+  };
 
   return (
     <section
@@ -399,6 +445,17 @@ function SourceWorkspace({
             >
               {t('cameraSource.title')}
             </h2>
+            <span
+              data-testid="camera-source-connection-status"
+              data-connection-status={connectionStatus.state}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ${connectionStatus.pill}`}
+            >
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 rounded-full ${connectionStatus.dot}`}
+              />
+              {t(connectionStatus.key)}
+            </span>
             {isCameraInactive && (
               <span
                 data-testid="camera-source-inactive-badge"
@@ -531,7 +588,7 @@ function SourceWorkspace({
           <div
             role="status"
             data-testid="camera-source-host-prerequisite"
-            data-host-state="offline"
+            data-host-state="unavailable"
             className="min-w-0 space-y-3 rounded-xl border border-amber-200/90 border-l-[3px] border-l-amber-600 bg-amber-50/60 p-4 text-amber-950"
           >
             <div className="space-y-1">
@@ -609,62 +666,25 @@ function SourceWorkspace({
               </p>
             ) : (
               <>
-                <div className="flex min-w-0 flex-wrap items-end gap-3">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label className={CAMERA_FIELD_STYLES.label} htmlFor={`${id}-host`}>
-                        {t('cameraSource.host')}
-                      </label>
-                      <details className="group text-xs text-slate-600">
-                        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md py-0.5 font-medium text-slate-600 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
-                          <span>{t('cameraSource.hostHelpToggle')}</span>
-                          <span
-                            aria-hidden="true"
-                            className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
-                          >
-                            ▾
-                          </span>
-                        </summary>
-                        <p className="mt-1 max-w-md text-xs leading-relaxed text-slate-600">
-                          {t('cameraSource.hostHelp')}
-                        </p>
-                      </details>
-                    </div>
-                    <select
-                      id={`${id}-host`}
-                      className={CAMERA_FIELD_STYLES.input}
-                      value={hostId}
-                      disabled={blocked || hosts.isPending}
-                      onChange={(e) =>
-                        change(() => {
-                          selectHostId(e.target.value);
-                          setDevice('');
-                          setAsset('');
-                          setPassword('');
-                        })
-                      }
-                    >
-                      <option value="">{t('cameraSource.chooseHost')}</option>
-                      {hosts.data?.map((h) => (
-                        <option key={h.id} value={h.id}>
-                          {h.label}
-                          {h.available ? '' : ` — ${t('cameraSource.offline')}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <button
-                    type="button"
-                    className={CAMERA_BUTTON_STYLES.secondary}
-                    disabled={hosts.isFetching || pending || applying.isPending}
-                    onClick={() => {
-                      reset();
-                      void refreshHosts();
-                    }}
+                {needsHostSelection && (
+                  <div
+                    role="status"
+                    data-testid="camera-source-host-choice-required"
+                    className="flex min-w-0 flex-wrap items-center justify-between gap-2.5 rounded-xl border border-amber-200/90 border-l-[3px] border-l-amber-600 bg-amber-50/60 px-3.5 py-2.5 text-sm text-slate-800"
                   >
-                    {t('cameraSource.refresh')}
-                  </button>
-                </div>
+                    <p className="min-w-0 flex-1 leading-relaxed break-words">
+                      {t('cameraSource.multipleHostsPrompt')}
+                    </p>
+                    <button
+                      type="button"
+                      className={CAMERA_BUTTON_STYLES.compactSecondary}
+                      disabled={blocked}
+                      onClick={openConnectionDetailsAndFocus}
+                    >
+                      {t('cameraSource.chooseConnectionAction')}
+                    </button>
+                  </div>
+                )}
                 {host && !host.available && !allHostsOffline && (
                   <p role="status" className="text-sm text-amber-900">
                     {t('cameraSource.unavailable')}
@@ -814,6 +834,99 @@ function SourceWorkspace({
                     </div>
                   </div>
                 )}
+                <details
+                  ref={detailsRef}
+                  data-testid="camera-source-connection-details"
+                  className="group min-w-0 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm text-slate-700"
+                >
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 rounded-md py-0.5 text-xs font-semibold text-slate-700 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+                    <span className="inline-flex items-center gap-2">
+                      <span>{t('cameraSource.connectionDetailsToggle')}</span>
+                      {needsHostSelection && (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                          {t('cameraSource.connectionDetailsNeeded')}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
+                    >
+                      ▾
+                    </span>
+                  </summary>
+                  <div className="mt-2.5 space-y-2.5 border-t border-slate-200 pt-2.5">
+                    <p className="max-w-[65ch] text-xs leading-relaxed text-slate-600">
+                      {t('cameraSource.hostHelp')}
+                    </p>
+                    {!hasMultipleHosts && host ? (
+                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                        <p
+                          data-testid="camera-source-bound-host"
+                          className="min-w-0 break-words text-xs text-slate-700"
+                        >
+                          <span className="font-medium text-slate-600">
+                            {t('cameraSource.host')}:{' '}
+                          </span>
+                          <span className="font-semibold text-slate-950">{host.label}</span>
+                        </p>
+                        <button
+                          type="button"
+                          className={CAMERA_BUTTON_STYLES.compactSecondary}
+                          disabled={hosts.isFetching || pending || applying.isPending}
+                          onClick={() => {
+                            reset();
+                            void refreshHosts();
+                          }}
+                        >
+                          {t(hosts.isFetching ? 'cameraSource.refreshing' : 'cameraSource.refresh')}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex min-w-0 flex-wrap items-end gap-2.5">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <label className={CAMERA_FIELD_STYLES.label} htmlFor={`${id}-host`}>
+                            {t('cameraSource.host')}
+                          </label>
+                          <select
+                            ref={hostSelectRef}
+                            id={`${id}-host`}
+                            className={CAMERA_FIELD_STYLES.input}
+                            value={hostId}
+                            disabled={blocked || hosts.isPending}
+                            onChange={(e) =>
+                              change(() => {
+                                selectHostId(e.target.value);
+                                setDevice('');
+                                setAsset('');
+                                setPassword('');
+                              })
+                            }
+                          >
+                            <option value="">{t('cameraSource.chooseHost')}</option>
+                            {hosts.data?.map((h) => (
+                              <option key={h.id} value={h.id}>
+                                {h.label}
+                                {h.available ? '' : ` — ${t('cameraSource.offline')}`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          className={CAMERA_BUTTON_STYLES.secondary}
+                          disabled={hosts.isFetching || pending || applying.isPending}
+                          onClick={() => {
+                            reset();
+                            void refreshHosts();
+                          }}
+                        >
+                          {t(hosts.isFetching ? 'cameraSource.refreshing' : 'cameraSource.refresh')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </details>
               </>
             )}
           </>
@@ -961,14 +1074,57 @@ function SourceWorkspace({
               canWrite &&
               activeResult.sourceKind === 'LIVE' &&
               !applying.isSuccess && (
-                <button
-                  type="button"
-                  className={CAMERA_BUTTON_STYLES.primary}
-                  disabled={blocked || hosts.isError || applying.isError || isExpired}
-                  onClick={() => applying.mutate()}
-                >
-                  {t(applying.isPending ? 'cameraSource.applying' : 'cameraSource.apply')}
-                </button>
+                <div className="space-y-2.5">
+                  <p
+                    data-testid="camera-source-shared-notice"
+                    className="text-xs leading-relaxed text-slate-600"
+                  >
+                    {t('cameraSource.sharedPersistenceNote')}
+                  </p>
+                  {confirmApply ? (
+                    <div
+                      role="region"
+                      aria-label={t('cameraSource.apply')}
+                      data-testid="camera-source-apply-confirm"
+                      className="space-y-2.5 rounded-xl border border-amber-200 bg-amber-50/75 p-3 text-sm text-amber-950"
+                    >
+                      <p className="leading-relaxed">
+                        {t('cameraSource.confirmApplyPrompt', { camera: camera.name })}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={CAMERA_BUTTON_STYLES.primary}
+                          disabled={blocked || hosts.isError || applying.isError || isExpired}
+                          onClick={() => applying.mutate()}
+                        >
+                          {t(
+                            applying.isPending
+                              ? 'cameraSource.applying'
+                              : 'cameraSource.confirmApplyBtn',
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className={CAMERA_BUTTON_STYLES.secondary}
+                          disabled={applying.isPending}
+                          onClick={() => setConfirmApply(false)}
+                        >
+                          {t('cameraSource.cancelApplyConfirm')}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={CAMERA_BUTTON_STYLES.primary}
+                      disabled={blocked || hosts.isError || applying.isError || isExpired}
+                      onClick={() => setConfirmApply(true)}
+                    >
+                      {t(applying.isPending ? 'cameraSource.applying' : 'cameraSource.apply')}
+                    </button>
+                  )}
+                </div>
               )}
           </figure>
         )}

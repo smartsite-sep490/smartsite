@@ -37,12 +37,17 @@ const items = (value: unknown) => {
 export function parseSourceHosts(value: unknown): SourceHost[] {
   const body = record(value);
   if (!Array.isArray(body.hosts) || body.hosts.length > 16) throw new SourceSetupError(502);
-  const hosts = body.hosts.map((row) => {
+  const hosts = body.hosts.map((row): SourceHost => {
     const h = record(row),
       id = text(h.id),
       label = text(h.label);
     if (typeof h.available !== 'boolean') throw new SourceSetupError(502);
-    if (!h.available) return { id, label, available: false };
+    if (!h.available) {
+      if (h.reason === undefined) return { id, label, available: false };
+      if (h.reason !== 'AGENT_UNAVAILABLE' && h.reason !== 'CAMERA_UNBOUND')
+        throw new SourceSetupError(502);
+      return { id, label, available: false, reason: h.reason };
+    }
     const c = record(h.capabilities);
     if (
       c.schemaVersion !== '1.0.0' ||
