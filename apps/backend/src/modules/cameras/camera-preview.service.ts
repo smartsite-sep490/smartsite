@@ -261,7 +261,14 @@ export class CameraPreviewService implements OnModuleDestroy {
       await this.authorize(token, siteId);
       const initialCamera = await this.camera(siteId, cameraId);
       await this.authorize(token, siteId);
-      if (initialCamera.externalId !== externalId || controller.signal.aborted)
+      if (
+        initialCamera.externalId !== externalId ||
+        Object.hasOwn(
+          this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true }),
+          initialCamera.externalId,
+        ) ||
+        controller.signal.aborted
+      )
         return unavailable();
 
       let lastSession = first.leaseId;
@@ -296,7 +303,15 @@ export class CameraPreviewService implements OnModuleDestroy {
         await this.authorize(token, siteId);
         const current = await this.camera(siteId, cameraId);
         await this.authorize(token, siteId);
-        if (current.externalId !== externalId || controller.signal.aborted) return;
+        if (
+          current.externalId !== externalId ||
+          Object.hasOwn(
+            this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true }),
+            current.externalId,
+          ) ||
+          controller.signal.aborted
+        )
+          return;
 
         const next = await uplink.readFreshFrame(siteId, cameraId);
         if (!next) return;
@@ -429,7 +444,15 @@ export class CameraPreviewService implements OnModuleDestroy {
         await this.authorize(token, siteId);
         const current = await this.camera(siteId, cameraId);
         await this.authorize(token, siteId);
-        if (current.externalId !== camera.externalId || signal?.aborted) return unavailable();
+        if (
+          current.externalId !== camera.externalId ||
+          Object.hasOwn(
+            this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true }),
+            current.externalId,
+          ) ||
+          signal?.aborted
+        )
+          return unavailable();
         return parseCameraPreviewResponse({
           siteId,
           cameraId,

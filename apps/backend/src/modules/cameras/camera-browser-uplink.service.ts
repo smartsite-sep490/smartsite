@@ -28,6 +28,10 @@ import { CameraStatus } from '../../database/entities/enums.js';
 import { UserRole } from '../../database/entities/user.entity.js';
 import { AuthService } from '../auth/auth.service.js';
 import { CameraConfigurationService } from './camera-configuration.service.js';
+import {
+  CAMERA_SOURCE_OWNERSHIP_LOCK_SQL,
+  hasPhysicalWorkerBinding,
+} from './camera-source-ownership.js';
 
 export const CAMERA_BROWSER_UPLINK_CLOCK = Symbol('CAMERA_BROWSER_UPLINK_CLOCK');
 
@@ -154,6 +158,11 @@ export class CameraBrowserUplinkService {
     return this.config.get('BROWSER_CAMERA_UPLINK_ENABLED', { infer: true }) === true;
   }
 
+  private hasStaticPreviewSource(externalId: string): boolean {
+    const sources = this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true });
+    return Boolean(sources && Object.hasOwn(sources, externalId));
+  }
+
   private async authorize(token: string, siteId: string, write: boolean): Promise<string> {
     const { user } = await this.auth.authenticate(token);
     if (user.mustChangePassword) {
@@ -203,9 +212,26 @@ export class CameraBrowserUplinkService {
     const siteId = uuid(requestedSite).toLowerCase();
     const cameraId = uuid(requestedCamera).toLowerCase();
     const userId = await this.authorize(token, siteId, false);
-    await this.requireScopedCamera(siteId, cameraId, false);
+    const camera = await this.requireScopedCamera(siteId, cameraId, false);
 
-    if (!this.isEnabled()) {
+    if (!this.isEnabled() || this.hasStaticPreviewSource(camera.externalId)) {
+      return {
+        schemaVersion: BROWSER_CAMERA_UPLINK_SCHEMA_VERSION,
+        supported: false,
+        siteId,
+        cameraId,
+        state: 'IDLE',
+        activeLeaseId: null,
+        ownedByCurrentUser: false,
+        lastSequence: null,
+        lastFrameCapturedAt: null,
+        leaseExpiresAt: null,
+        width: null,
+        height: null,
+      };
+    }
+
+    if (await hasPhysicalWorkerBinding(this.database, siteId, cameraId)) {
       return {
         schemaVersion: BROWSER_CAMERA_UPLINK_SCHEMA_VERSION,
         supported: false,
@@ -288,54 +314,123 @@ export class CameraBrowserUplinkService {
     }
 
     const userId = await this.authorize(token, siteId, true);
-    await this.requireScopedCamera(siteId, cameraId, true);
+    const camera = await this.requireScopedCamera(siteId, cameraId, true);
+    if (this.hasStaticPreviewSource(camera.externalId)) {
+      conflict(
+        'Camera is already routed to a static preview source and cannot start browser uplink',
+      );
+    }
 
     const nowMs = this.clock();
     const nowDate = new Date(nowMs);
     const leaseId = randomUUID();
     const leaseExpiresAt = new Date(nowMs + BROWSER_CAMERA_UPLINK_START_LEASE_TTL_MS);
 
-    // Atomic single-owner acquisition: rejects concurrent or existing unexpired ACTIVE leases.
-    const rows = (await this.database.query(
-      `INSERT INTO camera_browser_uplink_frame (
-         camera_id, site_id, lease_id, owner_user_id, client_session_id,
-         device_label, state, sequence, width, height, byte_length,
-         captured_at, lease_expires_at, stopped_at, updated_at, jpeg_bytes
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', 0, NULL, NULL, NULL, NULL, $7, NULL, $8, NULL)
-       ON CONFLICT (camera_id) DO UPDATE SET
-         site_id = EXCLUDED.site_id,
-         lease_id = EXCLUDED.lease_id,
-         owner_user_id = EXCLUDED.owner_user_id,
-         client_session_id = EXCLUDED.client_session_id,
-         device_label = EXCLUDED.device_label,
-         state = 'ACTIVE',
-         sequence = 0,
-         width = NULL,
-         height = NULL,
-         byte_length = NULL,
-         captured_at = NULL,
-         lease_expires_at = EXCLUDED.lease_expires_at,
-         stopped_at = NULL,
-         updated_at = EXCLUDED.updated_at,
-         jpeg_bytes = NULL
-       WHERE camera_browser_uplink_frame.state <> 'ACTIVE'
-          OR camera_browser_uplink_frame.lease_expires_at <= $8
-       RETURNING lease_id`,
-      [
-        cameraId,
-        siteId,
-        leaseId,
-        userId,
-        command.clientSessionId,
-        command.deviceLabel ?? null,
-        leaseExpiresAt,
-        nowDate,
-      ],
-    )) as { lease_id: string }[];
+    // Coordinate with physical source apply/resume (exclusive :source-apply lock) using a shared
+    // advisory lock + camera row FOR UPDATE so physical apply/resume and browser start never pass
+    // concurrently, while concurrent browser start callers still resolve cleanly to 409 LEASE_HELD.
+    const runner = this.database.createQueryRunner();
+    await runner.connect();
+    let locked = false;
+    let inTransaction = false;
+    try {
+      const [lock] = (await runner.query(
+        `SELECT pg_try_advisory_lock_shared(${CAMERA_SOURCE_OWNERSHIP_LOCK_SQL}) AS acquired`,
+        [cameraId],
+      )) as Array<{ acquired?: boolean }>;
+      locked = lock?.acquired === true;
+      if (!locked) {
+        conflict('Camera source operation in progress');
+      }
 
-    if (rows.length !== 1) {
-      leaseHeld();
+      await runner.startTransaction();
+      inTransaction = true;
+
+      const lockedCameras = (await runner.query(
+        'SELECT id, status, type, external_id FROM camera WHERE id = $1 AND site_id = $2 FOR UPDATE',
+        [cameraId, siteId],
+      )) as Array<{ id: string; status: string; type: string; external_id: string }>;
+      const lockedCamera = lockedCameras[0];
+      if (!lockedCamera) missing();
+      if (lockedCamera.type === 'GATE') {
+        conflict('Gate Cameras cannot accept browser monitoring uplink');
+      }
+      if (lockedCamera.status !== CameraStatus.ACTIVE) {
+        throw new PublicHttpException(HttpStatus.CONFLICT, {
+          code: 'CAMERA_INACTIVE',
+          message: 'Camera must be active before starting browser camera uplink',
+        });
+      }
+      if (this.hasStaticPreviewSource(lockedCamera.external_id)) {
+        conflict(
+          'Camera is already routed to a static preview source and cannot start browser uplink',
+        );
+      }
+      if (await hasPhysicalWorkerBinding(runner, siteId, cameraId)) {
+        conflict('Camera already has a physical worker binding and cannot start browser uplink');
+      }
+
+      // Atomic single-owner acquisition: rejects concurrent or existing unexpired ACTIVE leases.
+      const rows = (await runner.query(
+        `INSERT INTO camera_browser_uplink_frame (
+           camera_id, site_id, lease_id, owner_user_id, client_session_id,
+           device_label, state, sequence, width, height, byte_length,
+           captured_at, lease_expires_at, stopped_at, updated_at, jpeg_bytes
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', 0, NULL, NULL, NULL, NULL, $7, NULL, $8, NULL)
+         ON CONFLICT (camera_id) DO UPDATE SET
+           site_id = EXCLUDED.site_id,
+           lease_id = EXCLUDED.lease_id,
+           owner_user_id = EXCLUDED.owner_user_id,
+           client_session_id = EXCLUDED.client_session_id,
+           device_label = EXCLUDED.device_label,
+           state = 'ACTIVE',
+           sequence = 0,
+           width = NULL,
+           height = NULL,
+           byte_length = NULL,
+           captured_at = NULL,
+           lease_expires_at = EXCLUDED.lease_expires_at,
+           stopped_at = NULL,
+           updated_at = EXCLUDED.updated_at,
+           jpeg_bytes = NULL
+         WHERE camera_browser_uplink_frame.state <> 'ACTIVE'
+            OR camera_browser_uplink_frame.lease_expires_at <= $8
+         RETURNING lease_id`,
+        [
+          cameraId,
+          siteId,
+          leaseId,
+          userId,
+          command.clientSessionId,
+          command.deviceLabel ?? null,
+          leaseExpiresAt,
+          nowDate,
+        ],
+      )) as { lease_id: string }[];
+
+      if (rows.length !== 1) {
+        leaseHeld();
+      }
+
+      await runner.commitTransaction();
+      inTransaction = false;
+    } catch (error) {
+      if (inTransaction) {
+        await runner.rollbackTransaction().catch(() => {});
+      }
+      throw error;
+    } finally {
+      try {
+        if (locked) {
+          await runner.query(
+            `SELECT pg_advisory_unlock_shared(${CAMERA_SOURCE_OWNERSHIP_LOCK_SQL})`,
+            [cameraId],
+          );
+        }
+      } finally {
+        await runner.release();
+      }
     }
 
     return {
@@ -421,7 +516,12 @@ export class CameraBrowserUplinkService {
     }
 
     const userId = await this.authorize(token, siteId, true);
-    await this.requireScopedCamera(siteId, cameraId, true);
+    const camera = await this.requireScopedCamera(siteId, cameraId, true);
+    if (this.hasStaticPreviewSource(camera.externalId)) {
+      conflict(
+        'Camera is already routed to a static preview source and cannot accept browser uplink frames',
+      );
+    }
 
     const nowDate = new Date(nowMs);
     const nextLeaseExpiresAt = new Date(nowMs + BROWSER_CAMERA_UPLINK_SLIDING_LEASE_TTL_MS);
@@ -443,6 +543,13 @@ export class CameraBrowserUplinkService {
            AND state = 'ACTIVE'
            AND lease_expires_at > $10
            AND sequence < $4
+           AND NOT EXISTS (
+             SELECT 1
+             FROM camera_worker_generation g
+             WHERE g.camera_id = $1
+               AND g.site_id = $2
+               AND (g.is_current = true OR g.superseded_at IS NULL)
+           )
          RETURNING sequence`,
         [
           cameraId,
@@ -462,6 +569,11 @@ export class CameraBrowserUplinkService {
     );
 
     if (updated.length !== 1) {
+      if (await hasPhysicalWorkerBinding(this.database, siteId, cameraId)) {
+        conflict(
+          'Camera already has a physical worker binding and cannot accept browser uplink frames',
+        );
+      }
       const existingRows = (await this.database.query(
         `SELECT lease_id, owner_user_id, state, sequence, lease_expires_at
          FROM camera_browser_uplink_frame
@@ -583,7 +695,14 @@ export class CameraBrowserUplinkService {
          AND state = 'ACTIVE'
          AND lease_expires_at > $3
          AND jpeg_bytes IS NOT NULL
-         AND captured_at IS NOT NULL`,
+         AND captured_at IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1
+           FROM camera_worker_generation g
+           WHERE g.camera_id = $1
+             AND g.site_id = $2
+             AND (g.is_current = true OR g.superseded_at IS NULL)
+         )`,
       [cameraId, siteId, nowDate],
     )) as Pick<
       UplinkRow,

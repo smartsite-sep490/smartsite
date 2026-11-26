@@ -61,11 +61,17 @@ function buildUplinkFixture(options: {
   cameraType?: 'ZONE' | 'GATE';
   nowMs?: () => number;
   dbRows?: unknown[];
+  previewSources?: Record<string, string>;
+  physicalWorkerBound?: boolean;
+  advisoryLockAcquired?: boolean;
 }) {
   const queries: string[] = [];
+  let lockReleased = false;
+  let runnerReleased = false;
   const config = new ConfigService<BackendEnvironment, true>({
     NODE_ENV: 'test',
     BROWSER_CAMERA_UPLINK_ENABLED: options.enabled ?? false,
+    SMARTSITE_AI_PREVIEW_SOURCES: options.previewSources ?? {},
   } as unknown as BackendEnvironment);
 
   const auth = {
@@ -102,11 +108,43 @@ function buildUplinkFixture(options: {
     }),
   } as unknown as CameraConfigurationService;
 
+  const runSql = async (sql: string) => {
+    queries.push(sql);
+    if (sql.includes('pg_try_advisory_lock_shared')) {
+      return [{ acquired: options.advisoryLockAcquired ?? true }];
+    }
+    if (sql.includes('pg_advisory_unlock_shared')) {
+      lockReleased = true;
+      return [{ pg_advisory_unlock_shared: true }];
+    }
+    if (sql.includes('FROM camera WHERE id = $1 AND site_id = $2 FOR UPDATE')) {
+      return [
+        {
+          id: CAMERA_ID,
+          status: options.cameraStatus ?? CameraStatus.ACTIVE,
+          type: options.cameraType ?? 'ZONE',
+          external_id: 'cam-browser-01',
+        },
+      ];
+    }
+    if (sql.includes('FROM camera_worker_generation') && sql.includes('AS bound')) {
+      return [{ bound: options.physicalWorkerBound ?? false }];
+    }
+    return options.dbRows ?? [];
+  };
+
   const db = {
-    query: async (sql: string) => {
-      queries.push(sql);
-      return options.dbRows ?? [];
-    },
+    query: runSql,
+    createQueryRunner: () => ({
+      connect: async () => {},
+      startTransaction: async () => {},
+      commitTransaction: async () => {},
+      rollbackTransaction: async () => {},
+      release: async () => {
+        runnerReleased = true;
+      },
+      query: runSql,
+    }),
   } as unknown as DataSource;
 
   const service = new CameraBrowserUplinkService(
@@ -117,7 +155,11 @@ function buildUplinkFixture(options: {
     options.nowMs ?? (() => Date.parse('2026-11-26T12:00:00.000Z')),
   );
 
-  return { service, queries };
+  return {
+    service,
+    queries,
+    lockState: () => ({ lockReleased, runnerReleased }),
+  };
 }
 
 test('BROWSER_CAMERA_UPLINK_ENABLED defaults to false and parses explicit boolean strings', () => {
@@ -379,7 +421,7 @@ test('readBoundedJpegBody handles aborted and premature close streams promptly w
   }
 });
 
-test('CameraSourceService advertises browserCameraSupported=true ONLY when BROWSER_CAMERA_UPLINK_ENABLED is true', async () => {
+test('CameraSourceService keeps physical host browserCameraSupported=false while browser-uplink status discovers availability independently with zero hosts', async () => {
   const hostCaps = {
     schemaVersion: '1.0.0',
     hostId: 'edge',
@@ -403,6 +445,7 @@ test('CameraSourceService advertises browserCameraSupported=true ONLY when BROWS
   } as unknown as CameraConfigurationService;
   const fetcher = (async () => Response.json(hostCaps)) as typeof fetch;
 
+  // Physical host capabilities always reflect physical AI host truth (never conflated with browser preview)
   for (const enabled of [false, true]) {
     const config = new ConfigService<BackendEnvironment, true>({
       NODE_ENV: 'test',
@@ -415,8 +458,101 @@ test('CameraSourceService advertises browserCameraSupported=true ONLY when BROWS
     const service = new CameraSourceService(config, auth, cameras, fetcher);
     const result = await service.list('tok', SITE_A, CAMERA_ID);
     assert.equal(result.hosts[0]?.available, true);
-    assert.equal(result.hosts[0]?.capabilities?.browserCameraSupported, enabled);
+    assert.equal(result.hosts[0]?.capabilities?.browserCameraSupported, false);
   }
+
+  // Zero physical hosts: source-hosts returns [], while scoped browser-uplink/status reports supported=true for both Manager & Officer
+  const zeroHostConfig = new ConfigService<BackendEnvironment, true>({
+    NODE_ENV: 'test',
+    SMARTSITE_AI_SERVICE_TOKEN: 'server-only-token',
+    SMARTSITE_AI_SOURCE_HOSTS: '[]',
+    BROWSER_CAMERA_UPLINK_ENABLED: true,
+  } as unknown as BackendEnvironment);
+  const zeroHostSource = new CameraSourceService(zeroHostConfig, auth, cameras, fetcher);
+  assert.deepEqual(await zeroHostSource.list('tok', SITE_A, CAMERA_ID), { hosts: [] });
+
+  for (const role of [UserRole.SITE_MANAGER, UserRole.SAFETY_OFFICER]) {
+    const { service } = buildUplinkFixture({ enabled: true, role });
+    const status = await service.status('tok', SITE_A, CAMERA_ID);
+    assert.equal(status.supported, true);
+    assert.equal(status.state, 'IDLE');
+    assert.equal(status.siteId, SITE_A);
+    assert.equal(status.cameraId, CAMERA_ID);
+  }
+});
+
+test('browser uplink fails closed on static preview origin, physical worker binding, or concurrent source-apply lock', async () => {
+  const is409Conflict = (err: unknown) =>
+    err instanceof PublicHttpException &&
+    err.getStatus() === 409 &&
+    err.publicPayload.code === 'CONFLICT';
+
+  // 1. Statically routed preview origin -> status supported=false, start & uploadFrame reject 409 with zero DB writes
+  const staticFixture = buildUplinkFixture({
+    enabled: true,
+    previewSources: { 'cam-browser-01': 'http://127.0.0.1:8090' },
+  });
+  const staticStatus = await staticFixture.service.status('tok', SITE_A, CAMERA_ID);
+  assert.equal(staticStatus.supported, false);
+  assert.equal(staticStatus.state, 'IDLE');
+  await assert.rejects(
+    staticFixture.service.start('tok', SITE_A, CAMERA_ID, { clientSessionId: 'tab-static' }),
+    is409Conflict,
+  );
+  await assert.rejects(
+    staticFixture.service.uploadFrame(
+      'tok',
+      SITE_A,
+      CAMERA_ID,
+      {
+        contentType: 'image/jpeg',
+        leaseId: LEASE_ID,
+        sequence: '1',
+        capturedAt: '2026-11-26T12:00:00.000Z',
+        width: '640',
+        height: '480',
+      },
+      SAMPLE_JPEG,
+    ),
+    is409Conflict,
+  );
+  assert.equal(staticFixture.queries.length, 0);
+
+  // 2. Existing physical worker binding -> status supported=false, start & uploadFrame reject 409 and release shared lock
+  const boundFixture = buildUplinkFixture({ enabled: true, physicalWorkerBound: true });
+  const boundStatus = await boundFixture.service.status('tok', SITE_A, CAMERA_ID);
+  assert.equal(boundStatus.supported, false);
+  assert.equal(boundStatus.state, 'IDLE');
+  await assert.rejects(
+    boundFixture.service.start('tok', SITE_A, CAMERA_ID, { clientSessionId: 'tab-bound' }),
+    is409Conflict,
+  );
+  assert.deepEqual(boundFixture.lockState(), { lockReleased: true, runnerReleased: true });
+  await assert.rejects(
+    boundFixture.service.uploadFrame(
+      'tok',
+      SITE_A,
+      CAMERA_ID,
+      {
+        contentType: 'image/jpeg',
+        leaseId: LEASE_ID,
+        sequence: '1',
+        capturedAt: '2026-11-26T12:00:00.000Z',
+        width: '640',
+        height: '480',
+      },
+      SAMPLE_JPEG,
+    ),
+    is409Conflict,
+  );
+
+  // 3. Concurrent physical source-apply holding exclusive lock -> start rejects 409 immediately
+  const busyFixture = buildUplinkFixture({ enabled: true, advisoryLockAcquired: false });
+  await assert.rejects(
+    busyFixture.service.start('tok', SITE_A, CAMERA_ID, { clientSessionId: 'tab-busy' }),
+    is409Conflict,
+  );
+  assert.deepEqual(busyFixture.lockState(), { lockReleased: false, runnerReleased: true });
 });
 
 test('CameraPreviewService returns 503 when browser uplink has no fresh frame (never fakes LIVE)', async () => {

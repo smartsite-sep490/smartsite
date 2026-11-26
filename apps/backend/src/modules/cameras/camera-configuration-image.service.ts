@@ -126,7 +126,14 @@ export class CameraConfigurationImageService implements OnModuleDestroy {
         await this.authorize(token, siteId);
         const current = await this.camera(siteId, cameraId);
         await this.authorize(token, siteId);
-        if (controller.signal.aborted || current.externalId !== camera.externalId)
+        if (
+          controller.signal.aborted ||
+          current.externalId !== camera.externalId ||
+          Object.hasOwn(
+            this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true }),
+            current.externalId,
+          )
+        )
           return unavailable();
         if (current.configurationVersion !== camera.configurationVersion) conflict();
         const now = this.clock();

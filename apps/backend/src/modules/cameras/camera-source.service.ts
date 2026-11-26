@@ -15,6 +15,7 @@ import {
 import { activateTestedCameraSource } from './camera-source-activation.js';
 import { readCurrentCameraPolicyBundle } from './camera-policy-bundle-reader.js';
 import { resumeAcceptedCameraSource } from './camera-source-resume.js';
+import { hasActiveBrowserUplinkLease } from './camera-source-ownership.js';
 import type { SourceConfigurationResumeResult } from '@smartsite/contracts';
 import {
   sourceCapabilitiesSchema,
@@ -208,15 +209,11 @@ export class CameraSourceService {
             ),
           );
           if (parsed.hostId !== host.id) unavailable();
-          const browserCameraSupported =
-            this.config.get('BROWSER_CAMERA_UPLINK_ENABLED', { infer: true }) === true;
           return {
             id: host.id,
             label: host.label,
             available: true as const,
-            capabilities: browserCameraSupported
-              ? { ...parsed, browserCameraSupported: true }
-              : parsed,
+            capabilities: parsed,
           };
         } catch (error) {
           return {
@@ -447,6 +444,11 @@ export class CameraSourceService {
           code: 'CONFLICT',
           message: 'Camera source operation in progress',
         });
+      if (await hasActiveBrowserUplinkLease(runner, siteId, cameraId)) {
+        conflict(
+          'Camera has an active browser uplink session; stop it before resuming a physical source',
+        );
+      }
       const path = `/v1/source-control/${siteId}/${encodeURIComponent(camera.externalId)}`;
       const capabilities = sourceCapabilitiesSchema.parse(
         await this.call(host!.origin, path + '/capabilities', undefined, AbortSignal.timeout(5000)),
@@ -660,6 +662,11 @@ export class CameraSourceService {
           code: 'CONFLICT',
           message: 'Camera source operation in progress',
         });
+      if (await hasActiveBrowserUplinkLease(runner, siteId, cameraId)) {
+        conflict(
+          'Camera has an active browser uplink session; stop it before applying a physical source',
+        );
+      }
       const path = `/v1/source-control/${siteId}/${encodeURIComponent(camera.externalId)}`;
       const remote = async (suffix: string, body: unknown) =>
         sourceActivationStateSchema.parse(

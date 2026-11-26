@@ -25,6 +25,9 @@ import { ZoneConfigurationService } from '../../src/modules/zones/zone-configura
 import { CameraBrowserUplinkService } from '../../src/modules/cameras/camera-browser-uplink.service.js';
 import { CameraPreviewService } from '../../src/modules/cameras/camera-preview.service.js';
 import { CameraConfigurationImageService } from '../../src/modules/cameras/camera-configuration-image.service.js';
+import { CameraConfigurationReferenceService } from '../../src/modules/cameras/camera-configuration-reference.service.js';
+import { CameraSourceService } from '../../src/modules/cameras/camera-source.service.js';
+import { bootstrapCameraWorkerGeneration } from '../../src/modules/cameras/camera-worker-generations.js';
 import { createIsolatedTestDatabase } from '../support/isolated-test-database.js';
 import { createTestConfig } from '../support/config.js';
 
@@ -387,6 +390,7 @@ test('PostgreSQL 5433 real HTTP NestExpressApplication: CORS X-Uplink-* headers,
     await owned.initialize();
     const siteId = randomUUID();
     const cameraId = randomUUID();
+    const staticCameraId = randomUUID();
     const password = 'Synthetic_uplink_password_123!';
     const passwordHash = await hashPassword(password);
     const managerId = randomUUID();
@@ -396,8 +400,8 @@ test('PostgreSQL 5433 real HTTP NestExpressApplication: CORS X-Uplink-* headers,
       siteId,
     ]);
     await db.query(
-      "INSERT INTO camera(type,status,id,site_id,external_id,code,name) VALUES('ZONE','ACTIVE',$1,$2,'cam-http-uplink','CAM-H1','HTTP Browser Cam')",
-      [cameraId, siteId],
+      "INSERT INTO camera(type,status,id,site_id,external_id,code,name) VALUES('ZONE','ACTIVE',$1,$2,'cam-http-uplink','CAM-H1','HTTP Browser Cam'),('ZONE','ACTIVE',$3,$2,'cam-static-preview','CAM-S1','Static Preview Cam')",
+      [cameraId, siteId, staticCameraId],
     );
     await db.query(
       'INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1::uuid,$1::text,$1::text,$3),($2::uuid,$2::text,$2::text,$3)',
@@ -420,6 +424,10 @@ test('PostgreSQL 5433 real HTTP NestExpressApplication: CORS X-Uplink-* headers,
       LOG_FORMAT: 'json',
       CORS_ORIGINS: 'http://localhost:5173',
       BROWSER_CAMERA_UPLINK_ENABLED: 'true',
+      SMARTSITE_AI_SOURCE_HOSTS: '[]',
+      SMARTSITE_AI_PREVIEW_SOURCES: JSON.stringify({
+        'cam-static-preview': 'http://127.0.0.1:62099',
+      }),
     });
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ConfigService)
@@ -443,6 +451,59 @@ test('PostgreSQL 5433 real HTTP NestExpressApplication: CORS X-Uplink-* headers,
     const managerSession = await authService.login(managerId, password, AuthClientType.WEB);
     const officerSession = await authService.login(officerId, password, AuthClientType.WEB);
     const uplinkBase = `${origin}/api/v1/sites/${siteId}/cameras/${cameraId}/browser-uplink`;
+
+    // 0. Zero physical hosts: source-hosts returns [], yet scoped browser-uplink/status discovers supported=true
+    const sourceHostsRes = await fetch(
+      `${origin}/api/v1/sites/${siteId}/cameras/${cameraId}/source-hosts`,
+      { headers: { Authorization: `Bearer ${managerSession.accessToken}` } },
+    );
+    assert.equal(sourceHostsRes.status, 200);
+    assert.deepEqual(await sourceHostsRes.json(), { hosts: [] });
+
+    for (const token of [managerSession.accessToken, officerSession.accessToken]) {
+      const statusRes = await fetch(`${uplinkBase}/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      assert.equal(statusRes.status, 200);
+      assert.equal(statusRes.headers.get('cache-control'), 'no-store');
+      assert.deepEqual(await statusRes.json(), {
+        schemaVersion: '1.0.0',
+        supported: true,
+        siteId,
+        cameraId,
+        state: 'IDLE',
+        activeLeaseId: null,
+        ownedByCurrentUser: false,
+        lastSequence: null,
+        lastFrameCapturedAt: null,
+        leaseExpiresAt: null,
+        width: null,
+        height: null,
+      });
+    }
+
+    // 0b. Statically routed preview camera fails closed on status & start with zero DB rows
+    const staticBase = `${origin}/api/v1/sites/${siteId}/cameras/${staticCameraId}/browser-uplink`;
+    const staticStatusRes = await fetch(`${staticBase}/status`, {
+      headers: { Authorization: `Bearer ${managerSession.accessToken}` },
+    });
+    assert.equal(staticStatusRes.status, 200);
+    assert.equal(((await staticStatusRes.json()) as { supported: boolean }).supported, false);
+
+    const staticStartRes = await fetch(`${staticBase}/start`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${managerSession.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ clientSessionId: 'static-tab' }),
+    });
+    assert.equal(staticStartRes.status, 409);
+    const staticRows = await db.query(
+      'SELECT camera_id FROM camera_browser_uplink_frame WHERE camera_id = $1',
+      [staticCameraId],
+    );
+    assert.equal(staticRows.length, 0);
 
     // 1. CORS preflight must permit X-Uplink-* headers
     const preflight = await fetch(`${uplinkBase}/frames`, {
@@ -672,6 +733,237 @@ test('PostgreSQL 5433 real HTTP NestExpressApplication: CORS X-Uplink-* headers,
     assert.equal(stopUploadBody.code, 'LEASE_EXPIRED');
   } finally {
     if (app) await app.close();
+    await owned.dispose();
+  }
+});
+
+test('PostgreSQL 5433 source-ownership mutual exclusion: physical binding rejects browser uplink, active browser lease supplying reference blocks physical apply/resume, and concurrent lock serializes both', async () => {
+  const owned = createIsolatedTestDatabase();
+  const db = owned.dataSource;
+  try {
+    await owned.initialize();
+    const siteId = randomUUID();
+    const camPhysical = randomUUID();
+    const camBrowser = randomUUID();
+    const camRace = randomUUID();
+    const managerId = randomUUID();
+
+    await db.query("INSERT INTO site(id,code,name) VALUES($1,$1::uuid::text,'Ownership Site')", [
+      siteId,
+    ]);
+    await db.query(
+      'INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1::uuid,$1::text,$1::text,$2)',
+      [managerId, 'unused-hash'],
+    );
+    await db.query(
+      `INSERT INTO camera(type,status,id,site_id,external_id,code,name) VALUES
+       ('ZONE','ACTIVE',$1,$4,'cam-phys-own','CAM-P1','Physical Owned Cam'),
+       ('ZONE','ACTIVE',$2,$4,'cam-brows-own','CAM-B1','Browser Owned Cam'),
+       ('ZONE','ACTIVE',$3,$4,'cam-race-own','CAM-R1','Race Lock Cam')`,
+      [camPhysical, camBrowser, camRace, siteId],
+    );
+
+    const auth = {
+      authenticate: async () => ({
+        sessionId: randomUUID(),
+        clientType: 'WEB',
+        user: {
+          id: managerId,
+          username: 'mgr',
+          displayName: 'Manager',
+          isActive: true,
+          mustChangePassword: false,
+          roleAssignments: [{ role: UserRole.SITE_MANAGER, siteId }],
+        },
+      }),
+    } as unknown as AuthService;
+
+    const sites = new SiteConfigurationService(db);
+    const zones = new ZoneConfigurationService(db, sites);
+    const cameraConfig = new CameraConfigurationService(db, zones, sites);
+    const config = new ConfigService<BackendEnvironment, true>({
+      NODE_ENV: 'test',
+      BROWSER_CAMERA_UPLINK_ENABLED: true,
+      SMARTSITE_AI_PREVIEW_SOURCES: {},
+      SMARTSITE_AI_SERVICE_TOKEN: 'synthetic-service-token',
+      SMARTSITE_AI_SOURCE_APPLY_ENABLED: true,
+      AI_CONFIGURATION_CAMERA_IDS: [camPhysical, camBrowser, camRace],
+      SMARTSITE_AI_SOURCE_HOSTS: JSON.stringify([
+        { id: 'edge', label: 'Site Edge', siteIds: [siteId], origin: 'http://127.0.0.1:62035' },
+      ]),
+    } as unknown as BackendEnvironment);
+
+    const uplink = new CameraBrowserUplinkService(config, auth, cameraConfig, db, Date.now);
+    const configImage = new CameraConfigurationImageService(
+      config,
+      auth,
+      cameraConfig,
+      globalThis.fetch,
+      Date.now,
+      uplink,
+    );
+    const configRef = new CameraConfigurationReferenceService(db, configImage);
+
+    // 1. Existing physical worker generation binding rejects browser status & start
+    await bootstrapCameraWorkerGeneration(db, camPhysical, [camPhysical], 60_000);
+    const physicalStatus = await uplink.status('tok', siteId, camPhysical);
+    assert.equal(physicalStatus.supported, false);
+    assert.equal(physicalStatus.state, 'IDLE');
+    await assert.rejects(
+      uplink.start('tok', siteId, camPhysical, { clientSessionId: 'tab-phys' }),
+      (e: unknown) =>
+        e instanceof PublicHttpException &&
+        e.getStatus() === 409 &&
+        e.publicPayload.code === 'CONFLICT',
+    );
+    assert.equal(
+      (
+        await db.query('SELECT camera_id FROM camera_browser_uplink_frame WHERE camera_id = $1', [
+          camPhysical,
+        ])
+      ).length,
+      0,
+    );
+
+    // 2. Active browser lease supplying a configuration reference blocks physical apply, resume, and generation bootstrap
+    const lease = await uplink.start('tok', siteId, camBrowser, {
+      clientSessionId: 'tab-browser-ref',
+    });
+    await uplink.uploadFrame(
+      'tok',
+      siteId,
+      camBrowser,
+      {
+        contentType: 'image/jpeg',
+        leaseId: lease.leaseId,
+        sequence: '1',
+        capturedAt: new Date().toISOString(),
+        width: '640',
+        height: '480',
+      },
+      makeJpeg(0x55),
+    );
+    const refBundle = await configRef.read('tok', siteId, camBrowser);
+    assert.equal(refBundle.reference.sessionId, lease.leaseId);
+
+    let remoteCalls = 0;
+    const blockedFetcher = (async () => {
+      remoteCalls++;
+      return Response.json({});
+    }) as typeof fetch;
+    const sourceService = new CameraSourceService(config, auth, cameraConfig, blockedFetcher, db);
+
+    await assert.rejects(
+      sourceService.apply('tok', siteId, camBrowser, 'edge', {
+        commandId: randomUUID(),
+        receiptId: randomUUID(),
+        expectedRevision: 0,
+      }),
+      (e: unknown) =>
+        e instanceof PublicHttpException &&
+        e.getStatus() === 409 &&
+        e.publicPayload.code === 'CONFLICT',
+    );
+    await assert.rejects(
+      sourceService.resume('tok', siteId, camBrowser, 'edge', {
+        commandId: randomUUID(),
+        expectedRevision: 1,
+        expectedConfigurationVersion: 1,
+      }),
+      (e: unknown) =>
+        e instanceof PublicHttpException &&
+        e.getStatus() === 409 &&
+        e.publicPayload.code === 'CONFLICT',
+    );
+    await assert.rejects(
+      bootstrapCameraWorkerGeneration(db, camBrowser, [camBrowser], 60_000),
+      (e: unknown) =>
+        e instanceof PublicHttpException &&
+        e.getStatus() === 409 &&
+        e.publicPayload.code === 'CONFLICT',
+    );
+    assert.equal(remoteCalls, 0, 'blocked physical apply/resume must not call remote AI host');
+
+    // 3. Concurrent physical apply holding :source-apply exclusive lock blocks browser start immediately
+    let prepareEntered!: () => void;
+    const onPrepareEntered = new Promise<void>((resolve) => {
+      prepareEntered = resolve;
+    });
+    let releasePrepare!: () => void;
+    const waitPrepare = new Promise<void>((resolve) => {
+      releasePrepare = resolve;
+    });
+    const commandId = randomUUID();
+    const receiptId = randomUUID();
+    const raceFetcher = (async (url: string | URL, init?: RequestInit) => {
+      const target = String(url);
+      if (target.endsWith('/prepare')) {
+        prepareEntered();
+        await waitPrepare;
+        return Response.json({
+          schemaVersion: '1.1.0',
+          state: 'PREPARED',
+          commandId,
+          sourceRevision: 0,
+          sourceKind: 'LIVE',
+          currentGenerationId: null,
+        });
+      }
+      if (target.endsWith('/commit')) {
+        const body = JSON.parse(String(init?.body)) as {
+          generation: { workerGenerationId: string };
+        };
+        return Response.json({
+          schemaVersion: '1.0.0',
+          state: 'RUNNING',
+          commandId,
+          sourceRevision: 1,
+          sourceKind: 'LIVE',
+          currentGenerationId: body.generation.workerGenerationId,
+        });
+      }
+      throw new Error(`Unexpected URL ${target}`);
+    }) as typeof fetch;
+
+    const raceSourceService = new CameraSourceService(config, auth, cameraConfig, raceFetcher, db);
+    const applyPromise = raceSourceService.apply('tok', siteId, camRace, 'edge', {
+      commandId,
+      receiptId,
+      expectedRevision: 0,
+    });
+    await onPrepareEntered;
+
+    // While physical apply holds the advisory lock in /prepare, browser start MUST reject 409 CONFLICT
+    await assert.rejects(
+      uplink.start('tok', siteId, camRace, { clientSessionId: 'tab-concurrent-race' }),
+      (e: unknown) =>
+        e instanceof PublicHttpException &&
+        e.getStatus() === 409 &&
+        e.publicPayload.code === 'CONFLICT',
+    );
+
+    releasePrepare();
+    const applied = await applyPromise;
+    assert.equal(applied.state, 'RUNNING');
+
+    // After apply commits physical generation, browser status is unsupported and start remains 409 CONFLICT
+    assert.equal((await uplink.status('tok', siteId, camRace)).supported, false);
+    await assert.rejects(
+      uplink.start('tok', siteId, camRace, { clientSessionId: 'tab-after-apply' }),
+      (e: unknown) =>
+        e instanceof PublicHttpException &&
+        e.getStatus() === 409 &&
+        e.publicPayload.code === 'CONFLICT',
+    );
+    assert.equal(
+      (
+        await db.query('SELECT camera_id FROM camera_browser_uplink_frame WHERE camera_id = $1', [
+          camRace,
+        ])
+      ).length,
+      0,
+    );
+  } finally {
     await owned.dispose();
   }
 });
