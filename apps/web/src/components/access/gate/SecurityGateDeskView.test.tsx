@@ -626,7 +626,7 @@ it.each(automaticFaceOutcomes)(
     }
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1), { timeout: 3000 });
     if (outcome === 'schedule-removed') {
-      expect(await screen.findByText('No schedule')).toBeTruthy();
+      expect(await screen.findByText('Access Denied')).toBeTruthy();
       expect(screen.queryByText('Scheduled')).toBeNull();
       expect(
         (await screen.findAllByText('You have not been assigned a work shift for today.')).length,
@@ -647,7 +647,10 @@ it.each(automaticFaceOutcomes)(
       return;
     }
     if (outcome === 'recorded') {
-      expect(await screen.findByText('Scheduled')).toBeTruthy();
+      expect(await screen.findByText('Passage recorded')).toBeTruthy();
+      expect(screen.queryByText('Shift')).toBeNull();
+      expect(screen.queryByText('W1')).toBeNull();
+      expect(screen.getByText('Synthetic contractor')).toBeTruthy();
       expect(screen.queryByText(/^Site Assignment/)).toBeNull();
       expect(screen.queryByText('Missing')).toBeNull();
       await waitFor(() =>

@@ -98,3 +98,41 @@ it('explains missing roll call without claiming a PRESENT record', () => {
     }),
   );
 });
+
+it.each(['en', 'vi'] as const)(
+  'personalizes missing-attendance workflow in %s',
+  async (language) => {
+    await setLanguage(language);
+    const notice = {
+      event: 'MISSING_CHECKOUT' as const,
+      message: 'Legacy shared copy',
+      workDate: '2030-01-01',
+      workerName: 'Synthetic An',
+      processingStatus: 'ACTION_REQUIRED' as const,
+      recipientRole: 'WORKER' as const,
+    };
+    const worker = notificationMessage(notice);
+    const representative = notificationMessage({
+      ...notice,
+      recipientRole: 'CONTRACTOR_REPRESENTATIVE',
+      processingStatus: 'WAITING_WORKER',
+    });
+    expect(worker).not.toBe(representative);
+    expect(worker).not.toContain('Synthetic An');
+    expect(representative).toContain('Synthetic An');
+    for (const processingStatus of ['PENDING_REVIEW', 'NEEDS_RESUBMISSION', 'RESOLVED'] as const) {
+      const message = notificationMessage({ ...notice, processingStatus });
+      expect(message).not.toContain('notifications.');
+      expect(message).not.toBe(worker);
+    }
+    expect(
+      notificationMessage({
+        ...notice,
+        event: 'TIME_REQUESTED',
+        message: 'Attendance correction requested: Synthetic reason',
+        recipientRole: 'CONTRACTOR_REPRESENTATIVE',
+        processingStatus: 'PENDING_REVIEW',
+      }),
+    ).toContain('Synthetic An');
+  },
+);

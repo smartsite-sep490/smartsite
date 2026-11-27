@@ -198,7 +198,9 @@ export function calculateShiftAttendanceSubtraction(
     }
   }
 
-  const regularMs = Math.max(0, elapsedScheduledMs - totalDeductedMs);
+  const deductedMinutes = Math.floor(totalDeductedMs / 60000);
+  const regularMs =
+    inShift.length === 0 ? 0 : Math.max(0, elapsedScheduledMs - deductedMinutes * 60000);
   const regularMinutes = Math.floor(regularMs / 60000);
   const closedPresence = validSessions
     .filter((s) => s.effectiveOutAt !== null && +s.effectiveOutAt <= +now)
@@ -213,7 +215,7 @@ export function calculateShiftAttendanceSubtraction(
     regularMinutes,
     overtimeMinutes,
     provisionalMinutes: Math.floor((regularMs + provisionalOvertimeMs) / 60000),
-    deductedMinutes: Math.floor(totalDeductedMs / 60000),
+    deductedMinutes,
     exitCount,
     violations: violationList,
     anomalies: violationList,

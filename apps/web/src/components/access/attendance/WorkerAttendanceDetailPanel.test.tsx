@@ -71,7 +71,7 @@ it.each([null, 0, 420])(
         confirmedMinutes,
         exitCount: 1,
         maxExitCount: 0,
-        deductedMinutes: 1,
+        deductedMinutes: confirmedMinutes === 0 ? 0 : 1,
       },
       sessions: [
         {
@@ -111,7 +111,8 @@ it.each([null, 0, 420])(
     expect(within(label.parentElement!).getByText(expected)).toBeTruthy();
     expect(screen.queryByText('0h 3m 42s')).toBeNull();
     expect(screen.getByText('Effective: 08:00:28 – 08:04:11')).toBeTruthy();
-    expect(screen.getByText('-1 mins')).toBeTruthy();
+    expect(screen.getByText(`${confirmedMinutes === 0 ? 0 : 1} mins`)).toBeTruthy();
+    expect(screen.queryByText(/^-\d+ mins$/)).toBeNull();
     expect(screen.queryByText('8h 0m', { selector: '.text-emerald-700' })).toBeNull();
     expect(screen.getByText(/max.*0/i)).toBeTruthy();
     expect(screen.getByText('Check-in/out matched')).toBeTruthy();
@@ -120,11 +121,12 @@ it.each([null, 0, 420])(
       await i18n.changeLanguage('vi');
     });
     expect(screen.getByRole('button', { name: 'Ẩn chi tiết' })).toBeTruthy();
+    expect(screen.getByText(`${confirmedMinutes === 0 ? 0 : 1} phút`)).toBeTruthy();
+    expect(screen.queryByText(/^-\d+ phút$/)).toBeNull();
     expect(screen.getByText('Đã ghép lượt vào / ra')).toBeTruthy();
     expect(screen.getByText('Hiệu lực: 08:00:28 – 08:04:11')).toBeTruthy();
     expect(screen.getByText('Thực tế: 08:00:28 – 08:04:11')).toBeTruthy();
     expect(screen.queryByText('0 giờ 3 phút 42 giây')).toBeNull();
-    expect(screen.getByText('-1 phút')).toBeTruthy();
     expect(screen.getByText('Worker-authored note')).toBeTruthy();
     expect(screen.queryByText('0h 0m')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Hide details' })).toBeNull();

@@ -404,16 +404,45 @@ test('subtraction: no presence and full approved leave never create work or pena
   assert.deepEqual(result.violations, []);
 });
 
-test('subtraction: approved overtime requires presence and preserves rounding across regular/OT boundary', () => {
+test('subtraction: approved overtime requires presence and sub-minute lateness is not deducted', () => {
   const result = calculateShiftAttendanceSubtraction({
     shiftWindow: subtractionShift,
-    sessions: [session('08:00:30', '17:00:40')],
+    sessions: [session('08:00:30', '17:01:40')],
     overtimeWindows: [{ start: +at('17:00:00'), end: +at('18:00:00') }],
     now: at('18:00:00'),
   });
-  assert.equal(result.regularMinutes, 479);
+  assert.equal(result.deductedMinutes, 0);
+  assert.equal(result.regularMinutes, 480);
   assert.equal(result.overtimeMinutes, 1);
-  assert.equal(result.provisionalMinutes, 480);
+  assert.equal(result.provisionalMinutes, 481);
+});
+
+test('subtraction: ignores sub-minute seconds when deducting lateness while keeping absent shift at zero', () => {
+  const subMinuteLate = calculateShiftAttendanceSubtraction({
+    shiftWindow: { startsAt: at('13:37:00'), endsAt: at('13:40:00') },
+    sessions: [session('13:37:17', '13:43:22')],
+    now: at('13:45:00'),
+  });
+  assert.equal(subMinuteLate.scheduledMinutes, 3);
+  assert.equal(subMinuteLate.deductedMinutes, 0);
+  assert.equal(subMinuteLate.regularMinutes, 3);
+
+  const minutesPlusSecondsLate = calculateShiftAttendanceSubtraction({
+    shiftWindow: { startsAt: at('08:00:00'), endsAt: at('12:00:00') },
+    sessions: [session('08:15:20', '12:05:00')],
+    now: at('12:10:00'),
+  });
+  assert.equal(minutesPlusSecondsLate.scheduledMinutes, 240);
+  assert.equal(minutesPlusSecondsLate.deductedMinutes, 15);
+  assert.equal(minutesPlusSecondsLate.regularMinutes, 225);
+
+  const absent = calculateShiftAttendanceSubtraction({
+    shiftWindow: { startsAt: at('08:00:00'), endsAt: at('12:00:00') },
+    sessions: [],
+    now: at('12:10:00'),
+  });
+  assert.equal(absent.deductedMinutes, 240);
+  assert.equal(absent.regularMinutes, 0);
 });
 
 test('subtraction: zero grace/count and a break-spanning exit respect work-only duration', () => {

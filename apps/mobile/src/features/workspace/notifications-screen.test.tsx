@@ -38,7 +38,10 @@ describe('NotificationsScreen', () => {
           id: 'n-2',
           siteId: 'site-1',
           siteName: 'Công trường Landmark',
-          event: 'TIME_APPROVED',
+          event: 'MISSING_CHECKOUT',
+          processingStatus: 'RESOLVED',
+          recipientRole: 'WORKER',
+          workerName: 'Synthetic Worker',
           title: 'Đã duyệt yêu cầu điều chỉnh giờ',
           message: 'Yêu cầu của bạn đã được quản lý phê duyệt.',
           readAt: '2026-10-27T08:00:00Z',
@@ -101,6 +104,7 @@ describe('NotificationsScreen', () => {
     const json = JSON.stringify(root.toJSON());
     expect(json).toContain('Công trường Landmark');
     expect(json).toContain('Lịch làm đã thay đổi');
+    expect(json).toContain('Đã xử lý');
 
     // Find and press the mark read button for unread notification n-1
     const buttons = root.root.findAll((n) => String(n.type) === 'Pressable');

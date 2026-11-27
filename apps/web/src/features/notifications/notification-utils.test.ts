@@ -303,3 +303,41 @@ it('switches generated time-request notices both ways without translating author
     'Time request',
   );
 });
+
+it.each(['en', 'vi'] as const)(
+  'personalizes missing-attendance workflow in %s',
+  async (language) => {
+    await i18n.changeLanguage(language);
+    const notice = {
+      event: 'MISSING_CHECKOUT' as const,
+      message: 'Legacy shared copy',
+      workDate: '2030-01-01',
+      workerName: 'Synthetic An',
+      processingStatus: 'ACTION_REQUIRED' as const,
+      recipientRole: 'WORKER' as const,
+    };
+    const worker = formatNotificationDisplayMessage(notice);
+    const representative = formatNotificationDisplayMessage({
+      ...notice,
+      recipientRole: 'CONTRACTOR_REPRESENTATIVE',
+      processingStatus: 'WAITING_WORKER',
+    });
+    expect(worker).not.toBe(representative);
+    expect(worker).not.toContain('Synthetic An');
+    expect(representative).toContain('Synthetic An');
+    for (const processingStatus of ['PENDING_REVIEW', 'NEEDS_RESUBMISSION', 'RESOLVED'] as const) {
+      const message = formatNotificationDisplayMessage({ ...notice, processingStatus });
+      expect(message).not.toContain('notifications.');
+      expect(message).not.toBe(worker);
+    }
+    expect(
+      formatNotificationDisplayMessage({
+        ...notice,
+        event: 'TIME_REQUESTED',
+        message: 'Attendance correction requested: Synthetic reason',
+        recipientRole: 'CONTRACTOR_REPRESENTATIVE',
+        processingStatus: 'PENDING_REVIEW',
+      }),
+    ).toContain('Synthetic An');
+  },
+);

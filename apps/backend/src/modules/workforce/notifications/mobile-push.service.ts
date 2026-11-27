@@ -17,7 +17,7 @@ import type { AuthenticatedUser } from '../../auth/auth.service.js';
 import { PublicHttpException } from '../../../common/http/public-http-exception.js';
 import { uuid, knownUnique } from '../../../common/configuration/commands.js';
 import { openJson, sealJson } from '../../../common/secure-envelope.js';
-import { notificationVisibilityScope } from './scheduling-notification.service.js';
+import { inboxVisibilityScope } from './notification-inbox.service.js';
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 export const pushInstallationHash = (id: string, secret: string) =>
   hash(`mobile-push-installation-v1:${id}:${secret}`);
@@ -206,7 +206,7 @@ export class MobilePushService implements OnApplicationBootstrap, OnApplicationS
         LEFT JOIN mobile_push_delivery sent ON sent.device_id=d.id AND sent.notification_id=n.id
         WHERE d.revoked_at IS NULL AND s.revoked_at IS NULL AND s.expires_at>now() AND s.client_type='MOBILE'
           AND n.deleted_at IS NULL AND n.read_at IS NULL AND n.created_at>=d.registered_at AND sent.device_id IS NULL
-          AND n.recipient_role IN ('WORKER','CONTRACTOR_REPRESENTATIVE') AND (${notificationVisibilityScope})
+          AND n.recipient_role IN ('WORKER','CONTRACTOR_REPRESENTATIVE') AND (${inboxVisibilityScope})
         ORDER BY n.created_at,n.id,d.id LIMIT 100 ON CONFLICT DO NOTHING`);
       const claimed = await this.source.query<
         Pick<Delivery, 'device_id' | 'notification_id' | 'attempts'>[]
@@ -221,7 +221,7 @@ export class MobilePushService implements OnApplicationBootstrap, OnApplicationS
           Pick<Delivery, 'token_hash' | 'token_ciphertext' | 'language'>[]
         >(
           `SELECT d.token_hash,d.token_ciphertext,d.language FROM mobile_push_device d JOIN auth_session s ON s.id=d.session_id AND s.user_id=d.user_id JOIN user_notification n ON n.recipient_user_id=d.user_id
-          WHERE d.id=$1 AND n.id=$2 AND d.revoked_at IS NULL AND s.revoked_at IS NULL AND s.expires_at>now() AND n.deleted_at IS NULL AND n.read_at IS NULL AND (${notificationVisibilityScope})`,
+          WHERE d.id=$1 AND n.id=$2 AND d.revoked_at IS NULL AND s.revoked_at IS NULL AND s.expires_at>now() AND n.deleted_at IS NULL AND n.read_at IS NULL AND (${inboxVisibilityScope})`,
           [row.device_id, row.notification_id],
         );
         if (!device) {

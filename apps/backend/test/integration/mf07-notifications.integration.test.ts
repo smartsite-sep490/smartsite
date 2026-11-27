@@ -1,3 +1,4 @@
+import { NotificationInboxService } from '../../src/modules/workforce/notifications/notification-inbox.service.js';
 import 'reflect-metadata';
 import { approvedWorkerDocuments } from '../support/approved-worker-documents.js';
 import assert from 'node:assert/strict';
@@ -20,6 +21,9 @@ import {
   UserNotificationEntity,
   ShiftRequestStatus,
   ShiftChangeRequestEntity,
+  AttendanceDayEntity,
+  AttendanceSessionEntity,
+  AttendanceCorrectionEntity,
   ContractorTeamEntity,
   ContractorTeamMembershipEntity,
 } from '../../src/database/entities/index.js';
@@ -37,6 +41,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
     if (dataSource.isInitialized) await dataSource.destroy();
   });
   const notifications = new SchedulingNotificationService(dataSource);
+  const inbox = new NotificationInboxService(dataSource);
   const workflow = new SchedulingWorkflowService(dataSource, notifications);
   const siteId = randomUUID(),
     otherSite = randomUUID(),
@@ -212,6 +217,177 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
     error instanceof PublicHttpException && error.publicPayload.code === expected;
 
   await t.test(
+    'attendance inbox groups one issue and derives current processing without changing read state',
+    async () => {
+      const [schedule] = await schedules();
+      const worker = await dataSource.getRepository(WorkerEntity).findOneByOrFail({ id: aId });
+      const day = await dataSource.getRepository(AttendanceDayEntity).save({
+        id: randomUUID(),
+        siteId,
+        workerId: aId,
+        workDate: schedule!.workDate,
+        timezone: 'UTC',
+        scheduleId: schedule!.id,
+        status: 'NEEDS_REVIEW',
+        anomalies: ['MISSING_IN'],
+      });
+      const session = await dataSource.getRepository(AttendanceSessionEntity).save({
+        id: randomUUID(),
+        siteId,
+        workerId: aId,
+        dayId: day.id,
+        shiftAssignmentId: schedule!.id,
+        status: 'MISSING_IN',
+      });
+      const requestId = randomUUID();
+      try {
+        for (const event of ['MISSING_ATTENDANCE', 'MISSING_CHECKOUT'] as const)
+          await dataSource.transaction((manager) =>
+            notifications.recordAttendance(manager, {
+              worker,
+              id: day.id,
+              event,
+              message: 'Synthetic missing attendance',
+              representatives: true,
+              workDate: day.workDate,
+              dayId: day.id,
+            }),
+          );
+        const workerPage = await inbox.list(workerA);
+        assert.equal(workerPage.total, 1);
+        assert.equal(workerPage.unreadCount, 1);
+        assert.equal(workerPage.items[0]!.event, 'MISSING_CHECKOUT');
+        assert.equal(workerPage.items[0]!.processingStatus, 'ACTION_REQUIRED');
+        assert.equal(workerPage.items[0]!.workerName, 'Synthetic Worker A');
+        const repNotice = (await inbox.list(repA)).items[0]!;
+        assert.equal(repNotice.processingStatus, 'WAITING_WORKER');
+        await inbox.read(repA, repNotice.id);
+        assert.equal((await inbox.list(repA)).items[0]!.processingStatus, 'WAITING_WORKER');
+        const hidden = await dataSource.getRepository(UserNotificationEntity).findOneByOrFail({
+          recipientUserId: repA.id,
+          event: 'MISSING_ATTENDANCE',
+          requestId: day.id,
+        });
+        await assert.rejects(inbox.read(repA, hidden.id), code('NOT_FOUND'));
+        for (const actor of [workerB, wrongRep, wrongSiteRep, unassignedRep])
+          assert.equal((await inbox.list(actor)).total, 0);
+        await dataSource.getRepository(AttendanceCorrectionEntity).save({
+          id: requestId,
+          attendanceSessionId: session.id,
+          requestedBy: workerA.id,
+          expectedSessionVersion: 1,
+          proposedInAt: new Date('2030-01-01T08:00:00Z'),
+          proposedOutAt: new Date('2030-01-01T16:00:00Z'),
+          reason: 'Synthetic correction',
+          status: 'PENDING',
+        });
+        await dataSource.transaction((manager) =>
+          notifications.recordAttendance(manager, {
+            worker,
+            id: requestId,
+            event: 'TIME_REQUESTED',
+            message: 'Attendance correction requested: synthetic',
+            representatives: true,
+            workDate: day.workDate,
+            dayId: day.id,
+          }),
+        );
+        let repPage = await inbox.list(repA);
+        assert.equal(repPage.total, 1);
+        assert.equal(repPage.unreadCount, 1);
+        assert.equal(repPage.items[0]!.processingStatus, 'PENDING_REVIEW');
+        assert.equal(
+          'requestId' in repPage.items[0]!.target && repPage.items[0]!.target.requestId,
+          requestId,
+        );
+        await dataSource
+          .getRepository(AttendanceCorrectionEntity)
+          .update(requestId, { status: 'REJECTED' });
+        assert.equal((await inbox.list(workerA)).items[0]!.processingStatus, 'NEEDS_RESUBMISSION');
+        assert.equal((await inbox.list(repA)).items[0]!.processingStatus, 'WAITING_WORKER');
+        await dataSource
+          .getRepository(AttendanceCorrectionEntity)
+          .update(requestId, { status: 'APPROVED' });
+        assert.equal((await inbox.list(workerA)).items[0]!.processingStatus, 'ACTION_REQUIRED');
+        await dataSource.getRepository(AttendanceSessionEntity).update(session.id, {
+          status: 'CORRECTED',
+          appliedCorrectionId: requestId,
+          effectiveInAt: new Date('2030-01-01T08:00:00Z'),
+          effectiveOutAt: new Date('2030-01-01T16:00:00Z'),
+        });
+        await dataSource
+          .getRepository(AttendanceDayEntity)
+          .update(day.id, { status: 'CONFIRMED', anomalies: [] });
+        repPage = await inbox.list(repA);
+        assert.equal(repPage.total, 1);
+        assert.equal(repPage.items[0]!.processingStatus, 'RESOLVED');
+        assert.equal((await inbox.list(workerA)).unreadCount, 1);
+        // A second shift on the same date remains a separate issue.
+        const secondDay = await dataSource.getRepository(AttendanceDayEntity).save({
+          id: randomUUID(),
+          siteId,
+          workerId: aId,
+          workDate: day.workDate,
+          timezone: 'UTC',
+          status: 'NEEDS_REVIEW',
+          anomalies: ['MISSING_IN'],
+        });
+        try {
+          await dataSource.transaction((manager) =>
+            notifications.recordAttendance(manager, {
+              worker,
+              id: secondDay.id,
+              event: 'MISSING_ATTENDANCE',
+              message: 'Second shift issue',
+              representatives: true,
+              workDate: day.workDate,
+              dayId: secondDay.id,
+            }),
+          );
+          assert.equal((await inbox.list(repA)).total, 2);
+          assert.equal((await inbox.list(workerA)).total, 2);
+          assert.equal((await inbox.list(repA, 'ALL', 0, 1)).items.length, 1);
+          assert.equal((await inbox.list(repA, 'ALL', 0, 1)).total, 2);
+        } finally {
+          await dataSource
+            .getRepository(UserNotificationEntity)
+            .delete({ requestId: secondDay.id });
+          await dataSource.getRepository(AttendanceDayEntity).delete(secondDay.id);
+        }
+        // Deleting the resolved canonical issue must not resurrect its hidden request or generic duplicate.
+        await inbox.delete(repA, repNotice.id);
+        assert.equal((await inbox.list(repA)).total, 0);
+        // Restore only for the unavailable-context assertion below.
+        await dataSource
+          .getRepository(UserNotificationEntity)
+          .update(repNotice.id, { deletedAt: null });
+        // Unavailable context cannot be presented as resolved.
+        await dataSource.getRepository(UserNotificationEntity).update(repNotice.id, {
+          content: {
+            siteName: 'Synthetic',
+            title: 'Missing',
+            message: 'Missing',
+            dayId: randomUUID(),
+          },
+        });
+        assert.equal(
+          (await inbox.list(repA)).items.find((n) => n.id === repNotice.id)?.processingStatus,
+          undefined,
+        );
+      } finally {
+        await dataSource.getRepository(UserNotificationEntity).delete({ requestId });
+        await dataSource.getRepository(UserNotificationEntity).delete({ requestId: day.id });
+        await dataSource
+          .getRepository(AttendanceSessionEntity)
+          .update(session.id, { appliedCorrectionId: null, status: 'MISSING_IN' });
+        await dataSource.getRepository(AttendanceCorrectionEntity).delete(requestId);
+        await dataSource.getRepository(AttendanceSessionEntity).delete(session.id);
+        await dataSource.getRepository(AttendanceDayEntity).delete(day.id);
+      }
+    },
+  );
+
+  await t.test(
     'direct changes notify all eligible representatives and applied outcomes notify only the worker',
     async () => {
       const [a] = await schedules();
@@ -221,7 +397,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         reason: 'Synthetic change reason',
       });
       for (const rep of [repA, repB]) {
-        const page = await notifications.list(rep);
+        const page = await inbox.list(rep);
         assert.equal(
           page.items.find((n) => 'requestId' in n.target && n.target.requestId === request.id)
             ?.event,
@@ -229,7 +405,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         );
       }
       for (const actor of [workerA, workerB, wrongRep, wrongSiteRep, unassignedRep])
-        assert.equal((await notifications.list(actor)).unreadCount, 0);
+        assert.equal((await inbox.list(actor)).unreadCount, 0);
       assert.equal(
         await dataSource
           .getRepository(UserNotificationEntity)
@@ -238,7 +414,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       );
       const approved = await workflow.approveShiftChange(repA, siteId, request.id);
       assert.equal(approved.status, ShiftRequestStatus.APPLIED);
-      const page = await notifications.list(workerA);
+      const page = await inbox.list(workerA);
       assert.equal(page.items[0]?.event, 'REQUEST_APPLIED');
       assert.equal(page.items[0]?.toShiftName, 'Evening');
       assert.equal(page.items[0]?.workDate, a!.workDate);
@@ -248,8 +424,8 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         evening,
       );
       await assert.rejects(workflow.approveShiftChange(repA, siteId, request.id), code('CONFLICT'));
-      assert.equal((await notifications.list(workerA)).unreadCount, 1);
-      await assert.rejects(notifications.read(workerB, page.items[0]!.id), code('NOT_FOUND'));
+      assert.equal((await inbox.list(workerA)).unreadCount, 1);
+      await assert.rejects(inbox.read(workerB, page.items[0]!.id), code('NOT_FOUND'));
       await assert.rejects(
         workflow.getShiftRequest(wrongRep, siteId, request.id, 'CHANGE'),
         code('FORBIDDEN'),
@@ -274,27 +450,27 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         coworkerWorkerScheduleId: b!.id,
         reason: 'Synthetic swap reason',
       });
-      const incoming = (await notifications.list(workerB)).items.find(
+      const incoming = (await inbox.list(workerB)).items.find(
         (n) => 'requestId' in n.target && n.target.requestId === request.id,
       )!;
       assert.equal(incoming.event, 'SWAP_REQUESTED');
       assert.ok('view' in incoming.target);
       assert.equal(incoming.target.view, 'coworker');
       assert.equal(
-        (await notifications.list(repA)).items.some(
+        (await inbox.list(repA)).items.some(
           (n) => 'requestId' in n.target && n.target.requestId === request.id,
         ),
         false,
       );
       await workflow.confirmShiftSwap(workerB, siteId, request.id);
       assert.equal(
-        (await notifications.list(workerA)).items.find(
+        (await inbox.list(workerA)).items.find(
           (n) => 'requestId' in n.target && n.target.requestId === request.id,
         )?.event,
         'SWAP_CONFIRMED',
       );
       assert.equal(
-        (await notifications.list(repA)).items.find(
+        (await inbox.list(repA)).items.find(
           (n) => 'requestId' in n.target && n.target.requestId === request.id,
         )?.event,
         'SWAP_CONFIRMED',
@@ -302,14 +478,14 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       await workflow.approveShiftSwap(repA, siteId, request.id);
       for (const actor of [workerA, workerB])
         assert.ok(
-          (await notifications.list(actor)).items.some(
+          (await inbox.list(actor)).items.some(
             (n) =>
               'requestId' in n.target &&
               n.target.requestId === request.id &&
               n.event === 'REQUEST_APPLIED',
           ),
         );
-      const coworkerOutcome = (await notifications.list(workerB)).items.find(
+      const coworkerOutcome = (await inbox.list(workerB)).items.find(
         (n) =>
           'requestId' in n.target &&
           n.target.requestId === request.id &&
@@ -340,13 +516,13 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       await workflow.declineShiftSwap(workerB, siteId, request.id, {
         reason: 'Coworker cannot attend',
       });
-      const notice = (await notifications.list(workerA)).items.find(
+      const notice = (await inbox.list(workerA)).items.find(
         (n) => 'requestId' in n.target && n.target.requestId === request.id,
       )!;
       assert.equal(notice.event, 'SWAP_DECLINED');
       assert.match(notice.message, /Coworker cannot attend/);
       assert.equal(
-        (await notifications.list(repA)).items.some(
+        (await inbox.list(repA)).items.some(
           (n) => 'requestId' in n.target && n.target.requestId === request.id,
         ),
         false,
@@ -362,7 +538,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         reason: 'Contractor cannot approve',
       });
       for (const actor of [workerA, workerB]) {
-        const outcome = (await notifications.list(actor)).items.find(
+        const outcome = (await inbox.list(actor)).items.find(
           (n) =>
             'requestId' in n.target &&
             n.target.requestId === swap.id &&
@@ -380,7 +556,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         reason: 'Contractor cannot approve',
       });
       assert.ok(
-        (await notifications.list(workerA)).items.some(
+        (await inbox.list(workerA)).items.some(
           (n) =>
             'requestId' in n.target &&
             n.target.requestId === change.id &&
@@ -403,7 +579,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       ShiftRequestStatus.CONFLICTED,
     );
     assert.ok(
-      (await notifications.list(workerA)).items.some(
+      (await inbox.list(workerA)).items.some(
         (n) =>
           'requestId' in n.target &&
           n.target.requestId === request.id &&
@@ -421,28 +597,22 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
   await t.test(
     'read and read-all are persistent, idempotent, paginated, and never transition requests',
     async () => {
-      const before = await notifications.list(workerA);
+      const before = await inbox.list(workerA);
       const id = before.items[0]!.id;
-      const [first, second] = await Promise.all([
-        notifications.read(workerA, id),
-        notifications.read(workerA, id),
-      ]);
+      const [first, second] = await Promise.all([inbox.read(workerA, id), inbox.read(workerA, id)]);
       assert.equal(first.readAt, second.readAt);
-      assert.equal(
-        (await notifications.list(workerA, 'UNREAD')).unreadCount,
-        before.unreadCount - 1,
-      );
-      assert.equal((await notifications.list(workerA, 'ALL', 1, 1)).items.length, 1);
-      assert.equal((await notifications.list(workerA, 'ALL', 0, 1)).total, before.total);
-      assert.equal((await notifications.readAll(workerA)).updated, before.unreadCount - 1);
-      assert.equal((await notifications.readAll(workerA)).updated, 0);
+      assert.equal((await inbox.list(workerA, 'UNREAD')).unreadCount, before.unreadCount - 1);
+      assert.equal((await inbox.list(workerA, 'ALL', 1, 1)).items.length, 1);
+      assert.equal((await inbox.list(workerA, 'ALL', 0, 1)).total, before.total);
+      assert.equal((await inbox.readAll(workerA)).updated, before.unreadCount - 1);
+      assert.equal((await inbox.readAll(workerA)).updated, 0);
       assert.equal(
         (await new SchedulingNotificationService(dataSource).list(workerA)).unreadCount,
         0,
       );
-      await assert.rejects(notifications.list(workerA, 'INVALID'), code('VALIDATION_FAILED'));
-      await assert.rejects(notifications.list(workerA, 'ALL', 0, 101), code('VALIDATION_FAILED'));
-      await assert.rejects(notifications.read(workerA, 'invalid-id'), code('VALIDATION_FAILED'));
+      await assert.rejects(inbox.list(workerA, 'INVALID'), code('VALIDATION_FAILED'));
+      await assert.rejects(inbox.list(workerA, 'ALL', 0, 101), code('VALIDATION_FAILED'));
+      await assert.rejects(inbox.read(workerA, 'invalid-id'), code('VALIDATION_FAILED'));
     },
   );
 
@@ -812,10 +982,10 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         toShiftId: evening,
         reason: 'Synthetic dismissible request',
       });
-      const notice = (await notifications.list(repA, 'ALL', 0, 100)).items.find(
+      const notice = (await inbox.list(repA, 'ALL', 0, 100)).items.find(
         (n) => 'requestId' in n.target && n.target.requestId === request.id,
       )!;
-      await notifications.read(repA, notice.id);
+      await inbox.read(repA, notice.id);
       const repository = dataSource.getRepository(UserNotificationEntity);
       const content = {
         siteName: 'Synthetic site',
@@ -845,25 +1015,25 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         row(repB.id),
         row(repA.id, { siteId: otherSite }),
       ]);
-      const before = await notifications.list(repA, 'ALL', 0, 100);
+      const before = await inbox.list(repA, 'ALL', 0, 100);
       const readCount = before.total - before.unreadCount;
       assert.ok(readCount >= 26);
-      assert.deepEqual(await notifications.deleteRead(repA), { deleted: readCount });
-      const after = await notifications.list(repA, 'ALL', 0, 100);
+      assert.deepEqual(await inbox.deleteRead(repA), { deleted: readCount });
+      const after = await inbox.list(repA, 'ALL', 0, 100);
       assert.equal(after.total, before.unreadCount);
       assert.equal(after.unreadCount, before.unreadCount);
       assert.ok(after.items.every((n) => n.readAt === null));
-      assert.deepEqual(await notifications.deleteRead(repA), { deleted: 0 });
+      assert.deepEqual(await inbox.deleteRead(repA), { deleted: 0 });
       for (const r of [...readRows, notice])
         assert.ok((await repository.findOneByOrFail({ id: r.id })).deletedAt);
       for (const r of [unread!, otherAccount!, otherScope!])
         assert.equal((await repository.findOneByOrFail({ id: r.id })).deletedAt, null);
       const singleNotice = await repository.save(row(repA.id, { readAt: null }));
-      assert.deepEqual(await notifications.delete(repA, singleNotice.id), { id: singleNotice.id });
+      assert.deepEqual(await inbox.delete(repA, singleNotice.id), { id: singleNotice.id });
       assert.ok((await repository.findOneByOrFail({ id: singleNotice.id })).deletedAt);
-      await assert.rejects(notifications.delete(repA, singleNotice.id), code('NOT_FOUND'));
-      await assert.rejects(notifications.delete(repA, otherAccount!.id), code('NOT_FOUND'));
-      await assert.rejects(notifications.read(repA, notice.id), code('NOT_FOUND'));
+      await assert.rejects(inbox.delete(repA, singleNotice.id), code('NOT_FOUND'));
+      await assert.rejects(inbox.delete(repA, otherAccount!.id), code('NOT_FOUND'));
+      await assert.rejects(inbox.read(repA, notice.id), code('NOT_FOUND'));
       await dataSource.transaction(async (manager) =>
         notifications.record(
           manager,
@@ -875,7 +1045,7 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
       );
       await notifications.backfillPending();
       assert.equal(
-        (await notifications.list(repA, 'ALL', 0, 100)).items.some((n) => n.id === notice.id),
+        (await inbox.list(repA, 'ALL', 0, 100)).items.some((n) => n.id === notice.id),
         false,
       );
       assert.equal(
@@ -899,20 +1069,17 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
         ).status,
         ShiftRequestStatus.PENDING_MANAGER,
       );
+      await assert.rejects(inbox.deleteRead({ ...repA, isActive: false }), code('FORBIDDEN'));
       await assert.rejects(
-        notifications.deleteRead({ ...repA, isActive: false }),
+        inbox.deleteRead({ ...repA, mustChangePassword: true }),
         code('FORBIDDEN'),
       );
-      await assert.rejects(
-        notifications.deleteRead({ ...repA, mustChangePassword: true }),
-        code('FORBIDDEN'),
-      );
-      await notifications.read(repA, unread!.id);
+      await inbox.read(repA, unread!.id);
       await dataSource
         .getRepository(ContractorSiteParticipationEntity)
         .update({ siteId, contractorId }, { isActive: false });
       try {
-        assert.deepEqual(await notifications.deleteRead(repA), { deleted: 0 });
+        assert.deepEqual(await inbox.deleteRead(repA), { deleted: 0 });
         assert.equal((await repository.findOneByOrFail({ id: unread!.id })).deletedAt, null);
       } finally {
         await dataSource
@@ -929,24 +1096,21 @@ test('MF07 durable notifications: delivery, scope, transactions, history and rea
   await t.test(
     'revoked role, representative assignment, worker linkage and participation hide list/count/read',
     async () => {
-      const notice = (await notifications.list(repB)).items[0]!;
+      const notice = (await inbox.list(repB)).items[0]!;
       await dataSource
         .getRepository(ContractorRepresentativeAssignmentEntity)
         .delete({ userId: repB.id });
-      assert.equal((await notifications.list(repB)).total, 0);
-      await assert.rejects(notifications.read(repB, notice.id), code('NOT_FOUND'));
+      assert.equal((await inbox.list(repB)).total, 0);
+      await assert.rejects(inbox.read(repB, notice.id), code('NOT_FOUND'));
       await dataSource.getRepository(UserRoleAssignmentEntity).delete({ userId: repA.id });
-      assert.equal((await notifications.list(repA)).unreadCount, 0);
+      assert.equal((await inbox.list(repA)).unreadCount, 0);
       await dataSource.getRepository(WorkerEntity).update(bId, { userId: null });
-      assert.equal((await notifications.list(workerB)).total, 0);
+      assert.equal((await inbox.list(workerB)).total, 0);
       await dataSource
         .getRepository(ContractorSiteParticipationEntity)
         .update({ contractorId, siteId }, { isActive: false });
-      assert.equal((await notifications.list(workerA)).total, 0);
-      await assert.rejects(
-        notifications.list({ ...workerA, mustChangePassword: true }),
-        code('FORBIDDEN'),
-      );
+      assert.equal((await inbox.list(workerA)).total, 0);
+      await assert.rejects(inbox.list({ ...workerA, mustChangePassword: true }), code('FORBIDDEN'));
     },
   );
 });

@@ -711,3 +711,23 @@ describe('durable Web notification bell', () => {
     expect(screen.queryByText(/Bạn chưa được phân công/)).toBeNull();
   });
 });
+
+it('shows processing status independently from the unread badge', async () => {
+  vi.mocked(SmartSiteManagementClient.prototype.listNotifications).mockResolvedValue({
+    items: [
+      {
+        ...notification,
+        event: 'MISSING_CHECKOUT',
+        processingStatus: 'RESOLVED',
+        recipientRole: 'WORKER',
+        workerName: 'Synthetic An',
+      },
+    ],
+    total: 1,
+    unreadCount: 1,
+  });
+  mount();
+  fireEvent.click(await screen.findByRole('button', { name: /notifications.*1 unread/i }));
+  expect(await screen.findByText('Resolved')).toBeTruthy();
+  expect(screen.getByText(/Your missing attendance/)).toBeTruthy();
+});

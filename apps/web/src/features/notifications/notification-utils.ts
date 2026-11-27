@@ -13,8 +13,74 @@ export function notificationHref(notification: UserNotificationResponse, assigne
 }
 
 export function formatNotificationDisplayMessage(
-  item: Pick<UserNotificationResponse, 'event' | 'message' | 'workDate' | 'safetyAlert'>,
+  item: Pick<
+    UserNotificationResponse,
+    | 'event'
+    | 'message'
+    | 'workDate'
+    | 'recipientRole'
+    | 'workerName'
+    | 'processingStatus'
+    | 'safetyAlert'
+  >,
 ): string {
+  const personalize = (message: string) => {
+    if (item.recipientRole !== 'WORKER' || !item.workerName) return message;
+    for (const [prefix, replacement] of [
+      [`Công nhân ${item.workerName}`, 'Bạn'],
+      [`Worker ${item.workerName}`, 'You'],
+    ] as const)
+      if (message.startsWith(prefix)) return replacement + message.slice(prefix.length);
+    return message;
+  };
+  if (item.event === 'ABSENT' && item.workerName && item.recipientRole)
+    return tr(
+      item.recipientRole === 'WORKER'
+        ? 'notifications.workflowAbsentWorker'
+        : 'notifications.workflowAbsentRepresentative',
+      { name: item.workerName, date: item.workDate ?? '' },
+    );
+  const values = { name: item.workerName ?? '', date: item.workDate ?? '' };
+  if (
+    item.processingStatus &&
+    item.recipientRole &&
+    ['MISSING_ATTENDANCE', 'MISSING_CHECKOUT'].includes(item.event)
+  )
+    return tr(
+      `notifications.workflowMissing_${item.recipientRole}_${item.processingStatus}`,
+      values,
+    );
+  if (item.event === 'TIME_REQUESTED' && item.workerName && item.processingStatus === 'RESOLVED')
+    return tr('notifications.workflowRequestResolved', values);
+  if (
+    item.event === 'TIME_REQUESTED' &&
+    item.workerName &&
+    item.processingStatus === 'PENDING_REVIEW' &&
+    item.message.startsWith('Attendance correction requested: ')
+  )
+    return (
+      tr('notifications.workflowRequestPending', values) +
+      tr('notifications.reason', {
+        reason: item.message.slice('Attendance correction requested: '.length),
+      })
+    );
+  if (item.event === 'ASSIGNMENT_REVIEW' && item.workerName && item.recipientRole)
+    return tr(
+      item.recipientRole === 'WORKER'
+        ? 'notifications.workflowAssignmentWorker'
+        : 'notifications.workflowAssignmentRepresentative',
+      values,
+    );
+  if (item.event.startsWith('DOCUMENT_') && item.recipientRole === 'WORKER' && item.workerName) {
+    const separator = item.message.indexOf(' — ');
+    if (separator > 0 && item.message.startsWith(item.workerName + ' ('))
+      return (
+        tr('notifications.workflowYourDocument') +
+        ' ' +
+        localizeMessage(item.message.slice(separator + 3))
+      );
+  }
+
   if (item.event === 'MISSING_ATTENDANCE')
     return uiLocale().startsWith('vi')
       ? `Thiếu lượt IN/OUT được xác nhận (${item.workDate ?? ''}). Công nhân gửi đơn báo thiếu chấm công theo ca; Đại diện nhà thầu kiểm tra và duyệt hoặc từ chối. Mở thông báo để xem bản ghi cần xử lý.`
@@ -70,7 +136,7 @@ export function formatNotificationDisplayMessage(
         / Exit \d+, time outside excluding breaks: \d+ minutes; time deducted as of this check: \d+ minutes\.$/,
         '',
       );
-    return localizeMessage(message);
+    return personalize(localizeMessage(message));
   }
   if (
     item.event === 'ENTRY_DENIED_NO_SCHEDULE' &&
@@ -125,10 +191,14 @@ export function formatNotificationDisplayMessage(
       tr('notifications.reason', { reason: item.message.slice(reasonAt + 9) })
     );
   }
-  return localizeMessage(item.message);
+  return personalize(localizeMessage(item.message));
 }
 
-export function formatNotificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>) {
+export function formatNotificationTitle(
+  item: Pick<UserNotificationResponse, 'event' | 'title' | 'processingStatus'>,
+) {
+  if (item.processingStatus && ['MISSING_ATTENDANCE', 'MISSING_CHECKOUT'].includes(item.event))
+    return tr('notifications.workflowMissingTitle');
   if (item.event === 'MISSING_ATTENDANCE')
     return uiLocale().startsWith('vi')
       ? 'Thiếu chấm công — công nhân cần gửi đơn'
