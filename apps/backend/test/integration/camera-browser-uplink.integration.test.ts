@@ -241,6 +241,12 @@ test('PostgreSQL 5433 browser camera uplink: UNLOGGED table, single-owner lease 
     );
     assert.equal(receipt1.sequence, 1);
     assert.equal(receipt1.byteLength, jpeg1.byteLength);
+    const readAssignedFrame = (leaseId: string, afterSequence = 0, siteId = siteA) =>
+      uplink.readFreshFrame(siteId, cameraId, { leaseId, afterSequence });
+    assert.deepEqual((await readAssignedFrame(winnerStart.leaseId))?.jpegBytes, jpeg1);
+    assert.equal(await readAssignedFrame(randomUUID()), null);
+    assert.equal(await readAssignedFrame(winnerStart.leaseId, 1), null);
+    assert.equal(await readAssignedFrame(winnerStart.leaseId, 0, siteB), null);
 
     // Non-owner cannot upload on winner's lease
     await assert.rejects(
@@ -309,6 +315,7 @@ test('PostgreSQL 5433 browser camera uplink: UNLOGGED table, single-owner lease 
 
     // 6. Advance clock by 2000ms -> frame becomes stale -> preview & config-image MUST fail 503 (never frozen LIVE!)
     nowMs += 2000;
+    assert.equal(await readAssignedFrame(winnerStart.leaseId), null);
     await assert.rejects(
       preview.read('tok-officer-1', siteA, cameraId),
       (e: unknown) => e instanceof PublicHttpException && e.getStatus() === 503,
@@ -351,6 +358,7 @@ test('PostgreSQL 5433 browser camera uplink: UNLOGGED table, single-owner lease 
       reason: 'USER_STOPPED',
     });
     assert.equal(stopped.state, 'STOPPED');
+    assert.equal(await readAssignedFrame(winnerStart.leaseId), null);
 
     const [rowAfterStop] = await db.query(
       'SELECT state, jpeg_bytes FROM camera_browser_uplink_frame WHERE camera_id = $1',
@@ -377,6 +385,28 @@ test('PostgreSQL 5433 browser camera uplink: UNLOGGED table, single-owner lease 
       clientSessionId: 'tab-after-expiry',
     });
     assert.notEqual(start3.leaseId, start2.leaseId);
+    await uplink.uploadFrame(
+      winnerToken,
+      siteA,
+      cameraId,
+      {
+        contentType: 'image/jpeg',
+        leaseId: start3.leaseId,
+        sequence: '1',
+        capturedAt: new Date(nowMs).toISOString(),
+        width: '640',
+        height: '480',
+      },
+      jpeg1,
+    );
+    assert.equal(await readAssignedFrame(winnerStart.leaseId), null);
+    assert.equal(await readAssignedFrame(start2.leaseId), null);
+    assert.equal((await readAssignedFrame(start3.leaseId))?.sequence, 1);
+    await db.query('UPDATE camera SET status = $1 WHERE id = $2', [
+      CameraStatus.INACTIVE,
+      cameraId,
+    ]);
+    assert.equal(await readAssignedFrame(start3.leaseId), null);
   } finally {
     await owned.dispose();
   }

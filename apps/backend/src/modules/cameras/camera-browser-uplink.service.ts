@@ -682,8 +682,14 @@ export class CameraBrowserUplinkService {
    * Read latest frame ONLY when capability is enabled, lease is ACTIVE & unexpired,
    * pixels exist, and capturedAt passes the strict <2000ms past / <=1000ms future gate.
    * Never returns stale or stopped frames as LIVE.
+   * A consumer already authorized for a lease can restrict reads to that lease
+   * and to frames newer than its last accepted sequence.
    */
-  async readFreshFrame(siteId: string, cameraId: string): Promise<FreshBrowserUplinkFrame | null> {
+  async readFreshFrame(
+    siteId: string,
+    cameraId: string,
+    assigned?: { leaseId: string; afterSequence: number },
+  ): Promise<FreshBrowserUplinkFrame | null> {
     if (!this.isEnabled()) return null;
     const nowMs = this.clock();
     const nowDate = new Date(nowMs);
@@ -694,8 +700,15 @@ export class CameraBrowserUplinkService {
          AND site_id = $2
          AND state = 'ACTIVE'
          AND lease_expires_at > $3
+         AND ($4::uuid IS NULL OR lease_id = $4)
+         AND sequence > $5::bigint
          AND jpeg_bytes IS NOT NULL
          AND captured_at IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM camera c
+           WHERE c.id = $1 AND c.site_id = $2 AND c.status = 'ACTIVE' AND c.type <> 'GATE'
+         )
          AND NOT EXISTS (
            SELECT 1
            FROM camera_worker_generation g
@@ -703,7 +716,7 @@ export class CameraBrowserUplinkService {
              AND g.site_id = $2
              AND (g.is_current = true OR g.superseded_at IS NULL)
          )`,
-      [cameraId, siteId, nowDate],
+      [cameraId, siteId, nowDate, assigned?.leaseId ?? null, assigned?.afterSequence ?? 0],
     )) as Pick<
       UplinkRow,
       'lease_id' | 'sequence' | 'width' | 'height' | 'captured_at' | 'jpeg_bytes'
