@@ -66,6 +66,18 @@ before both producer and consumer checks pass.
 
 ## Scoped retrieval
 
+The ordinary Alerts detection evidence endpoint also uses the private storage reader
+when `AI_EVIDENCE_OBJECT_STORAGE_ENABLED=true`. It supports content-bound FRAMEs
+from v1.2–v1.7 after Site/mapping, immutable payload/header and image SHA validation.
+This fixes retained R2 images being marked unavailable solely because no local evidence
+directory is mounted. Legacy unbound/local files retain their existing path. Reading
+a tracked FRAME here does not enable legacy identity review of tracked observations.
+For local Backend reads, configure `STORAGE_PROVIDER=R2`, the private R2 credentials,
+and `AI_EVIDENCE_OBJECT_STORAGE_ENABLED=true` in `apps/backend/.env`, then restart
+the Backend. The ordinary Alerts endpoint does not require enabling AI intake or
+tracked history routes. Missing or unbound evidence remains unavailable; no image
+is substituted from another event.
+
 When the same flag is enabled, tracked episode FRAME/SUBJECT requests use the
 private object reader after the existing Site/role/event/finding checks. It
 derives the event ID, original payload hash and image hash from the validated
