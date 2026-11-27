@@ -698,7 +698,7 @@ export class CameraBrowserUplinkService {
   /**
    * Read latest frame ONLY when capability is enabled, lease is ACTIVE & unexpired,
    * pixels exist, and capturedAt passes the strict <2000ms past / <=1000ms future gate.
-   * Never returns stale or stopped frames as LIVE.
+   * Also requires the capture owner's login and scoped role to remain active.
    * A consumer already authorized for a lease can restrict reads to that lease
    * and to frames newer than its last accepted sequence.
    */
@@ -721,6 +721,17 @@ export class CameraBrowserUplinkService {
          AND sequence > $5::bigint
          AND jpeg_bytes IS NOT NULL
          AND captured_at IS NOT NULL
+         AND EXISTS (
+           SELECT 1
+           FROM auth_session s
+           JOIN app_user u ON u.id = s.user_id
+           JOIN user_role_assignment r ON r.user_id = u.id AND r.site_id = $2
+           WHERE s.id = camera_browser_uplink_frame.owner_auth_session_id
+             AND s.user_id = camera_browser_uplink_frame.owner_user_id
+             AND s.revoked_at IS NULL AND s.expires_at > $3
+             AND u.is_active AND NOT u.must_change_password
+             AND r.role = 'SITE_MANAGER'
+         )
          AND EXISTS (
            SELECT 1
            FROM camera c

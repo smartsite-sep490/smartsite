@@ -59,6 +59,26 @@ function makeJpeg(seed: number, width = 640, height = 480): Buffer {
   ]);
 }
 
+async function persistCaptureOwner(
+  db: DataSource,
+  siteId: string,
+  userId: string,
+  sessionId: string,
+) {
+  await db.query(
+    "INSERT INTO app_user(id, username, display_name, password_hash) VALUES($1::uuid, $1::text, 'Fixture Manager', 'fixture')",
+    [userId],
+  );
+  await db.query(
+    "INSERT INTO user_role_assignment(id, user_id, site_id, role) VALUES($1, $2, $3, 'SITE_MANAGER')",
+    [randomUUID(), userId, siteId],
+  );
+  await db.query(
+    "INSERT INTO auth_session(id, user_id, client_type, refresh_token_hash, last_refreshed_at, expires_at) VALUES($1, $2, 'WEB', repeat('0', 64), now(), now() + interval '1 day')",
+    [sessionId, userId],
+  );
+}
+
 test('PostgreSQL 5433 browser camera uplink: UNLOGGED table, single-owner lease race, bounded frames, stop cleanup, expiry takeover, and fresh preview/config-image', async () => {
   const owned = createIsolatedTestDatabase();
   const db = owned.dataSource;
@@ -217,6 +237,12 @@ test('PostgreSQL 5433 browser camera uplink: UNLOGGED table, single-owner lease 
       ? 'tok-mgr-1'
       : 'tok-mgr-2';
     const otherToken = winnerToken === 'tok-mgr-1' ? 'tok-mgr-2' : 'tok-mgr-1';
+    await persistCaptureOwner(
+      db,
+      siteA,
+      tokenUsers.get(winnerToken)!.id,
+      sessions.get(winnerToken)!,
+    );
 
     // Other manager / officer never see the winner's leaseId
     const officerStatus = await uplink.status('tok-officer-1', siteA, cameraId);
@@ -803,6 +829,55 @@ test('PostgreSQL 5433 real HTTP NestExpressApplication: CORS X-Uplink-* headers,
     assert.equal(secondStart.status, 200);
     const secondLease = (await secondStart.json()) as { leaseId: string };
     assert.notEqual(secondLease.leaseId, started.leaseId);
+
+    const newFrame = await fetch(`${uplinkBase}/frames`, {
+      method: 'POST',
+      headers: {
+        ...secondLaptopHeaders,
+        'Content-Type': 'image/jpeg',
+        'X-Uplink-Lease-Id': secondLease.leaseId,
+        'X-Uplink-Sequence': '1',
+        'X-Uplink-Captured-At': new Date().toISOString(),
+        'X-Uplink-Width': '640',
+        'X-Uplink-Height': '480',
+      },
+      body: new Uint8Array(jpeg),
+    });
+    assert.equal(newFrame.status, 200);
+    const readLease = () =>
+      module.get(CameraBrowserUplinkService).readFreshFrame(siteId, cameraId, {
+        leaseId: secondLease.leaseId,
+        afterSequence: 0,
+      });
+    assert.equal((await readLease())?.sequence, 1);
+    const { sessionId: secondSessionId } = await authService.authenticate(secondLaptop.accessToken);
+    const activeStream = await fetch(
+      `${origin}/api/v1/sites/${siteId}/cameras/${cameraId}/video-stream`,
+      { headers: { Authorization: `Bearer ${officerSession.accessToken}` } },
+    );
+    assert.equal(activeStream.status, 200);
+    const activeReader = activeStream.body!.getReader();
+    try {
+      assert.equal((await activeReader.read()).done, false);
+      await db.query('UPDATE auth_session SET revoked_at = now() WHERE id = $1', [secondSessionId]);
+      assert.equal(await readLease(), null, 'revoked login must stop frame reads');
+      assert.equal((await activeReader.read()).done, true);
+    } finally {
+      await activeReader.cancel();
+    }
+    const afterRevocation = await fetch(
+      `${origin}/api/v1/sites/${siteId}/cameras/${cameraId}/preview`,
+      { headers: { Authorization: `Bearer ${officerSession.accessToken}` } },
+    );
+    assert.equal(afterRevocation.status, 503);
+
+    await db.query('UPDATE auth_session SET revoked_at = NULL WHERE id = $1', [secondSessionId]);
+    assert.equal((await readLease())?.sequence, 1);
+    await db.query('DELETE FROM user_role_assignment WHERE user_id = $1 AND site_id = $2', [
+      managerId,
+      siteId,
+    ]);
+    assert.equal(await readLease(), null, 'removed role must stop frame reads');
   } finally {
     if (app) await app.close();
     await owned.dispose();
@@ -824,10 +899,6 @@ test('PostgreSQL 5433 source-ownership mutual exclusion: physical binding reject
       siteId,
     ]);
     await db.query(
-      'INSERT INTO app_user(id,username,display_name,password_hash) VALUES($1::uuid,$1::text,$1::text,$2)',
-      [managerId, 'unused-hash'],
-    );
-    await db.query(
       `INSERT INTO camera(type,status,id,site_id,external_id,code,name) VALUES
        ('ZONE','ACTIVE',$1,$4,'cam-phys-own','CAM-P1','Physical Owned Cam'),
        ('ZONE','ACTIVE',$2,$4,'cam-brows-own','CAM-B1','Browser Owned Cam'),
@@ -836,6 +907,7 @@ test('PostgreSQL 5433 source-ownership mutual exclusion: physical binding reject
     );
 
     const managerAuthSession = randomUUID();
+    await persistCaptureOwner(db, siteId, managerId, managerAuthSession);
     const auth = {
       authenticate: async () => ({
         sessionId: managerAuthSession,
