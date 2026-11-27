@@ -496,6 +496,17 @@ test('rejects ambiguous payloads: duplicate JSON keys, conflicting versions, dup
     2,
   );
 
+  // A temporal episode may remain confirmed while the current frame is unclear
+  // or while consecutive PRESENT frames are still needed to clear the episode.
+  for (const status of ['UNKNOWN', 'PRESENT']) {
+    assert.doesNotThrow(() =>
+      parse({
+        ...minimalMetadata(),
+        detections: [{ ...baseDet, ppeStatus: { HARD_HAT: status, SAFETY_VEST: 'PRESENT' } }],
+      }),
+    );
+  }
+
   // Contradictory PPE detection assertions
   assert.throws(() =>
     parse({
@@ -504,6 +515,7 @@ test('rejects ambiguous payloads: duplicate JSON keys, conflicting versions, dup
         {
           ...baseDet,
           ppeStatus: { HARD_HAT: 'PRESENT', SAFETY_VEST: 'PRESENT' },
+          alertState: 'PENDING_CONFIRMATION',
           confirmedMissingItems: ['HARD_HAT'],
         },
       ],

@@ -36,6 +36,10 @@ Anchored on the validated frontend prototype shape (`e90a8a2a` `overlayMetadataT
 - `modelObjects` _(optional)_: `CameraPreviewModelObjects` preserving raw detector `OBJECT_DETECTION_ONLY` diagnostics (`modelFamily: "yolo11s"`, `experimental: true`, `scope: "OBJECT_DETECTION_ONLY"`, `artifactId`, 64-hex `artifactSha256`, `0..512` normalized boxes matching `EXPERIMENTAL_OBJECT_CLASSES`).
   - Preserves **`PRESENT_ONLY` safety semantics**: `fullbody-Harness` and `Lanyard-Hook` appear only as positive raw objects (`classId` `13` and `14`), never in `ppeStatus`, `confirmedMissingItems`, or negative `NO-*` classes.
 
+`ppeStatus` describes the current frame. A nonempty `confirmedMissingItems` list requires
+`alertState: "CONFIRMED"` and describes the temporal episode. Its items can remain confirmed
+through an unclear frame or while the worker is gathering enough PRESENT observations to clear it.
+
 ### Hard Rejection Guarantees
 
 - **No image fields**: `imageDataUrl`, `image`, `imageBytes`, `imageSha256`, `jpeg`, `jpegBase64`, `dataUrl`, `pixels`, `frame`, `bytes`, plus any unknown keys, are rejected.

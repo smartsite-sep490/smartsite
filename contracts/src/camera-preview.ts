@@ -425,8 +425,10 @@ function validateDetections(
       seenKeys.add(dedupKey);
       const statuses = item.ppeStatus as Partial<Record<PpeItem, string>> | undefined;
       const missing = item.confirmedMissingItems as readonly PpeItem[] | undefined;
-      if (missing !== undefined && statuses !== undefined) {
-        check(missing.every((missingItem) => statuses[missingItem] === 'MISSING'));
+      if (ppe && missing?.length) {
+        // Confirmed items describe the track episode. Current-frame observations
+        // may change before the temporal gate clears that episode.
+        check(item.alertState === 'CONFIRMED');
       }
       if (item.alertState === 'COMPLIANT') {
         check(missing === undefined || missing.length === 0);
