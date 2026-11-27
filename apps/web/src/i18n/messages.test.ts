@@ -69,6 +69,27 @@ describe.each(['en', 'vi'] as const)('safe UI errors in %s', (language) => {
     expect(userErrorMessage(new ApiError('http', 'Choose a document up to 5 MiB', 400))).toBe(
       localizeMessage('Choose a document up to 5 MiB'),
     );
+    expect(
+      userErrorMessage(
+        new ApiError('http', 'Correction must relate to its assigned shift', 409),
+      ),
+    ).toBe(translate('errors.correctionOutsideShift'));
+    expect(
+      userErrorMessage(
+        new ApiError('http', 'Correction checkout cannot precede check-in', 409),
+      ),
+    ).toBe(translate('errors.correctionCheckoutBeforeCheckin'));
+    expect(
+      userErrorMessage(
+        new ApiError('http', 'Correction cannot claim future working hours', 409),
+      ),
+    ).toBe(translate('errors.correctionFutureHours'));
+    expect(
+      userErrorMessage(new ApiError('http', 'Attendance was finalized', 409)),
+    ).toBe(translate('errors.teamAttendanceFinalized'));
+    expect(
+      userErrorMessage(new ApiError('http', 'Team attendance is not editable', 409)),
+    ).toBe(translate('errors.teamAttendanceNotEditable'));
     expect(userErrorMessage(new ApiError('http', 'PRIVATE_SENTINEL', 429, undefined, 17))).toBe(
       translate('errors.rateLimitDelay', { seconds: 17 }),
     );

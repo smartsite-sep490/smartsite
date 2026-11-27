@@ -284,7 +284,10 @@ it('edits own identity despite unavailable contractor access and only reads the 
   });
   for (
     let attempt = 0;
-    !JSON.stringify(root.toJSON()).includes('W000001') && attempt < 80;
+    !(
+      JSON.stringify(root.toJSON()).includes('W000001') &&
+      JSON.stringify(root.toJSON()).includes(t('profileFace.NOT_ENROLLED'))
+    ) && attempt < 80;
     attempt++
   )
     await act(async () => {

@@ -16,7 +16,7 @@ import { command, invalid } from '../../../common/configuration/commands.js';
 import { pagination } from '../../../common/http/pagination.js';
 import type { AuthenticatedRequest } from '../../auth/auth.service.js';
 import { UserAuthGuard } from '../../auth/user-auth.guard.js';
-import { SchedulingNotificationService } from './scheduling-notification.service.js';
+import { NotificationInboxService } from './notification-inbox.service.js';
 
 class NotificationQuery {
   @IsOptional()
@@ -38,7 +38,7 @@ function emptyBody(body: unknown) {
 @Controller('me/notifications')
 export class NotificationsController {
   private readonly logger = new Logger(NotificationsController.name);
-  constructor(private readonly notifications: SchedulingNotificationService) {}
+  constructor(private readonly notifications: NotificationInboxService) {}
 
   @Get()
   list(@Req() request: AuthenticatedRequest, @Query() query: Record<string, unknown>) {

@@ -169,6 +169,8 @@ export function getSafeReasonMessage(code?: FaceGateReasonCode | string | null):
   switch (code) {
     case 'NO_SCHEDULE':
       return tr('face_gate_utils.you_have_not_been_assigned_a_work_shift_for_today');
+    case 'EXIT_RECORD_ONLY':
+      return tr('labels.EXIT_RECORD_ONLY');
     case 'MATCH_CONFIRMED':
     case 'VALID_ASSIGNMENT':
       return tr('face_gate_utils.identity_confirmed_and_active_site_assignment_verified');

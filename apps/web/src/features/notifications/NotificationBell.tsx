@@ -685,6 +685,13 @@ export function NotificationBell({
                                     </time>
                                   </div>
 
+                                  {item.processingStatus && (
+                                    <span
+                                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${item.processingStatus === 'RESOLVED' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}
+                                    >
+                                      {tr(`notifications.workflowStatus_${item.processingStatus}`)}
+                                    </span>
+                                  )}
                                   <p
                                     className="text-sm leading-relaxed text-slate-700 break-words whitespace-pre-line"
                                     title={formatNotificationDisplayMessage(item)}

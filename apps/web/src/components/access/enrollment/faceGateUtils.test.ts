@@ -8,6 +8,9 @@ import {
 } from './faceGateUtils';
 
 describe('faceGateUtils', () => {
+  it('describes exit-only authorization without an entry verification warning', () => {
+    expect(getSafeReasonMessage('EXIT_RECORD_ONLY')).toBe('Exit recorded only');
+  });
   it('explains document eligibility failures without implying that a schedule grants entry', () => {
     expect(getSafeReasonMessage('WORKER_DOCUMENTS_INVALID')).toContain(
       'Worker documents are incomplete, unapproved or expired',

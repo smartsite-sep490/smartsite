@@ -1026,11 +1026,15 @@ function ScopedSecurityGateDeskView({
                     : resultDescription}
                 </p>
               )}
-              {lastDecision?.reasonCode && !deniedScan && !qrResult && !currentAttempt && (
-                <p className="text-xs leading-relaxed text-slate-500">
-                  {getSafeReasonMessage(lastDecision.reasonCode)}
-                </p>
-              )}
+              {lastDecision?.reasonCode &&
+                !deniedScan &&
+                !qrResult &&
+                !currentAttempt &&
+                !confirmedEvent && (
+                  <p className="text-xs leading-relaxed text-slate-500">
+                    {getSafeReasonMessage(lastDecision.reasonCode)}
+                  </p>
+                )}
             </div>
 
             {/* Candidate Worker Card (if identified) */}
@@ -1048,30 +1052,16 @@ function ScopedSecurityGateDeskView({
                     {candidateWorker.displayName.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="truncate font-bold text-slate-900">
+                    <h4 className="break-words text-xl font-bold text-slate-900">
                       {candidateWorker.displayName}
                     </h4>
                     <p className="text-xs text-slate-600">
                       {tr('common.account_value', { value1: candidateWorker.username })}
                     </p>
-                    <p className="text-xs text-slate-500">
-                      {tr('common.id')}{' '}
-                      <span className="font-mono font-bold text-slate-700">
-                        {candidateWorker.externalId}
-                      </span>{' '}
-                      · {candidateWorker.contractorName}
+                    <p className="mt-1 break-words text-base font-semibold text-slate-800">
+                      {candidateWorker.contractorName}
                     </p>
                   </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs">
-                  <span className="text-slate-500 font-medium">{tr('common.shift')}</span>
-                  <span
-                    className={`font-bold ${candidateWorker.scheduleStatus === 'SCHEDULED' ? 'text-emerald-700' : 'text-slate-600'}`}
-                  >
-                    {candidateWorker.scheduleStatus
-                      ? localizedLabel(candidateWorker.scheduleStatus)
-                      : tr('common.unavailable')}
-                  </span>
                 </div>
               </div>
             )}

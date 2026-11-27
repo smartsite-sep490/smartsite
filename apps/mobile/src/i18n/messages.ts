@@ -58,7 +58,11 @@ export function localizedLabel(value: string): string {
   return i18n.exists(key) ? translate(key) : value;
 }
 
-export function notificationTitle(item: Pick<UserNotificationResponse, 'event' | 'title'>): string {
+export function notificationTitle(
+  item: Pick<UserNotificationResponse, 'event' | 'title' | 'processingStatus'>,
+): string {
+  if (item.processingStatus && ['MISSING_ATTENDANCE', 'MISSING_CHECKOUT'].includes(item.event))
+    return translate('notifications.workflowMissingTitle');
   const key = `notifications.${item.event}`;
   if (
     i18n.exists(key) &&
@@ -73,8 +77,68 @@ export function notificationTitle(item: Pick<UserNotificationResponse, 'event' |
 }
 
 export function notificationMessage(
-  item: Pick<UserNotificationResponse, 'event' | 'message' | 'workDate'>,
+  item: Pick<
+    UserNotificationResponse,
+    'event' | 'message' | 'workDate' | 'recipientRole' | 'workerName' | 'processingStatus'
+  >,
 ): string {
+  const personalize = (message: string) => {
+    if (item.recipientRole !== 'WORKER' || !item.workerName) return message;
+    for (const [prefix, replacement] of [
+      [`Công nhân ${item.workerName}`, 'Bạn'],
+      [`Worker ${item.workerName}`, 'You'],
+    ] as const)
+      if (message.startsWith(prefix)) return replacement + message.slice(prefix.length);
+    return message;
+  };
+  if (item.event === 'ABSENT' && item.workerName && item.recipientRole)
+    return translate(
+      item.recipientRole === 'WORKER'
+        ? 'notifications.workflowAbsentWorker'
+        : 'notifications.workflowAbsentRepresentative',
+      { name: item.workerName, date: item.workDate ?? '' },
+    );
+  const values = { name: item.workerName ?? '', date: item.workDate ?? '' };
+  if (
+    item.processingStatus &&
+    item.recipientRole &&
+    ['MISSING_ATTENDANCE', 'MISSING_CHECKOUT'].includes(item.event)
+  )
+    return translate(
+      `notifications.workflowMissing_${item.recipientRole}_${item.processingStatus}`,
+      values,
+    );
+  if (item.event === 'TIME_REQUESTED' && item.workerName && item.processingStatus === 'RESOLVED')
+    return translate('notifications.workflowRequestResolved', values);
+  if (
+    item.event === 'TIME_REQUESTED' &&
+    item.workerName &&
+    item.processingStatus === 'PENDING_REVIEW' &&
+    item.message.startsWith('Attendance correction requested: ')
+  )
+    return (
+      translate('notifications.workflowRequestPending', values) +
+      translate('notifications.reason', {
+        reason: item.message.slice('Attendance correction requested: '.length),
+      })
+    );
+  if (item.event === 'ASSIGNMENT_REVIEW' && item.workerName && item.recipientRole)
+    return translate(
+      item.recipientRole === 'WORKER'
+        ? 'notifications.workflowAssignmentWorker'
+        : 'notifications.workflowAssignmentRepresentative',
+      values,
+    );
+  if (item.event.startsWith('DOCUMENT_') && item.recipientRole === 'WORKER' && item.workerName) {
+    const separator = item.message.indexOf(' — ');
+    if (separator > 0 && item.message.startsWith(item.workerName + ' ('))
+      return (
+        translate('notifications.workflowYourDocument') +
+        ' ' +
+        localizeMessage(item.message.slice(separator + 3))
+      );
+  }
+
   if (item.event === 'ZONE_REVIEW_REQUIRED') {
     const match =
       /^Worker ([\s\S]+) \(([^()]*)\) has complete Gate IN\/OUT on (\d{4}-\d{2}-\d{2}),/.exec(
@@ -144,5 +208,5 @@ export function notificationMessage(
       localizeMessage(item.message.slice(0, reasonAt)) +
       translate('notifications.reason', { reason: item.message.slice(reasonAt + 9) })
     );
-  return localizeMessage(item.message);
+  return personalize(localizeMessage(item.message));
 }

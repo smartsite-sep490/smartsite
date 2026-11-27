@@ -145,6 +145,17 @@ function NotificationRow({
               </Text>
               {unread && <View style={styles.unreadDot} />}
             </View>
+            {notification.processingStatus && (
+              <Text
+                style={{
+                  color: notification.processingStatus === 'RESOLVED' ? '#047857' : '#92400E',
+                  fontSize: 12,
+                  fontWeight: '600',
+                }}
+              >
+                {t(`notifications.workflowStatus_${notification.processingStatus}`)}
+              </Text>
+            )}
             <Text numberOfLines={2} style={styles.message}>
               {notificationMessage(notification)}
             </Text>

@@ -141,7 +141,7 @@ export class TeamAttendanceService {
     const day = await m.getRepository(AttendanceDayEntity).findOneBy({
       siteId: schedule.siteId,
       workerId: schedule.workerId,
-      workDate: schedule.workDate,
+      scheduleId: schedule.id,
     });
     const [gate] = (await m.query(
       `SELECT EXISTS(SELECT 1 FROM attendance_event WHERE shift_assignment_id=$1 AND site_id=$2 AND worker_id=$3 AND kind='CHECK_IN' AND gate_event_id IS NOT NULL) AS entered`,
@@ -300,7 +300,7 @@ export class TeamAttendanceService {
           if (!target) conflict();
           // Lock the day as well so a concurrent payroll confirmation cannot race a correction.
           const day = await m.getRepository(AttendanceDayEntity).findOne({
-            where: { siteId, workerId: target.workerId, workDate: target.workDate },
+            where: { siteId, workerId: target.workerId, scheduleId: target.id },
             lock: { mode: 'pessimistic_write' },
           });
           if (row.locked || day?.status === 'CONFIRMED') conflict('Attendance was finalized');

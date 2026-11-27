@@ -501,6 +501,11 @@ export interface PpeAlertNotificationMetadata {
 }
 
 export interface UserNotificationResponse {
+  /** Optional presentation context; never used by clients to authorize actions. */
+  recipientRole?: 'WORKER' | 'CONTRACTOR_REPRESENTATIVE' | 'SITE_MANAGER' | 'SAFETY_OFFICER';
+  workerName?: string;
+  processingStatus?:
+    'ACTION_REQUIRED' | 'WAITING_WORKER' | 'PENDING_REVIEW' | 'NEEDS_RESUBMISSION' | 'RESOLVED';
   id: string;
   event:
     | import('./worker-documents-api.js').WorkerDocumentNotificationEvent

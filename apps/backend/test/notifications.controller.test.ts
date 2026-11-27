@@ -3,16 +3,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { NotificationsController } from '../src/modules/workforce/notifications/notifications.controller.js';
 import { PublicHttpException } from '../src/common/http/public-http-exception.js';
-import type { SchedulingNotificationService } from '../src/modules/workforce/notifications/scheduling-notification.service.js';
+import type { NotificationInboxService } from '../src/modules/workforce/notifications/notification-inbox.service.js';
 import type { AuthenticatedRequest } from '../src/modules/auth/auth.service.js';
-import { SchedulingNotificationService as NotificationService } from '../src/modules/workforce/notifications/scheduling-notification.service.js';
+import { NotificationInboxService as NotificationService } from '../src/modules/workforce/notifications/notification-inbox.service.js';
 import type { AuthenticatedUser } from '../src/modules/auth/auth.service.js';
 import type { DataSource } from 'typeorm';
 
 test('Notification boundary rejects unknown filters, invalid pagination and arbitrary command bodies', async () => {
-  const controller = new NotificationsController(
-    undefined as unknown as SchedulingNotificationService,
-  );
+  const controller = new NotificationsController(undefined as unknown as NotificationInboxService);
   const request = {} as AuthenticatedRequest;
   const invalid = (error: unknown) =>
     error instanceof PublicHttpException && error.publicPayload.code === 'VALIDATION_FAILED';
@@ -48,7 +46,7 @@ test('deleting read notifications delegates only the authenticated actor', async
       assert.equal(id, 'notice-1');
       return { id: 'notice-1' };
     },
-  } as unknown as SchedulingNotificationService);
+  } as unknown as NotificationInboxService);
   assert.deepEqual(
     await controller.deleteRead({ user: actor } as AuthenticatedRequest, undefined, {}),
     { deleted: 3 },
