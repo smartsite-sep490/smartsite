@@ -244,6 +244,14 @@ test('rejects wrong types, malformed identity/timestamps, REPLAY sourceKind, and
   assert.throws(() => parsePayload('{not-json'));
 });
 
+test('rejects leading BOM consistently for strings and UTF-8 byte packets', () => {
+  const text = '\uFEFF' + JSON.stringify(richMetadata());
+  const bytes = new TextEncoder().encode(text);
+  assert.throws(() => api.parseCameraOverlayMetadataPayload!(text));
+  assert.throws(() => api.parseCameraOverlayMetadataPayload!(bytes));
+  assert.throws(() => api.parseOptInCameraMediaStreamPayload!(bytes, { overlayVersion: 1 }));
+});
+
 test('rejects oversized metadata payloads and over-limit arrays cleanly', () => {
   const parse = api.parseCameraOverlayMetadataFrame!;
   const parsePayload = api.parseCameraOverlayMetadataPayload!;

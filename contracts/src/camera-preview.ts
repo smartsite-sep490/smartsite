@@ -158,7 +158,7 @@ const OVERLAY_METADATA_ALLOWED_KEYS = new Set<string>([
   'modelObjects',
 ]);
 const utf8Encoder = new TextEncoder();
-const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+const utf8Decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 /** Raw display pixels only. AI evidence stays on its original analyzed frame. */
 export type CameraMediaFrame = {
