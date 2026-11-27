@@ -15,6 +15,7 @@ export class CameraBrowserUplinkFrame1795824000000 implements MigrationInterface
         site_id uuid NOT NULL,
         lease_id uuid NOT NULL,
         owner_user_id uuid NOT NULL,
+        owner_auth_session_id uuid NOT NULL,
         client_session_id varchar(128) NOT NULL,
         device_label varchar(160),
         state varchar(16) NOT NULL CHECK (state IN ('ACTIVE', 'STOPPED')),

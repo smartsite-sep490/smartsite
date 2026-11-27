@@ -58,6 +58,7 @@ interface UplinkRow {
   site_id: string;
   lease_id: string;
   owner_user_id: string;
+  owner_auth_session_id: string;
   state: 'ACTIVE' | 'STOPPED';
   sequence: string | number;
   width: number | null;
@@ -163,8 +164,8 @@ export class CameraBrowserUplinkService {
     return Boolean(sources && Object.hasOwn(sources, externalId));
   }
 
-  private async authorize(token: string, siteId: string, write: boolean): Promise<string> {
-    const { user } = await this.auth.authenticate(token);
+  private async authorize(token: string, siteId: string, write: boolean) {
+    const { user, sessionId } = await this.auth.authenticate(token);
     if (user.mustChangePassword) {
       throw new PublicHttpException(HttpStatus.FORBIDDEN, {
         code: 'PASSWORD_CHANGE_REQUIRED',
@@ -186,7 +187,7 @@ export class CameraBrowserUplinkService {
         message: 'Forbidden',
       });
     }
-    return user.id.toLowerCase();
+    return { userId: user.id.toLowerCase(), sessionId };
   }
 
   private async requireScopedCamera(siteId: string, cameraId: string, requireActive: boolean) {
@@ -211,7 +212,7 @@ export class CameraBrowserUplinkService {
   ): Promise<BrowserCameraUplinkStatusResponse> {
     const siteId = uuid(requestedSite).toLowerCase();
     const cameraId = uuid(requestedCamera).toLowerCase();
-    const userId = await this.authorize(token, siteId, false);
+    const { userId, sessionId } = await this.authorize(token, siteId, false);
     const camera = await this.requireScopedCamera(siteId, cameraId, false);
 
     if (!this.isEnabled() || this.hasStaticPreviewSource(camera.externalId)) {
@@ -249,7 +250,7 @@ export class CameraBrowserUplinkService {
     }
 
     const rows = (await this.database.query(
-      `SELECT camera_id, site_id, lease_id, owner_user_id, state, sequence,
+      `SELECT camera_id, site_id, lease_id, owner_user_id, owner_auth_session_id, state, sequence,
               width, height, byte_length, captured_at, lease_expires_at, stopped_at
        FROM camera_browser_uplink_frame
        WHERE camera_id = $1 AND site_id = $2`,
@@ -279,7 +280,8 @@ export class CameraBrowserUplinkService {
     const active =
       row.state === 'ACTIVE' && Number.isFinite(leaseExpiresMs) && leaseExpiresMs > nowMs;
     const effectiveState = active ? 'ACTIVE' : row.state === 'ACTIVE' ? 'EXPIRED' : 'STOPPED';
-    const ownedByCurrentUser = active && row.owner_user_id.toLowerCase() === userId;
+    const ownedByCurrentUser =
+      active && row.owner_user_id === userId && row.owner_auth_session_id === sessionId;
 
     return {
       schemaVersion: BROWSER_CAMERA_UPLINK_SCHEMA_VERSION,
@@ -313,7 +315,7 @@ export class CameraBrowserUplinkService {
       invalid('Invalid browser camera uplink start command');
     }
 
-    const userId = await this.authorize(token, siteId, true);
+    const { userId, sessionId } = await this.authorize(token, siteId, true);
     const camera = await this.requireScopedCamera(siteId, cameraId, true);
     if (this.hasStaticPreviewSource(camera.externalId)) {
       conflict(
@@ -373,15 +375,16 @@ export class CameraBrowserUplinkService {
       // Atomic single-owner acquisition: rejects concurrent or existing unexpired ACTIVE leases.
       const rows = (await runner.query(
         `INSERT INTO camera_browser_uplink_frame (
-           camera_id, site_id, lease_id, owner_user_id, client_session_id,
+           camera_id, site_id, lease_id, owner_user_id, owner_auth_session_id, client_session_id,
            device_label, state, sequence, width, height, byte_length,
            captured_at, lease_expires_at, stopped_at, updated_at, jpeg_bytes
          )
-         VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', 0, NULL, NULL, NULL, NULL, $7, NULL, $8, NULL)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE', 0, NULL, NULL, NULL, NULL, $8, NULL, $9, NULL)
          ON CONFLICT (camera_id) DO UPDATE SET
            site_id = EXCLUDED.site_id,
            lease_id = EXCLUDED.lease_id,
            owner_user_id = EXCLUDED.owner_user_id,
+           owner_auth_session_id = EXCLUDED.owner_auth_session_id,
            client_session_id = EXCLUDED.client_session_id,
            device_label = EXCLUDED.device_label,
            state = 'ACTIVE',
@@ -395,13 +398,14 @@ export class CameraBrowserUplinkService {
            updated_at = EXCLUDED.updated_at,
            jpeg_bytes = NULL
          WHERE camera_browser_uplink_frame.state <> 'ACTIVE'
-            OR camera_browser_uplink_frame.lease_expires_at <= $8
+            OR camera_browser_uplink_frame.lease_expires_at <= $9
          RETURNING lease_id`,
         [
           cameraId,
           siteId,
           leaseId,
           userId,
+          sessionId,
           command.clientSessionId,
           command.deviceLabel ?? null,
           leaseExpiresAt,
@@ -515,7 +519,7 @@ export class CameraBrowserUplinkService {
       });
     }
 
-    const userId = await this.authorize(token, siteId, true);
+    const { userId, sessionId } = await this.authorize(token, siteId, true);
     const camera = await this.requireScopedCamera(siteId, cameraId, true);
     if (this.hasStaticPreviewSource(camera.externalId)) {
       conflict(
@@ -540,6 +544,7 @@ export class CameraBrowserUplinkService {
            AND site_id = $2
            AND lease_id = $3
            AND owner_user_id = $12
+           AND owner_auth_session_id = $13
            AND state = 'ACTIVE'
            AND lease_expires_at > $10
            AND sequence < $4
@@ -564,6 +569,7 @@ export class CameraBrowserUplinkService {
           nowDate,
           jpegBytes,
           userId,
+          sessionId,
         ],
       ),
     );
@@ -575,13 +581,18 @@ export class CameraBrowserUplinkService {
         );
       }
       const existingRows = (await this.database.query(
-        `SELECT lease_id, owner_user_id, state, sequence, lease_expires_at
+        `SELECT lease_id, owner_user_id, owner_auth_session_id, state, sequence, lease_expires_at
          FROM camera_browser_uplink_frame
          WHERE camera_id = $1 AND site_id = $2`,
         [cameraId, siteId],
       )) as Pick<
         UplinkRow,
-        'lease_id' | 'owner_user_id' | 'state' | 'sequence' | 'lease_expires_at'
+        | 'lease_id'
+        | 'owner_user_id'
+        | 'owner_auth_session_id'
+        | 'state'
+        | 'sequence'
+        | 'lease_expires_at'
       >[];
       const row = existingRows[0];
       if (!row) leaseNotFound();
@@ -589,7 +600,8 @@ export class CameraBrowserUplinkService {
       if (
         unexpired &&
         (row.lease_id.toLowerCase() !== metadata.leaseId.toLowerCase() ||
-          row.owner_user_id.toLowerCase() !== userId)
+          row.owner_user_id !== userId ||
+          row.owner_auth_session_id !== sessionId)
       ) {
         leaseHeld();
       }
@@ -625,7 +637,7 @@ export class CameraBrowserUplinkService {
       invalid('Invalid browser camera uplink stop command');
     }
 
-    const userId = await this.authorize(token, siteId, true);
+    const { userId, sessionId } = await this.authorize(token, siteId, true);
     await this.requireScopedCamera(siteId, cameraId, false);
 
     const nowDate = new Date(this.clock());
@@ -645,25 +657,30 @@ export class CameraBrowserUplinkService {
            AND site_id = $2
            AND lease_id = $3
            AND owner_user_id = $5
+           AND owner_auth_session_id = $6
          RETURNING lease_id, stopped_at`,
-        [cameraId, siteId, command.leaseId, nowDate, userId],
+        [cameraId, siteId, command.leaseId, nowDate, userId, sessionId],
       ),
     );
 
     if (updated.length !== 1) {
       const existingRows = (await this.database.query(
-        `SELECT lease_id, owner_user_id, state, lease_expires_at
+        `SELECT lease_id, owner_user_id, owner_auth_session_id, state, lease_expires_at
          FROM camera_browser_uplink_frame
          WHERE camera_id = $1 AND site_id = $2`,
         [cameraId, siteId],
-      )) as Pick<UplinkRow, 'lease_id' | 'owner_user_id' | 'state' | 'lease_expires_at'>[];
+      )) as Pick<
+        UplinkRow,
+        'lease_id' | 'owner_user_id' | 'owner_auth_session_id' | 'state' | 'lease_expires_at'
+      >[];
       const row = existingRows[0];
       if (!row) leaseNotFound();
       const unexpired = row.state === 'ACTIVE' && toMs(row.lease_expires_at) > nowDate.getTime();
       if (
         unexpired &&
         (row.lease_id.toLowerCase() !== command.leaseId.toLowerCase() ||
-          row.owner_user_id.toLowerCase() !== userId)
+          row.owner_user_id !== userId ||
+          row.owner_auth_session_id !== sessionId)
       ) {
         leaseHeld();
       }

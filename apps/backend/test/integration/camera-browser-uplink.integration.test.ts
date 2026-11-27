@@ -129,13 +129,14 @@ test('PostgreSQL 5433 browser camera uplink: UNLOGGED table, single-owner lease 
       ['tok-foreign', { id: foreignManager, role: UserRole.SITE_MANAGER, siteId: siteB }],
     ]);
 
+    const sessions = new Map([...tokenUsers.keys()].map((token) => [token, randomUUID()]));
     const auth = {
       authenticate: async (token: string) => {
         const entry = tokenUsers.get(token);
         if (!entry)
           throw new PublicHttpException(401, { code: 'UNAUTHORIZED', message: 'Unauthorized' });
         return {
-          sessionId: randomUUID(),
+          sessionId: sessions.get(token)!,
           clientType: 'WEB',
           user: {
             id: entry.id,
@@ -725,6 +726,38 @@ test('PostgreSQL 5433 real HTTP NestExpressApplication: CORS X-Uplink-* headers,
     assert.equal(mediaFrame.sequenceNumber, '1');
     assert.equal(mediaFrame.imageDataUrl, `data:image/jpeg;base64,${jpeg.toString('base64')}`);
 
+    // The same account on another laptop has a different authenticated session.
+    const secondLaptop = await authService.login(managerId, password, AuthClientType.WEB);
+    const secondLaptopHeaders = { Authorization: `Bearer ${secondLaptop.accessToken}` };
+    const otherStatus = await fetch(`${uplinkBase}/status`, { headers: secondLaptopHeaders });
+    assert.equal(otherStatus.status, 200);
+    const otherLease = (await otherStatus.json()) as {
+      activeLeaseId: string | null;
+      ownedByCurrentUser: boolean;
+    };
+    assert.equal(otherLease.activeLeaseId, null);
+    assert.equal(otherLease.ownedByCurrentUser, false);
+    const otherFrame = await fetch(`${uplinkBase}/frames`, {
+      method: 'POST',
+      headers: {
+        ...secondLaptopHeaders,
+        'Content-Type': 'image/jpeg',
+        'X-Uplink-Lease-Id': started.leaseId,
+        'X-Uplink-Sequence': '2',
+        'X-Uplink-Captured-At': new Date().toISOString(),
+        'X-Uplink-Width': '640',
+        'X-Uplink-Height': '480',
+      },
+      body: new Uint8Array(makeJpeg(0x43)),
+    });
+    assert.equal(otherFrame.status, 409);
+    const otherStop = await fetch(`${uplinkBase}/stop`, {
+      method: 'POST',
+      headers: { ...secondLaptopHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leaseId: started.leaseId }),
+    });
+    assert.equal(otherStop.status, 409);
+
     // 5. Stop via HTTP -> immediately clears pixels and makes preview return 503
     const stopRes = await fetch(`${uplinkBase}/stop`, {
       method: 'POST',
@@ -761,6 +794,15 @@ test('PostgreSQL 5433 real HTTP NestExpressApplication: CORS X-Uplink-* headers,
     assert.equal(uploadAfterStop.status, 409);
     const stopUploadBody = (await uploadAfterStop.json()) as { code: string };
     assert.equal(stopUploadBody.code, 'LEASE_EXPIRED');
+
+    const secondStart = await fetch(`${uplinkBase}/start`, {
+      method: 'POST',
+      headers: { ...secondLaptopHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientSessionId: 'second-laptop-tab' }),
+    });
+    assert.equal(secondStart.status, 200);
+    const secondLease = (await secondStart.json()) as { leaseId: string };
+    assert.notEqual(secondLease.leaseId, started.leaseId);
   } finally {
     if (app) await app.close();
     await owned.dispose();
@@ -793,9 +835,10 @@ test('PostgreSQL 5433 source-ownership mutual exclusion: physical binding reject
       [camPhysical, camBrowser, camRace, siteId],
     );
 
+    const managerAuthSession = randomUUID();
     const auth = {
       authenticate: async () => ({
-        sessionId: randomUUID(),
+        sessionId: managerAuthSession,
         clientType: 'WEB',
         user: {
           id: managerId,
