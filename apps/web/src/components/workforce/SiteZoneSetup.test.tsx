@@ -3,6 +3,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
+import { Toaster } from '../ui/Toaster';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { SiteZoneSetup } from './components/SiteZoneSetup';
 
@@ -36,6 +37,7 @@ function mount(locked = false) {
         })
       }
     >
+      <Toaster />
       <SiteZoneSetup
         apiUrl="https://api.example.test"
         token="token"
@@ -59,7 +61,11 @@ it('requires confirmation before deleting a Zone and allows cancellation', async
   await user.click(screen.getByRole('button', { name: 'Delete Zone' }));
   await user.click(screen.getByRole('button', { name: 'Confirm delete' }));
   expect(remove).toHaveBeenCalledWith('token', 'site', 'zone');
-  expect(await screen.findByText('Zone deleted successfully.')).toBeTruthy();
+  expect(
+    (await screen.findByText('Zone deleted successfully.'))
+      .closest('.app-toast')
+      ?.getAttribute('data-type'),
+  ).toBe('success');
 });
 
 it('unifies Create and Edit form UI, allows renaming a locked Zone while disabling policy edits', async () => {

@@ -17,7 +17,7 @@ import {
   IconShield,
   IconTrash,
 } from '../../icons';
-import { Toast, ToastContainer, useToast } from '../../ui';
+import { toast } from '../../ui';
 
 export function SiteZoneSetup({
   apiUrl,
@@ -52,7 +52,6 @@ export function SiteZoneSetup({
   const [vest, setVest] = useState(false);
   const [editing, setEditing] = useState<ZoneResponse | null>(null);
   const [deleting, setDeleting] = useState<ZoneResponse | null>(null);
-  const { toast, showToast, hideToast } = useToast();
 
   const refresh = () =>
     cache.invalidateQueries({ predicate: (query) => query.queryKey.includes(siteId) });
@@ -86,7 +85,7 @@ export function SiteZoneSetup({
     mutationFn: (zone: ZoneResponse) => client.deleteZone(token, siteId, zone.id),
     onSuccess: () => {
       setDeleting(null);
-      showToast(tr('zone_actions.deleted'));
+      toast.add({ title: tr('zone_actions.deleted'), type: 'success', timeout: 5000 });
       void refresh();
     },
   });
@@ -127,7 +126,7 @@ export function SiteZoneSetup({
       setHardHat(false);
       setVest(false);
       create.reset();
-      showToast(tr('common.zone_updated'));
+      toast.add({ title: tr('common.zone_updated'), type: 'success', timeout: 5000 });
       void refresh();
     },
   });
@@ -545,12 +544,6 @@ export function SiteZoneSetup({
           </ul>
         )}
       </section>
-
-      {toast && (
-        <ToastContainer>
-          <Toast message={toast.message} type={toast.type} onClose={hideToast} />
-        </ToastContainer>
-      )}
     </div>
   );
 }

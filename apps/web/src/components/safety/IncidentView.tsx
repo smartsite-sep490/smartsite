@@ -1,3 +1,4 @@
+import { FormField } from './FormField';
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -373,14 +374,6 @@ export function IncidentView(p: IncidentViewProps) {
         </div>
       )}
       {!editor && <RequestError error={mutation.error} retry={reload} />}
-      {mutation.isSuccess && (
-        <p
-          role="status"
-          className="rounded-lg bg-[var(--semantic-green-bg)] p-3 text-sm text-[var(--semantic-green-text)]"
-        >
-          {tr('common.change_recorded')}
-        </p>
-      )}
       <div
         className={
           (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
@@ -812,7 +805,6 @@ export function IncidentView(p: IncidentViewProps) {
               disabled={
                 detail.isFetching || detail.isError || !safety || current.status === 'CLOSED'
               }
-              reload={reload}
               onPendingChange={setHandoverPending}
               onDone={() => {
                 setEditor(undefined);
@@ -938,8 +930,7 @@ export function IncidentView(p: IncidentViewProps) {
                     required
                     type="textarea"
                   />
-                  <label className="block text-sm font-semibold">
-                    {tr('common.severity')}
+                  <FormField name="severity" label={tr('common.severity')} required>
                     <SmartNativeSelect className={fieldClass} name="severity">
                       {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((s) => (
                         <option key={s} value={s}>
@@ -947,7 +938,7 @@ export function IncidentView(p: IncidentViewProps) {
                         </option>
                       ))}
                     </SmartNativeSelect>
-                  </label>
+                  </FormField>
                   <Field
                     name="occurredAt"
                     label={tr('incident_view.occurred_at_local_time')}
@@ -957,9 +948,9 @@ export function IncidentView(p: IncidentViewProps) {
                   />
                   <details className="text-sm">
                     <summary className="cursor-pointer font-semibold">
-                      {tr('common.optional_references')}
+                      {tr('safetyForm.references')}
                     </summary>
-                    <Field name="zoneId" label={tr('common.zone_id_optional')} />
+                    <Field name="zoneId" label={tr('safetyForm.zone')} />
                   </details>
                   <ConfirmedAlerts
                     p={p}
@@ -1025,18 +1016,13 @@ export function IncidentView(p: IncidentViewProps) {
                     type="textarea"
                     required
                   />
-                  <Field
-                    name="dueAt"
-                    label={tr('incident_view.deadline_optional_local_time')}
-                    type="datetime-local"
-                  />
+                  <Field name="dueAt" label={tr('safetyForm.deadline')} type="datetime-local" />
                 </>
               )}
               {editor.op === 'submit' && <ResultFields onFileChange={setResultFile} />}
               {editor.op === 'review' && (
                 <>
-                  <label className="block text-sm font-semibold">
-                    {tr('incident_view.review_decision')}
+                  <FormField name="decision" label={tr('incident_view.review_decision')} required>
                     <SmartNativeSelect
                       className={fieldClass}
                       name="decision"
@@ -1048,7 +1034,7 @@ export function IncidentView(p: IncidentViewProps) {
                       </option>
                       <option value="REJECTED">{tr('incident_view.return_for_rework')}</option>
                     </SmartNativeSelect>
-                  </label>
+                  </FormField>
                   <Field
                     name="reason"
                     label={tr('common.recording_note')}
@@ -1394,14 +1380,12 @@ function IncidentHandoverForm({
   incident,
   disabled,
   onDone,
-  reload,
   onPendingChange,
 }: {
   p: WorkflowProps;
   incident: IncidentDetailResponse;
   disabled: boolean;
   onDone: () => void;
-  reload: () => void;
   onPendingChange: (pending: boolean) => void;
 }) {
   const cache = useQueryClient();
@@ -1464,6 +1448,7 @@ function IncidentHandoverForm({
   };
   return (
     <CommandForm
+      error={error}
       pending={pending}
       disabled={disabled}
       label={
@@ -1528,6 +1513,7 @@ function IncidentHandoverForm({
           throw new Error(tr('workflowUi.responsibilityRequired'));
         confirmationAttempt.current = attempt;
         confirmation.mutate({
+          feedback: only,
           fingerprint: JSON.stringify({
             id: incident.id,
             operation: 'responsibility',
@@ -1565,10 +1551,6 @@ function IncidentHandoverForm({
       {(confirmationUncertain || assignmentUncertain) && (
         <p className="text-sm">{tr('workflowUi.retrySameRequest')}</p>
       )}
-      <RequestError
-        error={error}
-        retry={error instanceof ApiError && error.status === 409 ? reload : undefined}
-      />
       <ResponsibilityFields
         p={p}
         incident={incident}
@@ -1637,8 +1619,7 @@ function ResponsibilityFields({
   return (
     <>
       <fieldset className="contents" disabled={responsibilityLocked}>
-        <label className="block text-sm font-semibold">
-          {tr('common.responsible_contractor')}
+        <FormField name="contractorId" label={tr('common.responsible_contractor')} required>
           <SmartNativeSelect
             className={fieldClass}
             name="contractorId"
@@ -1662,7 +1643,7 @@ function ResponsibilityFields({
               </option>
             ))}
           </SmartNativeSelect>
-        </label>
+        </FormField>
         {contractors.isPending && <p>{tr('common.loading_contractors')}</p>}
         <RequestError error={contractors.error} retry={() => void contractors.refetch()} />
         {contractors.data && contractors.data.total > 20 && (
@@ -1674,9 +1655,7 @@ function ResponsibilityFields({
         )}
         {contractorId && (
           <fieldset className="space-y-2">
-            <legend className="text-sm font-semibold">
-              {tr('incident_view.confirmed_worker_subjects_optional')}
-            </legend>
+            <legend className="text-sm font-semibold">{tr('safetyForm.workers')}</legend>
             <p className="text-sm">
               {tr(
                 'incident_view.select_only_workers_you_have_verified_leave_empty_when_identity_is_unknown_camera',
@@ -1738,11 +1717,7 @@ function ResponsibilityFields({
             type="textarea"
             required
           />
-          <Field
-            name="dueAt"
-            label={tr('incident_view.deadline_optional_local_time')}
-            type="datetime-local"
-          />
+          <Field name="dueAt" label={tr('safetyForm.deadline')} type="datetime-local" />
           {!creating && (
             <p className="text-sm">
               {tr(

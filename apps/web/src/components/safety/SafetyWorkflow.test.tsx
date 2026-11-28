@@ -204,7 +204,7 @@ it('Contractor representative can resubmit a rejected action while retaining the
     },
   );
   const validPhoto = new File(['photo'], 'result.jpg', { type: 'image/jpeg' });
-  const photoInput = screen.getByLabelText('Photo (optional JPEG, max 1 MiB)');
+  const photoInput = screen.getByLabelText('Photo');
   fireEvent.change(photoInput, { target: { files: [validPhoto] } });
   fireEvent.change(photoInput, {
     target: { files: [new File(['pdf'], 'wrong.pdf', { type: 'application/pdf' })] },
@@ -613,7 +613,7 @@ it('Result photo preview rejects oversized files and Remove photo clears the sub
       <button>Send</button>
     </form>,
   );
-  const input = screen.getByLabelText('Photo (optional JPEG, max 1 MiB)');
+  const input = screen.getByLabelText('Photo');
   fireEvent.change(input, {
     target: { files: [new File(['abc'], 'result.jpg', { type: 'image/jpeg' })] },
   });
@@ -726,7 +726,7 @@ it('Confirming a filtered alert keeps its detail available for creating an Incid
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'safety' } });
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Fake123!' } });
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-  fireEvent.change(await screen.findByLabelText('Decision reason (minimum 5 characters)'), {
+  fireEvent.change(await screen.findByLabelText('Decision reason'), {
     target: { value: 'Synthetic confirmed evidence' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Confirm violation' }));

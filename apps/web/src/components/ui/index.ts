@@ -7,5 +7,5 @@ export * from './Card';
 export * from './Alert';
 export * from './SmartFormControls';
 export * from './SmartNativeSelect';
-export * from './Toast';
-export * from './useToast';
+export { Toaster } from './Toaster';
+export { toast } from './toast-manager';

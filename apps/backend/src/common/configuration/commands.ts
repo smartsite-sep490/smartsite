@@ -2,10 +2,18 @@ import { HttpStatus } from '@nestjs/common';
 import { plainToInstance, type ClassConstructor } from 'class-transformer';
 import { isUUID, validateSync } from 'class-validator';
 import { QueryFailedError } from 'typeorm';
-import { PublicHttpException } from '../http/public-http-exception.js';
+import { PublicHttpException, type PublicValidationIssue } from '../http/public-http-exception.js';
+import { validationIssues } from '../http/validation-issues.js';
 
-export function invalid(message = 'Invalid configuration input'): never {
-  throw new PublicHttpException(HttpStatus.BAD_REQUEST, { code: 'VALIDATION_FAILED', message });
+export function invalid(
+  message = 'Invalid configuration input',
+  issues?: PublicValidationIssue[],
+): never {
+  throw new PublicHttpException(HttpStatus.BAD_REQUEST, {
+    code: 'VALIDATION_FAILED',
+    message,
+    ...(issues ? { issues } : {}),
+  });
 }
 
 export function missing(): never {
@@ -15,15 +23,22 @@ export function missing(): never {
   });
 }
 
-export function conflict(message = 'Configuration conflict'): never {
-  throw new PublicHttpException(HttpStatus.CONFLICT, { code: 'CONFLICT', message });
+export function conflict(
+  message = 'Configuration conflict',
+  issues?: PublicValidationIssue[],
+): never {
+  throw new PublicHttpException(HttpStatus.CONFLICT, {
+    code: 'CONFLICT',
+    message,
+    ...(issues ? { issues } : {}),
+  });
 }
 
 export function command<T extends object>(type: ClassConstructor<T>, input: unknown): T {
   if (!input || typeof input !== 'object' || Array.isArray(input)) invalid();
   const value = plainToInstance(type, input, { enableImplicitConversion: false });
   const errors = validateSync(value, { whitelist: true, forbidNonWhitelisted: true });
-  if (errors.length) invalid();
+  if (errors.length) invalid('Invalid configuration input', validationIssues(errors));
   return value;
 }
 

@@ -44,4 +44,4 @@ Neon/R2 đã smoke bằng một JPEG tổng hợp qua Report handling outcome tr
 
 ## Checklist evidence
 
-Checklist dùng cùng adapter/storage metadata với Incident: JPEG/PNG/PDF tối đa 5 MiB/file, 3 file/mục, 20 MiB/lần nộp; Incident/SafetyTask vẫn JPEG 1 MiB. PDF tải qua Backend có authentication/no-store/nosniff, không public bucket. Xem kịch bản trong [Safety workflow](../../contracts/mf08-safety-workflow.md#test-tay-trên-web).
+Checklist dùng cùng adapter/storage metadata với Incident: JPEG/PNG/PDF tối đa 5 MiB/file, 3 file/mục, 20 MiB/lần nộp; Incident/SafetyTask vẫn JPEG 1 MiB. PDF tải qua Backend có authentication/no-store/nosniff, không public bucket.

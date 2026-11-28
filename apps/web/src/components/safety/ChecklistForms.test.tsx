@@ -137,6 +137,63 @@ it('switching a template does not overwrite edited criteria until replacement is
   );
 });
 
+it('shows an invalid work window at the end time without submitting', async () => {
+  const { submit } = mountCreate();
+  await screen.findByRole('option', { name: 'rep' });
+  fireEvent.change(screen.getByLabelText('Work description'), { target: { value: 'Prepare PPE' } });
+  fireEvent.change(screen.getByLabelText('Work starts'), { target: { value: '2026-10-20T10:00' } });
+  fireEvent.change(screen.getByLabelText('Work ends'), { target: { value: '2026-10-20T09:00' } });
+  fireEvent.submit(screen.getByLabelText('Work ends').closest('form')!);
+  expect(submit).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Work ends').getAttribute('aria-invalid')).toBe('true');
+  expect(screen.getByText('End time must be after start time.')).not.toBeNull();
+  fireEvent.change(screen.getByLabelText('Work ends'), { target: { value: '2026-10-20T09:30' } });
+  expect(screen.getByLabelText('Work ends').getAttribute('aria-invalid')).toBe('true');
+  fireEvent.change(screen.getByLabelText('Work ends'), { target: { value: '2026-10-20T11:00' } });
+  expect(screen.getByLabelText('Work ends').getAttribute('aria-invalid')).toBeNull();
+});
+
+it('marks the Zone when its grant does not cover the entire work window', async () => {
+  const { submit } = mountCreate();
+  await screen.findByRole('option', { name: 'rep' });
+  fireEvent.change(screen.getByLabelText('Work description'), { target: { value: 'Prepare PPE' } });
+  fireEvent.change(screen.getByLabelText('Work starts'), { target: { value: '2026-12-31T08:00' } });
+  fireEvent.change(screen.getByLabelText('Work ends'), { target: { value: '2027-01-02T17:00' } });
+  fireEvent.submit(screen.getByLabelText('Work ends').closest('form')!);
+  expect(submit).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Zone').getAttribute('aria-invalid')).toBe('true');
+});
+
+it('permits a manually entered window when the team has no scheduled workers', async () => {
+  const { submit } = mountCreate(['zone'], ['rep'], 0);
+  await screen.findByRole('option', { name: 'rep' });
+  fireEvent.change(screen.getByLabelText('Work description'), { target: { value: 'Prepare PPE' } });
+  fireEvent.change(screen.getByLabelText('Work starts'), { target: { value: '2026-10-20T08:00' } });
+  fireEvent.change(screen.getByLabelText('Work ends'), { target: { value: '2026-10-20T17:00' } });
+  fireEvent.submit(screen.getByLabelText('Work ends').closest('form')!);
+  expect(submit).toHaveBeenCalledTimes(1);
+});
+
+it('shows missing Pass evidence at its criterion and clears it after a valid attachment', () => {
+  const submit = vi.fn();
+  render(
+    <ReportChecklistForm
+      items={[{ id: 'item', position: 0, text: 'Tools', evidenceRequired: true }]}
+      pending={false}
+      onSubmit={submit}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText('Result: Tools'), { target: { value: 'PASS' } });
+  fireEvent.submit(screen.getByRole('button', { name: 'Submit checklist' }).closest('form')!);
+  expect(submit).not.toHaveBeenCalled();
+  const evidence = screen.getByLabelText('Evidence: Tools');
+  expect(evidence.getAttribute('aria-invalid')).toBe('true');
+  fireEvent.change(evidence, {
+    target: { files: [new File(['proof'], 'proof.pdf', { type: 'application/pdf' })] },
+  });
+  expect(evidence.getAttribute('aria-invalid')).toBeNull();
+});
+
 it('reporting shows progress and only requires explanations and evidence where applicable', () => {
   const submit = vi.fn();
   render(

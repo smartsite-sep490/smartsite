@@ -1,16 +1,19 @@
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { userErrorMessage } from '../../i18n/messages';
+import { FormField } from './FormField';
+import { WorkflowReload, WorkflowServerError } from './workflow-validation';
+import { attachToastHost } from '../ui/toast-manager';
+import { wasWorkflowNotified } from './workflow-feedback';
+export { WorkflowCommandForm as CommandForm } from './WorkflowCommandForm';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
 import {
   type WorkflowProps,
   fieldClass,
   buttonClass,
-  primaryClass,
   cardClass,
   date,
   label,
-  formValues,
   photo,
 } from './safety-workflow';
 import {
@@ -42,8 +45,7 @@ export function Field({
   useTranslation();
 
   return (
-    <label className="block text-sm font-semibold">
-      {caption}
+    <FormField name={name} label={caption} required={required}>
       {type === 'textarea' ? (
         <textarea
           className={fieldClass + ' min-h-28 resize-y'}
@@ -58,12 +60,15 @@ export function Field({
           className={fieldClass}
           name={name}
           type={type}
+          data-validation={
+            ['zoneId', 'sourceAlertId', 'sourceIncidentId'].includes(name) ? 'uuid' : undefined
+          }
           required={required}
           maxLength={maxLength}
           defaultValue={defaultValue}
         />
       )}
-    </label>
+    </FormField>
   );
 }
 export function ResultFields({ onFileChange }: { onFileChange?: (file?: File) => void } = {}) {
@@ -80,8 +85,12 @@ export function ResultFields({ onFileChange }: { onFileChange?: (file?: File) =>
         type="textarea"
         required
       />
-      <label className="block text-sm font-semibold">
-        {tr('safety_workflow_ui.photo_optional_jpeg_max_1_mib')}
+      <FormField
+        name="file"
+        label={tr('safetyForm.photo')}
+        hint={tr('safetyForm.photoHint')}
+        error={error ? userErrorMessage(error) : undefined}
+      >
         <input
           ref={input}
           className={fieldClass}
@@ -105,8 +114,7 @@ export function ResultFields({ onFileChange }: { onFileChange?: (file?: File) =>
             }
           }}
         />
-      </label>
-      <RequestError error={error} />
+      </FormField>
       {file && (
         <div className="space-y-2 rounded-lg bg-[var(--surface-bone)] p-3">
           <p className="break-words text-sm">
@@ -136,7 +144,11 @@ export function ResultFields({ onFileChange }: { onFileChange?: (file?: File) =>
 export function RequestError({ error, retry }: { error: unknown; retry?: () => void }) {
   useTranslation();
 
-  if (!error) return null;
+  if (
+    !error ||
+    (wasWorkflowNotified(error) && !(error instanceof ApiError && error.status === 409))
+  )
+    return null;
   const conflict = error instanceof ApiError && error.status === 409;
   const message =
     error instanceof ApiError
@@ -202,7 +214,9 @@ export function Dialog({
     const opener = document.activeElement as HTMLElement | null;
     if (typeof dialog.showModal === 'function') dialog.showModal();
     else dialog.setAttribute('open', '');
+    const detachToastHost = attachToastHost(dialog);
     return () => {
+      detachToastHost();
       if (dialog.open && typeof dialog.close === 'function') dialog.close();
       if (opener?.isConnected) opener.focus();
     };
@@ -257,8 +271,9 @@ export function Dialog({
         </button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-5">
-        <RequestError error={error} retry={reload} />
-        {children}
+        <WorkflowServerError.Provider value={error}>
+          <WorkflowReload.Provider value={reload}>{children}</WorkflowReload.Provider>
+        </WorkflowServerError.Provider>
       </div>
     </dialog>
   );
@@ -311,11 +326,14 @@ export function Assignee({
         : '');
   return (
     <div>
-      <label className="block text-sm font-semibold">
-        {onChange ? tr('common.assigned_to') : tr('common.assignee')}
+      <FormField
+        name={onChange ? 'assigneeFilter' : 'assignedTo'}
+        label={onChange ? tr('common.assigned_to') : tr('common.assignee')}
+        required={!onChange}
+      >
         <SmartNativeSelect
           className={fieldClass}
-          name={onChange ? undefined : 'assignedTo'}
+          name={onChange ? 'assigneeFilter' : 'assignedTo'}
           required={!onChange}
           value={selected}
           onChange={(e) => {
@@ -345,7 +363,7 @@ export function Assignee({
             </option>
           ))}
         </SmartNativeSelect>
-      </label>
+      </FormField>
       {query.isPending && (
         <p className="mt-2 text-xs text-[var(--text-secondary)]">
           {tr('common.loading_assignees')}
@@ -585,58 +603,6 @@ export function BlobImage({ blob, alt }: { blob: Blob; alt: string }) {
     />
   );
 }
-export function CommandForm({
-  children,
-  onSubmit,
-  pending,
-  label: caption,
-  disabled = false,
-  secondaryAction,
-}: {
-  children: ReactNode;
-  onSubmit: (form: FormData) => void;
-  pending: boolean;
-  label: string;
-  disabled?: boolean;
-  secondaryAction?: ReactNode;
-}) {
-  useTranslation();
-
-  const [error, setError] = useState<unknown>();
-  return (
-    <form
-      className="flex min-h-0 flex-1 flex-col"
-      onSubmit={(e) => {
-        const form = formValues(e);
-        const submitter = (e.nativeEvent as SubmitEvent).submitter;
-        if (submitter instanceof HTMLButtonElement && submitter.name)
-          form.set(submitter.name, submitter.value);
-        try {
-          onSubmit(form);
-          setError(undefined);
-        } catch (error) {
-          setError(error);
-        }
-      }}
-    >
-      {/* Keep native disabling without fieldset's anonymous box expanding the scroll area. */}
-      <fieldset className="contents" disabled={pending || disabled}>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="workflow-form-fields min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-1">
-            {children}
-          </div>
-          <div className="flex flex-wrap gap-2 shrink-0 border-t border-[var(--border)] bg-white pt-4 mt-4">
-            <button className={primaryClass} type="submit">
-              {pending ? tr('common.saving') : caption}
-            </button>
-            {secondaryAction}
-          </div>
-        </div>
-      </fieldset>
-      <RequestError error={error} />
-    </form>
-  );
-}
 export function ConfirmedAlerts({
   p,
   initialAlertId,
@@ -670,9 +636,7 @@ export function ConfirmedAlerts({
     setSelected(selected.filter((id) => !linkedIds.includes(id)));
   return (
     <fieldset className="space-y-2">
-      <legend className="mb-2 text-sm font-semibold">
-        {tr('common.confirmed_alerts_optional')}
-      </legend>
+      <legend className="mb-2 text-sm font-semibold">{tr('safetyForm.alerts')}</legend>
       {selected.map((id) => (
         <input key={id} type="hidden" name="alertIds" value={id} />
       ))}

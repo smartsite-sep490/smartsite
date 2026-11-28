@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { Toaster } from '../ui/Toaster';
 import { SmartSiteManagementClient, type AccountResponse } from '@smartsite/api-client';
 import { SiteSetupView } from './components/SiteSetupView';
 import { gateFixture, mockGateCatalog } from '../access/test-gate-catalog';
@@ -90,6 +91,7 @@ function setup(
   });
   render(
     <QueryClientProvider client={cache}>
+      <Toaster />
       <SiteSetupView apiUrl="https://api.example.test" />
     </QueryClientProvider>,
   );
@@ -231,6 +233,11 @@ it('confirms and revokes the selected Site Manager, then allows a new assignment
   expect(revoke).not.toHaveBeenCalled();
   await user.click(screen.getByRole('button', { name: 'Confirm revoke' }));
   await waitFor(() => expect(revoke).toHaveBeenCalledWith('admin-token', 'old-manager', 'site-a'));
+  expect(
+    (await screen.findByText('Site Manager access has been revoked.'))
+      .closest('.app-toast')
+      ?.getAttribute('data-type'),
+  ).toBe('success');
   await screen.findByText('Not assigned yet');
   cache.clear();
 });

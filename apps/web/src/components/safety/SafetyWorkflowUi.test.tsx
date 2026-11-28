@@ -72,7 +72,7 @@ it('invalid replacement evidence preserves the previously selected result file',
   );
   const changed = vi.fn();
   render(<ResultFields onFileChange={changed} />);
-  const input = screen.getByLabelText('Photo (optional JPEG, max 1 MiB)');
+  const input = screen.getByLabelText('Photo');
   const valid = new File(['photo'], 'valid.jpg', { type: 'image/jpeg' });
   fireEvent.change(input, { target: { files: [valid] } });
   fireEvent.change(input, {

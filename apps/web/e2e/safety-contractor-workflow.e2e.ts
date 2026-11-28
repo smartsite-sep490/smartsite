@@ -1,6 +1,73 @@
 import { test, expect, type Page } from '@playwright/test';
 import { createSafetyFixture, siteId } from './safety-workflow-fixture';
 
+for (const width of [1366, 390])
+  test(`field validation and operation toast in the incident dialog at ${width}`, async ({
+    page,
+  }) => {
+    const fixture = createSafetyFixture();
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await install(page, fixture);
+    let fail = true;
+    await page.route('**/api/v1/**/incidents', async (route) => {
+      if (route.request().method() !== 'POST' || !fail) return route.fallback();
+      fail = false;
+      await route.fulfill({
+        status: 503,
+        json: { message: 'PRIVATE_DIAGNOSTIC' },
+        headers: { 'access-control-allow-origin': 'http://127.0.0.1:5181' },
+      });
+    });
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 768 });
+    await page.goto(`/incidents?tab=incidents&siteId=${siteId}`);
+    await expect(page).toHaveTitle(/SmartSite/i);
+    await page.getByRole('button', { name: 'New incident', exact: true }).click();
+    const dialog = page.locator('dialog[open]');
+    const submit = dialog.getByRole('button', { name: 'Create incident', exact: true });
+    await submit.click();
+    const title = dialog.getByLabel('Title', { exact: true });
+    await expect(title).toHaveAttribute('aria-invalid', 'true');
+    await expect(title).toBeFocused();
+    await expect(title.locator('..').locator('label')).toContainText('*');
+    expect(
+      fixture.requests.filter(
+        (request) => request.method === 'POST' && request.path.endsWith('/incidents'),
+      ),
+    ).toHaveLength(0);
+    await page.screenshot({ path: `D:/SEP490/.validation-tools/safety-inline-${width}.png` });
+    await title.fill('Synthetic safety preparation');
+    await dialog
+      .getByLabel('Description', { exact: true })
+      .fill('Prepare the protective equipment and document the result.');
+    await submit.click();
+    const toast = dialog.locator('.app-toast');
+    await expect(toast).toHaveCount(1);
+    await expect(toast).toBeVisible();
+    await expect(toast).toHaveCSS('background-color', 'rgb(254, 226, 226)');
+    await expect(toast).toHaveCSS('color', 'rgb(185, 28, 28)');
+    await expect(toast).not.toContainText('PRIVATE_DIAGNOSTIC');
+    expect(
+      await toast.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth && box.bottom <= innerHeight;
+      }),
+    ).toBe(true);
+    await page.screenshot({ path: `D:/SEP490/.validation-tools/app-toast-${width}.png` });
+    await toast.getByRole('button', { name: 'Close', exact: true, includeHidden: true }).click();
+    await submit.click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.locator('.app-toast')).toContainText('Saved successfully.');
+    await expect(page.locator('.app-toast')).toHaveCSS('background-color', 'rgb(220, 252, 231)');
+    await expect(page.locator('.app-toast')).toHaveCSS('color', 'rgb(21, 128, 61)');
+    await page.screenshot({ path: `D:/SEP490/.validation-tools/app-toast-success-${width}.png` });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    expect(errors).toEqual([]);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+  });
+
 async function install(
   page: Page,
   fixture: ReturnType<typeof createSafetyFixture>,
@@ -200,7 +267,7 @@ test('native Safety handover menu is clickable and the contractor can submit, re
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto(`/incidents?tab=incidents&siteId=${siteId}&incidentId=${incident.id}`);
   await page.getByRole('button', { name: 'Hand over to contractor', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.locator('dialog[open]');
   await dialog.locator('[data-value="Choose a contractor representative"]').click();
   const option = page
     .getByRole('listbox')
@@ -230,9 +297,9 @@ test('native Safety handover menu is clickable and the contractor can submit, re
   );
   await expect(page.getByRole('button', { name: 'Assigned work', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Start handling', exact: true }).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.locator('dialog[open]')).toBeVisible();
   await page.getByLabel('Result description', { exact: true }).fill('Synthetic repair result');
-  await page.getByLabel('Photo (optional JPEG, max 1 MiB)', { exact: true }).setInputFiles({
+  await page.getByLabel('Photo', { exact: true }).setInputFiles({
     name: 'synthetic.jpg',
     mimeType: 'image/jpeg',
     buffer: Buffer.from([255, 216, 255, 224, 0, 2, 255, 217]),
@@ -396,7 +463,7 @@ for (const width of [1366, 390])
     await page.setViewportSize({ width, height: width === 390 ? 844 : 768 });
     await page.goto(`/incidents?tab=incidents&siteId=${siteId}`);
     await page.getByRole('button', { name: 'New incident', exact: true }).click();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.locator('dialog[open]');
     const submit = dialog.getByRole('button', { name: 'Create incident', exact: true });
     await expect(submit).toBeVisible();
     const box = await submit.boundingBox();
@@ -458,7 +525,7 @@ for (const width of [1920, 1366, 1024]) {
     await expect(checklistsTab).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('button', { name: 'Inspect the synthetic barrier' }).click();
     await page.getByRole('button', { name: 'Start checklist', exact: true }).click();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.locator('dialog[open]');
     await expect(dialog).toBeVisible();
     const fields = dialog.locator('.workflow-form-fields');
     await dialog.getByRole('button', { name: 'Add note', exact: true }).click();
@@ -501,7 +568,7 @@ test('Safety confirms responsibility alone without filling assignment fields', a
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto(`/incidents?tab=incidents&siteId=${siteId}&incidentId=${incident.id}`);
   await page.getByRole('button', { name: 'Confirm and hand over', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.locator('dialog[open]');
   await dialog.locator('[data-value="Choose a contractor participating in this Site"]').click();
   await page
     .getByRole('listbox')
@@ -546,7 +613,7 @@ test('Safety keeps a partial handover open and retries assignment only', async (
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto(`/incidents?tab=incidents&siteId=${siteId}&incidentId=${incident.id}`);
   await page.getByRole('button', { name: 'Confirm and hand over', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.locator('dialog[open]');
   await dialog.locator('[data-value="Choose a contractor participating in this Site"]').click();
   await page
     .getByRole('listbox')
