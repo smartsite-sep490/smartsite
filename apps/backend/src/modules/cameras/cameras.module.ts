@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { CameraSourceController } from './camera-source.controller.js';
 import { CameraSourceService } from './camera-source.service.js';
+import { CameraBrowserUplinkController } from './camera-browser-uplink.controller.js';
+import { CameraBrowserUplinkService } from './camera-browser-uplink.service.js';
 import { CameraPreviewController } from './camera-preview.controller.js';
 import { CameraPreviewService } from './camera-preview.service.js';
 import { DatabaseModule } from '../../database/database.module.js';
@@ -26,6 +28,7 @@ import { CameraApplicationStatusService } from './camera-application-status.serv
   imports: [DatabaseModule, SitesModule, ZonesModule, AuthModule],
   controllers: [
     CameraSourceController,
+    CameraBrowserUplinkController,
     CameraPreviewController,
     CameraApplicationStatusController,
     CamerasController,
@@ -35,6 +38,7 @@ import { CameraApplicationStatusService } from './camera-application-status.serv
   ],
   providers: [
     CameraSourceService,
+    CameraBrowserUplinkService,
     CameraPpePolicyRuntime,
     CameraPreviewService,
     CameraApplicationStatusService,

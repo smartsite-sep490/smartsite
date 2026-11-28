@@ -321,6 +321,10 @@ export const backendEnvironmentSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((v) => v === 'true'),
+    BROWSER_CAMERA_UPLINK_ENABLED: z
+      .enum(['false', 'true'])
+      .default('false')
+      .transform((v) => v === 'true'),
     STORAGE_PROVIDER: z.enum(['LOCAL', 'R2']).default('LOCAL'),
     STORAGE_LOCAL_ROOT: z
       .string()

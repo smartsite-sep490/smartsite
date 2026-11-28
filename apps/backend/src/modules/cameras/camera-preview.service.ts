@@ -10,6 +10,7 @@ import { CameraStatus } from '../../database/entities/enums.js';
 import { AuthService } from '../auth/auth.service.js';
 import { assertCameraMonitoringSiteAccess } from './camera-monitoring-access.js';
 import { CameraConfigurationService } from './camera-configuration.service.js';
+import { CameraBrowserUplinkService } from './camera-browser-uplink.service.js';
 
 export const CAMERA_PREVIEW_FETCH = Symbol('CAMERA_PREVIEW_FETCH');
 const unavailable = (): never => {
@@ -70,6 +71,8 @@ export class CameraPreviewService implements OnModuleDestroy {
     @Optional()
     @Inject(CAMERA_PREVIEW_FETCH)
     private readonly fetcher: typeof fetch = globalThis.fetch,
+    @Optional()
+    private readonly browserUplink?: CameraBrowserUplinkService,
   ) {}
 
   onModuleDestroy(): void {
@@ -103,7 +106,13 @@ export class CameraPreviewService implements OnModuleDestroy {
     await this.authorize(token, siteId);
     const camera = await this.camera(siteId, cameraId);
     const sources = this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true });
-    if (!Object.hasOwn(sources, camera.externalId)) unavailable();
+    if (!Object.hasOwn(sources, camera.externalId)) {
+      if (this.browserUplink?.isEnabled()) {
+        yield* this.videoFromBrowserUplink(token, siteId, cameraId, camera.externalId, signal);
+        return;
+      }
+      unavailable();
+    }
     if (this.shuttingDown) unavailable();
     const origin = sources[camera.externalId]!;
     const count = this.mediaViewers.get(cameraId) ?? 0;
@@ -223,6 +232,117 @@ export class CameraPreviewService implements OnModuleDestroy {
     }
   }
 
+  private async *videoFromBrowserUplink(
+    token: string,
+    siteId: string,
+    cameraId: string,
+    externalId: string,
+    signal?: AbortSignal,
+  ): AsyncGenerator<CameraMediaFrame> {
+    const uplink = this.browserUplink;
+    if (!uplink || this.shuttingDown) return unavailable();
+    const count = this.mediaViewers.get(cameraId) ?? 0;
+    if (count >= 2 || [...this.mediaViewers.values()].reduce((a, b) => a + b, 0) >= 4) {
+      throw new PublicHttpException(HttpStatus.TOO_MANY_REQUESTS, {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Camera stream viewer limit reached',
+      });
+    }
+    this.mediaViewers.set(cameraId, count + 1);
+    const controller = new AbortController();
+    this.activeMediaControllers.add(controller);
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+    const deadline = setTimeout(abort, 600_000);
+    try {
+      const first = await uplink.readFreshFrame(siteId, cameraId);
+      if (!first || controller.signal.aborted) return unavailable();
+      await this.authorize(token, siteId);
+      const initialCamera = await this.camera(siteId, cameraId);
+      await this.authorize(token, siteId);
+      if (
+        initialCamera.externalId !== externalId ||
+        Object.hasOwn(
+          this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true }),
+          initialCamera.externalId,
+        ) ||
+        controller.signal.aborted
+      )
+        return unavailable();
+
+      let lastSession = first.leaseId;
+      let lastSequence = BigInt(first.sequence);
+      yield parseCameraMediaFrame({
+        type: 'media-frame',
+        mediaVersion: 1,
+        cameraExternalId: externalId,
+        sessionId: first.leaseId,
+        sequenceNumber: String(first.sequence),
+        capturedAt: first.capturedAt,
+        width: first.width,
+        height: first.height,
+        imageDataUrl: `data:image/jpeg;base64,${first.jpegBytes.toString('base64')}`,
+      });
+
+      while (!controller.signal.aborted) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            controller.signal.removeEventListener('abort', onAbort);
+            resolve();
+          }, 150);
+          const onAbort = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+          controller.signal.addEventListener('abort', onAbort, { once: true });
+        });
+        if (controller.signal.aborted || this.shuttingDown || !uplink.isEnabled()) {
+          return;
+        }
+        await this.authorize(token, siteId);
+        const current = await this.camera(siteId, cameraId);
+        await this.authorize(token, siteId);
+        if (
+          current.externalId !== externalId ||
+          Object.hasOwn(
+            this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true }),
+            current.externalId,
+          ) ||
+          controller.signal.aborted
+        )
+          return;
+
+        const next = await uplink.readFreshFrame(siteId, cameraId);
+        if (!next) return;
+        const seq = BigInt(next.sequence);
+        if (next.leaseId === lastSession && seq <= lastSequence) continue;
+
+        lastSession = next.leaseId;
+        lastSequence = seq;
+        yield parseCameraMediaFrame({
+          type: 'media-frame',
+          mediaVersion: 1,
+          cameraExternalId: externalId,
+          sessionId: next.leaseId,
+          sequenceNumber: String(next.sequence),
+          capturedAt: next.capturedAt,
+          width: next.width,
+          height: next.height,
+          imageDataUrl: `data:image/jpeg;base64,${next.jpegBytes.toString('base64')}`,
+        });
+      }
+    } finally {
+      clearTimeout(deadline);
+      controller.abort();
+      this.activeMediaControllers.delete(controller);
+      signal?.removeEventListener('abort', abort);
+      const remaining = (this.mediaViewers.get(cameraId) ?? 1) - 1;
+      if (remaining > 0) this.mediaViewers.set(cameraId, remaining);
+      else this.mediaViewers.delete(cameraId);
+    }
+  }
+
   async recordedVideo(
     token: string,
     requestedSite: string,
@@ -317,7 +437,45 @@ export class CameraPreviewService implements OnModuleDestroy {
     await this.authorize(token, siteId);
     const camera = await this.camera(siteId, cameraId);
     const sources = this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true });
-    if (!Object.hasOwn(sources, camera.externalId)) unavailable();
+    if (!Object.hasOwn(sources, camera.externalId)) {
+      if (this.browserUplink?.isEnabled()) {
+        const fresh = await this.browserUplink.readFreshFrame(siteId, cameraId);
+        if (!fresh || signal?.aborted) return unavailable();
+        await this.authorize(token, siteId);
+        const current = await this.camera(siteId, cameraId);
+        await this.authorize(token, siteId);
+        if (
+          current.externalId !== camera.externalId ||
+          Object.hasOwn(
+            this.config.get('SMARTSITE_AI_PREVIEW_SOURCES', { infer: true }),
+            current.externalId,
+          ) ||
+          signal?.aborted
+        )
+          return unavailable();
+        return parseCameraPreviewResponse({
+          siteId,
+          cameraId,
+          cameraExternalId: camera.externalId,
+          sourceKind: 'LIVE',
+          frame: {
+            type: 'frame',
+            previewVersion: 1,
+            cameraExternalId: camera.externalId,
+            sessionId: fresh.leaseId,
+            sequenceNumber: String(fresh.sequence),
+            capturedAt: fresh.capturedAt,
+            width: fresh.width,
+            height: fresh.height,
+            imageDataUrl: `data:image/jpeg;base64,${fresh.jpegBytes.toString('base64')}`,
+            detections: [],
+            zoneDetections: [],
+            zonePolygons: [],
+          },
+        });
+      }
+      unavailable();
+    }
     const origin = sources[camera.externalId]!;
     const url = new URL('/v1/realtime/preview/latest', origin);
     url.searchParams.set('cameraExternalId', camera.externalId);

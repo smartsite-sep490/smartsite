@@ -1,3 +1,4 @@
+import { CameraBrowserUplinkFrame1795824000000 } from './migrations/1795824000000-CameraBrowserUplinkFrame.js';
 import { AttendanceAbsenceReview1795651200000 } from './migrations/1795651200000-AttendanceAbsenceReview.js';
 import { AttendanceZoneReview1795651200001 } from './migrations/1795651200001-AttendanceZoneReview.js';
 import { SecurityBrowserWebcam1795564800000 } from './migrations/1795564800000-SecurityBrowserWebcam.js';
@@ -105,6 +106,7 @@ export function buildTypeOrmOptions(config: DatabaseConnectionConfig): DataSourc
     connectTimeoutMS: timeoutMs,
     entities: [...ENTITIES],
     migrations: [
+      CameraBrowserUplinkFrame1795824000000,
       MissingRollCallAbsence1795651200004,
       DirectWorkerQrSession1795651200003,
       AttendanceMultipleShifts1795651200002,

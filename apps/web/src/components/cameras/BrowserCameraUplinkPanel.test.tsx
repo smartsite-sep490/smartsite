@@ -15,17 +15,20 @@ import type {
   CameraSourceClient,
   SourceHost,
 } from '@smartsite/api-client';
+import type { BrowserCameraUplinkStatusResponse } from '@smartsite/contracts/browser-camera-uplink';
 import { BrowserCameraUplinkError } from '@smartsite/api-client';
 import i18n from '../../i18n';
 import { CameraSourceSetupPanel } from './CameraSourceSetupPanel';
 import { useBrowserCameraUplink } from './useBrowserCameraUplink';
 
 const SITE_ID = '11111111-1111-4111-8111-111111111111';
+const OTHER_SITE_ID = '99999999-9999-4999-8999-999999999999';
 const CAMERA_ID = '22222222-2222-4222-8222-222222222222';
+const OTHER_CAMERA_ID = '88888888-8888-4888-8888-888888888888';
 const LEASE_ID = '33333333-3333-4333-8333-333333333333';
 const SAMPLE_JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
 
-function makeHost(browserCameraSupported: boolean): SourceHost {
+function makeHost(browserCameraSupported = false): SourceHost {
   return {
     id: 'host-a',
     label: 'Site Edge A',
@@ -39,6 +42,27 @@ function makeHost(browserCameraSupported: boolean): SourceHost {
       configurationResumeSupported: false,
       sourceRevision: 1,
     },
+  };
+}
+
+function makeStatusResponse(
+  supported: boolean,
+  overrides: Partial<BrowserCameraUplinkStatusResponse> = {},
+): BrowserCameraUplinkStatusResponse {
+  return {
+    schemaVersion: '1.0.0',
+    supported,
+    siteId: SITE_ID,
+    cameraId: CAMERA_ID,
+    state: 'IDLE',
+    activeLeaseId: null,
+    ownedByCurrentUser: false,
+    lastSequence: null,
+    lastFrameCapturedAt: null,
+    leaseExpiresAt: null,
+    width: null,
+    height: null,
+    ...overrides,
   };
 }
 
@@ -86,39 +110,64 @@ function makeStartResponse(overrides: Partial<{ recommendedIntervalMs: number }>
 
 function renderPanel(options: {
   browserCameraSupported: boolean;
+  hostBrowserCapability?: boolean;
+  hosts?: SourceHost[];
   cameraStatus?: 'ACTIVE' | 'INACTIVE';
   uplinkClient?: BrowserCameraUplinkClient;
   onUnauthorized?: () => void;
   onOpenRegions?: () => void;
   encodeFrame?: () => Promise<{ width: number; height: number; jpegBytes: Uint8Array }>;
+  queryClient?: QueryClient;
+  setupKey?: readonly unknown[];
+  siteId?: string;
+  cameraId?: string;
 }) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient =
+    options.queryClient ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const targetSiteId = options.siteId ?? SITE_ID;
+  const targetCameraId = options.cameraId ?? CAMERA_ID;
   const sourceClient: CameraSourceClient = {
-    hosts: vi.fn().mockResolvedValue([makeHost(options.browserCameraSupported)]),
+    hosts: vi
+      .fn()
+      .mockResolvedValue(options.hosts ?? [makeHost(options.hostBrowserCapability ?? false)]),
     probe: vi.fn(),
   };
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <CameraSourceSetupPanel
-        apiUrl="https://api.example.test"
-        token="test-token"
-        siteId={SITE_ID}
-        camera={{
-          id: CAMERA_ID,
-          name: 'Cổng chính A',
-          configurationVersion: 1,
-          status: options.cameraStatus ?? 'ACTIVE',
-        }}
-        setupKey={['camera-setup']}
-        canWrite={true}
-        onUnauthorized={options.onUnauthorized ?? vi.fn()}
-        onOpenRegions={options.onOpenRegions}
-        client={sourceClient}
-        browserUplinkClient={options.uplinkClient}
-        browserUplinkFrameEncoder={options.encodeFrame}
-      />
-    </QueryClientProvider>,
-  );
+  const resolvedUplinkClient: BrowserCameraUplinkClient = options.uplinkClient ?? {
+    status: vi.fn().mockResolvedValue(
+      makeStatusResponse(options.browserCameraSupported, {
+        siteId: targetSiteId,
+        cameraId: targetCameraId,
+      }),
+    ),
+    start: vi.fn(),
+    uploadFrame: vi.fn(),
+    stop: vi.fn(),
+  };
+  return {
+    queryClient,
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <CameraSourceSetupPanel
+          apiUrl="https://api.example.test"
+          token="test-token"
+          siteId={targetSiteId}
+          camera={{
+            id: targetCameraId,
+            name: 'Cổng chính A',
+            configurationVersion: 1,
+            status: options.cameraStatus ?? 'ACTIVE',
+          }}
+          setupKey={options.setupKey ?? ['camera-setup']}
+          canWrite={true}
+          onUnauthorized={options.onUnauthorized ?? vi.fn()}
+          onOpenRegions={options.onOpenRegions}
+          client={sourceClient}
+          browserUplinkClient={resolvedUplinkClient}
+          browserUplinkFrameEncoder={options.encodeFrame}
+        />
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => {
@@ -132,31 +181,37 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
     await i18n.changeLanguage('vi');
   });
 
-  it('stays strictly unavailable and never calls getUserMedia when browserCameraSupported is false', async () => {
+  it('stays strictly unavailable and never calls getUserMedia when scoped browser-uplink status reports supported=false even if host caps claim true', async () => {
     const getUserMedia = vi.fn();
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: { getUserMedia, enumerateDevices: vi.fn().mockResolvedValue([]) },
     });
     const uplinkClient: BrowserCameraUplinkClient = {
-      status: vi.fn(),
+      status: vi.fn().mockResolvedValue(makeStatusResponse(false)),
       start: vi.fn(),
       uploadFrame: vi.fn(),
       stop: vi.fn(),
     };
 
-    renderPanel({ browserCameraSupported: false, uplinkClient });
+    renderPanel({
+      browserCameraSupported: false,
+      hostBrowserCapability: true,
+      uplinkClient,
+    });
     const browserRadio = await screen.findByRole('radio', { name: /Camera trên máy này/i });
     fireEvent.click(browserRadio);
 
+    await waitFor(() => {
+      expect(uplinkClient.status).toHaveBeenCalledTimes(1);
+    });
     expect(screen.getByTestId('camera-source-browser-unavailable')).toBeTruthy();
     expect(screen.queryByTestId('camera-source-browser-uplink')).toBeNull();
     expect(getUserMedia).not.toHaveBeenCalled();
     expect(uplinkClient.start).not.toHaveBeenCalled();
-    expect(uplinkClient.status).not.toHaveBeenCalled();
   });
 
-  it('streams frames via Backend lease without AI-machine selector when browserCameraSupported is true and cleans up on pagehide', async () => {
+  it('streams frames via Backend lease without AI-machine selector when scoped browser-uplink status reports supported=true and cleans up on pagehide', async () => {
     const fake = makeFakeStream();
     const getUserMedia = vi.fn().mockResolvedValue(fake.stream);
     const enumerateDevices = vi.fn().mockResolvedValue([
@@ -170,7 +225,7 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
 
     const uplinkClient: BrowserCameraUplinkClient = {
-      status: vi.fn(),
+      status: vi.fn().mockResolvedValue(makeStatusResponse(true)),
       start: vi.fn().mockResolvedValue(makeStartResponse()),
       uploadFrame: vi.fn().mockResolvedValue({
         schemaVersion: '1.0.0',
@@ -257,7 +312,7 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
 
     const onUnauthorized = vi.fn();
     const uplinkClient: BrowserCameraUplinkClient = {
-      status: vi.fn(),
+      status: vi.fn().mockResolvedValue(makeStatusResponse(true)),
       start: vi
         .fn()
         .mockRejectedValueOnce(new BrowserCameraUplinkError(409, 'LEASE_HELD'))
@@ -301,7 +356,7 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
 
     const uplinkClient: BrowserCameraUplinkClient = {
-      status: vi.fn(),
+      status: vi.fn().mockResolvedValue(makeStatusResponse(true)),
       start: vi.fn().mockResolvedValue(makeStartResponse()),
       uploadFrame: vi.fn().mockResolvedValue({
         schemaVersion: '1.0.0',
@@ -413,7 +468,7 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
           }),
       );
       const uplinkClient: BrowserCameraUplinkClient = {
-        status: vi.fn(),
+        status: vi.fn().mockResolvedValue(makeStatusResponse(true)),
         start: vi.fn().mockResolvedValue(makeStartResponse({ recommendedIntervalMs: 500 })),
         uploadFrame,
         stop: vi.fn().mockResolvedValue({
@@ -472,7 +527,7 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
     }
   });
 
-  it('immediately stops capture, timer, and lease when capability, write permission, or camera active state is lost mid-stream', async () => {
+  it('immediately stops capture, timer, and lease when scoped capability, write permission, or camera active state is lost mid-stream', async () => {
     const fake = makeFakeStream();
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
@@ -498,8 +553,14 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
       height: 480,
       byteLength: SAMPLE_JPEG.byteLength,
     };
+    const statusFn = vi
+      .fn<BrowserCameraUplinkClient['status']>()
+      .mockResolvedValueOnce(makeStatusResponse(true))
+      .mockResolvedValueOnce(makeStatusResponse(false))
+      .mockResolvedValueOnce(makeStatusResponse(true))
+      .mockRejectedValueOnce(new BrowserCameraUplinkError(503, 'HTTP_ERROR'));
     const uplinkClient: BrowserCameraUplinkClient = {
-      status: vi.fn(),
+      status: statusFn,
       start: vi.fn().mockResolvedValue(makeStartResponse()),
       uploadFrame: vi.fn().mockResolvedValue(receipt),
       stop: vi.fn().mockResolvedValue({
@@ -511,12 +572,7 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
     };
 
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const hostsFn = vi
-      .fn<CameraSourceClient['hosts']>()
-      .mockResolvedValueOnce([makeHost(true)])
-      .mockResolvedValueOnce([makeHost(false)])
-      .mockResolvedValueOnce([makeHost(true)])
-      .mockRejectedValueOnce(new Error('network down'));
+    const hostsFn = vi.fn<CameraSourceClient['hosts']>().mockResolvedValue([makeHost(false)]);
 
     const view = render(
       <QueryClientProvider client={queryClient}>
@@ -536,12 +592,14 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
     );
 
     fireEvent.click(await screen.findByRole('radio', { name: /Camera trên máy này/i }));
-    fireEvent.click(screen.getByTestId('browser-uplink-start-btn'));
+    fireEvent.click(await screen.findByTestId('browser-uplink-start-btn'));
     await waitFor(() => expect(uplinkClient.uploadFrame).toHaveBeenCalledTimes(1));
 
-    // 1) Capability turns false mid-stream -> stops tracks and releases lease immediately.
+    // 1) Scoped browser-uplink status turns false mid-stream -> stops tracks and releases lease immediately.
     await act(async () => {
-      await queryClient.invalidateQueries({ queryKey: ['cap-loss'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['cap-loss', 'camera-browser-uplink-status', SITE_ID, CAMERA_ID],
+      });
     });
     await waitFor(() => {
       expect(fake.track.stop).toHaveBeenCalledTimes(1);
@@ -549,9 +607,11 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
     });
     expect(screen.getByTestId('camera-source-browser-unavailable')).toBeTruthy();
 
-    // 2) Restore capability, restart, then camera becomes INACTIVE -> tears down active stream + lease.
+    // 2) Restore scoped capability, restart, then camera becomes INACTIVE -> tears down active stream + lease.
     await act(async () => {
-      await queryClient.invalidateQueries({ queryKey: ['cap-loss'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['cap-loss', 'camera-browser-uplink-status', SITE_ID, CAMERA_ID],
+      });
     });
     await waitFor(() => expect(screen.getByTestId('browser-uplink-start-btn')).toBeTruthy());
     fireEvent.click(screen.getByTestId('browser-uplink-start-btn'));
@@ -628,7 +688,7 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
       );
     });
 
-    // 4) Restore write, restart, then hosts query fails (hosts.isError with retained data) -> stops tracks + lease.
+    // 4) Restore write, restart, then scoped status query fails (isError with retained data) -> stops tracks + lease.
     view.rerender(
       <QueryClientProvider client={queryClient}>
         <CameraSourceSetupPanel
@@ -649,15 +709,15 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
     await waitFor(() => expect(uplinkClient.uploadFrame).toHaveBeenCalledTimes(4));
 
     await act(async () => {
-      await queryClient.invalidateQueries({ queryKey: ['cap-loss'] });
+      await queryClient.invalidateQueries({
+        queryKey: ['cap-loss', 'camera-browser-uplink-status', SITE_ID, CAMERA_ID],
+      });
     });
     await waitFor(() => {
       expect(fake.track.stop).toHaveBeenCalledTimes(4);
       expect(uplinkClient.stop).toHaveBeenCalledTimes(4);
     });
-    expect(
-      screen.getByTestId('camera-source-host-prerequisite').getAttribute('data-host-state'),
-    ).toBe('error');
+    expect(screen.getByTestId('camera-source-browser-unavailable')).toBeTruthy();
   });
 
   it('prevents stale in-flight finally from clearing new generation lock and guards concurrent or cancelled start()', async () => {
@@ -920,5 +980,296 @@ describe('CameraSourceSetupPanel capability-gated browser camera uplink', () => 
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('exposes source picker and browser webcam action with zero or offline physical hosts without calling getUserMedia until click, while preserving physical prerequisite states', async () => {
+    const fake = makeFakeStream();
+    const getUserMedia = vi.fn().mockResolvedValue(fake.stream);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia, enumerateDevices: vi.fn().mockResolvedValue([]) },
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+
+    const uplinkClient: BrowserCameraUplinkClient = {
+      status: vi.fn().mockResolvedValue(makeStatusResponse(true)),
+      start: vi.fn().mockResolvedValue(makeStartResponse()),
+      uploadFrame: vi.fn().mockResolvedValue({
+        schemaVersion: '1.0.0',
+        leaseId: LEASE_ID,
+        sequence: 1,
+        acceptedAt: '2026-11-26T12:00:00.100Z',
+        leaseExpiresAt: '2026-11-26T12:00:10.000Z',
+        width: 640,
+        height: 480,
+        byteLength: SAMPLE_JPEG.byteLength,
+      }),
+      stop: vi.fn().mockResolvedValue({
+        schemaVersion: '1.0.0',
+        leaseId: LEASE_ID,
+        state: 'STOPPED',
+        stoppedAt: '2026-11-26T12:00:05.000Z',
+      }),
+    };
+
+    // Case 1: Zero physical hosts (hosts: []) -> exposes browser webcam action immediately, ZERO getUserMedia until click
+    const emptyHostView = renderPanel({
+      browserCameraSupported: true,
+      hosts: [],
+      uplinkClient,
+      encodeFrame: vi.fn().mockResolvedValue({
+        width: 640,
+        height: 480,
+        jpegBytes: SAMPLE_JPEG,
+      }),
+    });
+
+    const startBtn = await screen.findByTestId('browser-uplink-start-btn');
+    expect(startBtn).toBeTruthy();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('camera-source-host-prerequisite')).toBeNull();
+
+    // Switching to physical WEBCAM preserves the empty-host prerequisite state cleanly
+    fireEvent.click(screen.getByRole('radio', { name: /Camera USB đã kết nối/i }));
+    const emptyGate = await screen.findByTestId('camera-source-host-prerequisite');
+    expect(emptyGate.getAttribute('data-host-state')).toBe('empty');
+    expect(screen.queryByTestId('camera-source-browser-uplink')).toBeNull();
+
+    // Switching back to BROWSER and clicking Start actually acquires webcam & uploads frame
+    fireEvent.click(screen.getByRole('radio', { name: /Camera trên máy này/i }));
+    expect(getUserMedia).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('browser-uplink-start-btn'));
+    await waitFor(() => {
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+      expect(uplinkClient.start).toHaveBeenCalledTimes(1);
+      expect(uplinkClient.uploadFrame).toHaveBeenCalledTimes(1);
+    });
+    emptyHostView.unmount();
+
+    // Case 2: All physical hosts offline/agent-unavailable -> browser webcam action stays exposed while physical source preserves agent-unavailable prerequisite
+    getUserMedia.mockClear();
+    renderPanel({
+      browserCameraSupported: true,
+      hosts: [
+        {
+          id: 'edge-off',
+          label: 'Site Edge Box',
+          available: false,
+          reason: 'AGENT_UNAVAILABLE',
+        },
+      ],
+      uplinkClient,
+    });
+    expect(await screen.findByTestId('browser-uplink-start-btn')).toBeTruthy();
+    expect(getUserMedia).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('radio', { name: /Camera IP \/ RTSP/i }));
+    const offlineGate = await screen.findByTestId('camera-source-host-prerequisite');
+    expect(offlineGate.getAttribute('data-host-state')).toBe('agent-unavailable');
+  });
+
+  it('fails closed on 401/403/404, mismatched scope payload, aborted scope switch, and retained stale status error', async () => {
+    const fake = makeFakeStream();
+    const getUserMedia = vi.fn().mockResolvedValue(fake.stream);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia, enumerateDevices: vi.fn().mockResolvedValue([]) },
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
+
+    // 1. 404 from browser-uplink status -> fails closed without calling onUnauthorized; no-host gate stays shown
+    const onUnauthorized404 = vi.fn();
+    const view404 = renderPanel({
+      browserCameraSupported: false,
+      hosts: [],
+      onUnauthorized: onUnauthorized404,
+      uplinkClient: {
+        status: vi.fn().mockRejectedValue(new BrowserCameraUplinkError(404, 'LEASE_NOT_FOUND')),
+        start: vi.fn(),
+        uploadFrame: vi.fn(),
+        stop: vi.fn(),
+      },
+    });
+    const emptyGate = await screen.findByTestId('camera-source-host-prerequisite');
+    expect(emptyGate.getAttribute('data-host-state')).toBe('empty');
+    expect(screen.queryByTestId('browser-uplink-start-btn')).toBeNull();
+    expect(onUnauthorized404).not.toHaveBeenCalled();
+    expect(getUserMedia).not.toHaveBeenCalled();
+    view404.unmount();
+
+    // 2. 403 and 401 from browser-uplink status (even with 200 empty hosts) -> fails closed, revokes & calls onUnauthorized once
+    for (const statusCode of [403, 401] as const) {
+      const onUnauthorized = vi.fn();
+      const viewDenied = renderPanel({
+        browserCameraSupported: false,
+        hosts: [],
+        onUnauthorized,
+        setupKey: [`denied-${statusCode}`],
+        uplinkClient: {
+          status: vi
+            .fn()
+            .mockRejectedValue(
+              new BrowserCameraUplinkError(
+                statusCode,
+                statusCode === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN',
+              ),
+            ),
+          start: vi.fn(),
+          uploadFrame: vi.fn(),
+          stop: vi.fn(),
+        },
+      });
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(/không còn quyền thiết lập camera|no longer permits/i);
+      expect(onUnauthorized).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('radio')).toBeNull();
+      expect(screen.queryByTestId('browser-uplink-start-btn')).toBeNull();
+      viewDenied.unmount();
+    }
+
+    // 3. Mismatched siteId/cameraId in status payload -> fails closed
+    const viewMismatch = renderPanel({
+      browserCameraSupported: true,
+      hosts: [],
+      setupKey: ['scope-mismatch'],
+      uplinkClient: {
+        status: vi
+          .fn()
+          .mockResolvedValue(
+            makeStatusResponse(true, { siteId: OTHER_SITE_ID, cameraId: OTHER_CAMERA_ID }),
+          ),
+        start: vi.fn(),
+        uploadFrame: vi.fn(),
+        stop: vi.fn(),
+      },
+    });
+    const mismatchGate = await screen.findByTestId('camera-source-host-prerequisite');
+    expect(mismatchGate.getAttribute('data-host-state')).toBe('empty');
+    expect(screen.queryByTestId('browser-uplink-start-btn')).toBeNull();
+    viewMismatch.unmount();
+
+    // 4. Scope replacement aborts in-flight status() AbortSignal and ignores stale supported=true response
+    let resolveStaleStatus!: (val: BrowserCameraUplinkStatusResponse) => void;
+    let firstSignal: AbortSignal | undefined;
+    const statusSpy = vi.fn<BrowserCameraUplinkClient['status']>(
+      (_api, _tok, _site, camId, signal) => {
+        if (camId === CAMERA_ID) {
+          firstSignal = signal;
+          return new Promise<BrowserCameraUplinkStatusResponse>((resolve) => {
+            resolveStaleStatus = resolve;
+          });
+        }
+        return Promise.resolve(makeStatusResponse(false, { cameraId: camId }));
+      },
+    );
+    const scopeClient: BrowserCameraUplinkClient = {
+      status: statusSpy,
+      start: vi.fn(),
+      uploadFrame: vi.fn(),
+      stop: vi.fn(),
+    };
+    const scopeQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const sourceClient: CameraSourceClient = {
+      hosts: vi.fn().mockResolvedValue([]),
+      probe: vi.fn(),
+    };
+    const scopeView = render(
+      <QueryClientProvider client={scopeQueryClient}>
+        <CameraSourceSetupPanel
+          apiUrl="https://api.example.test"
+          token="test-token"
+          siteId={SITE_ID}
+          camera={{ id: CAMERA_ID, name: 'Cam 1', configurationVersion: 1, status: 'ACTIVE' }}
+          setupKey={['scope-abort-1']}
+          canWrite={true}
+          onUnauthorized={vi.fn()}
+          client={sourceClient}
+          browserUplinkClient={scopeClient}
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(statusSpy).toHaveBeenCalledTimes(1));
+    expect(firstSignal?.aborted).toBe(false);
+
+    scopeView.rerender(
+      <QueryClientProvider client={scopeQueryClient}>
+        <CameraSourceSetupPanel
+          apiUrl="https://api.example.test"
+          token="test-token"
+          siteId={SITE_ID}
+          camera={{ id: OTHER_CAMERA_ID, name: 'Cam 2', configurationVersion: 1, status: 'ACTIVE' }}
+          setupKey={['scope-abort-2']}
+          canWrite={true}
+          onUnauthorized={vi.fn()}
+          client={sourceClient}
+          browserUplinkClient={scopeClient}
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(firstSignal?.aborted).toBe(true));
+    resolveStaleStatus(makeStatusResponse(true, { cameraId: CAMERA_ID }));
+    await screen.findByTestId('camera-source-host-prerequisite');
+    expect(screen.queryByTestId('browser-uplink-start-btn')).toBeNull();
+    scopeView.unmount();
+
+    // 5. Retained-data stale error on background refetch fails closed and stops active webcam tracks
+    const staleQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const staleUplinkClient: BrowserCameraUplinkClient = {
+      status: vi
+        .fn()
+        .mockResolvedValueOnce(makeStatusResponse(true))
+        .mockRejectedValueOnce(new BrowserCameraUplinkError(503, 'HTTP_ERROR')),
+      start: vi.fn().mockResolvedValue(makeStartResponse()),
+      uploadFrame: vi.fn().mockResolvedValue({
+        schemaVersion: '1.0.0',
+        leaseId: LEASE_ID,
+        sequence: 1,
+        acceptedAt: '2026-11-26T12:00:00.100Z',
+        leaseExpiresAt: '2026-11-26T12:00:10.100Z',
+        width: 640,
+        height: 480,
+        byteLength: SAMPLE_JPEG.byteLength,
+      }),
+      stop: vi.fn().mockResolvedValue({
+        schemaVersion: '1.0.0',
+        leaseId: LEASE_ID,
+        state: 'STOPPED',
+        stoppedAt: '2026-11-26T12:00:05.000Z',
+      }),
+    };
+    renderPanel({
+      browserCameraSupported: true,
+      hosts: [],
+      queryClient: staleQueryClient,
+      setupKey: ['stale-refetch-scope'],
+      uplinkClient: staleUplinkClient,
+      encodeFrame: vi.fn().mockResolvedValue({
+        width: 640,
+        height: 480,
+        jpegBytes: SAMPLE_JPEG,
+      }),
+    });
+    fireEvent.click(await screen.findByTestId('browser-uplink-start-btn'));
+    await waitFor(() => expect(screen.getByTestId('browser-uplink-stop-btn')).toBeTruthy());
+
+    await act(async () => {
+      await staleQueryClient.refetchQueries({
+        queryKey: ['stale-refetch-scope', 'camera-browser-uplink-status', SITE_ID, CAMERA_ID],
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('camera-source-browser-uplink')).toBeNull();
+      expect(fake.track.stop).toHaveBeenCalled();
+      expect(staleUplinkClient.stop).toHaveBeenCalledWith(
+        'https://api.example.test',
+        'test-token',
+        SITE_ID,
+        CAMERA_ID,
+        { leaseId: LEASE_ID, reason: 'SOURCE_SWITCHED' },
+        { keepalive: false },
+      );
+    });
+    expect(screen.getByTestId('camera-source-host-prerequisite')).toBeTruthy();
   });
 });

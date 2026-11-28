@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { SAFETY_NAMESPACE } from '../../i18n/runtime';
 import { CAMERA_BUTTON_STYLES, CAMERA_FIELD_STYLES } from './camera-dialog-styles';
 import {
+  browserCameraUplinkClient,
+  BrowserCameraUplinkError,
   cameraSourceClient,
   SourceSetupError,
   type BrowserCameraUplinkClient,
@@ -81,6 +83,7 @@ function SourceWorkspace({
   const { t } = useTranslation(SAFETY_NAMESPACE),
     id = useId();
   const [kind, setKind] = useState<CameraSourceKind | 'BROWSER'>('WEBCAM');
+  const [userSelectedKind, setUserSelectedKind] = useState(false);
   const [device, setDevice] = useState(''),
     [asset, setAsset] = useState(''),
     [endpoint, setEndpoint] = useState('');
@@ -92,9 +95,11 @@ function SourceWorkspace({
   const [error, setError] = useState(''),
     [now, setNow] = useState(() => Date.now());
   const operation = useRef<{ version: number; abort?: AbortController }>({ version: 0 });
+  const uplinkAuthFailureNotifiedRef = useRef(false);
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const hostSelectRef = useRef<HTMLSelectElement>(null);
   const cache = useQueryClient();
+  const resolvedBrowserUplinkClient = browserUplinkClient ?? browserCameraUplinkClient;
 
   const internalController = useCameraSourceResumeController({
     apiUrl,
@@ -127,7 +132,30 @@ function SourceWorkspace({
   } = controller;
 
   const isCameraInactive = camera.status === 'INACTIVE';
-  const browserUplinkSupported = !hosts.isError && caps?.browserCameraSupported === true;
+  const browserUplinkStatus = useQuery({
+    queryKey: [...setupKey, 'camera-browser-uplink-status', siteId, camera.id],
+    retry: false,
+    enabled: Boolean(siteId && camera.id && !revoked && !hostAccessDenied),
+    queryFn: ({ signal }) =>
+      resolvedBrowserUplinkClient.status(apiUrl, token, siteId, camera.id, signal),
+  });
+
+  const browserUplinkAccessDenied =
+    browserUplinkStatus.error instanceof BrowserCameraUplinkError &&
+    [401, 403].includes(browserUplinkStatus.error.status);
+
+  const scopedBrowserUplinkStatus =
+    !revoked &&
+    !hostAccessDenied &&
+    !browserUplinkAccessDenied &&
+    !browserUplinkStatus.isError &&
+    browserUplinkStatus.data &&
+    browserUplinkStatus.data.siteId.toLowerCase() === siteId.toLowerCase() &&
+    browserUplinkStatus.data.cameraId.toLowerCase() === camera.id.toLowerCase()
+      ? browserUplinkStatus.data
+      : null;
+
+  const browserUplinkSupported = scopedBrowserUplinkStatus?.supported === true;
   const handleBrowserUplinkRevoked = useCallback(() => {
     markRevoked();
     setPassword('');
@@ -140,10 +168,10 @@ function SourceWorkspace({
     siteId,
     cameraId: camera.id,
     supported: browserUplinkSupported,
-    canWrite: canWrite && !revoked && !hostAccessDenied,
+    canWrite: canWrite && !revoked && !hostAccessDenied && !browserUplinkAccessDenied,
     cameraInactive: isCameraInactive,
     onRevoked: handleBrowserUplinkRevoked,
-    client: browserUplinkClient,
+    client: resolvedBrowserUplinkClient,
     frameEncoder: browserUplinkFrameEncoder,
   });
 
@@ -222,7 +250,32 @@ function SourceWorkspace({
       operation.current.abort?.abort();
     }
   }, [hostAccessDenied]);
-  const supported = kind !== 'BROWSER' && host?.available && caps?.sourceKinds.includes(kind);
+  useEffect(() => {
+    if (
+      browserUplinkAccessDenied &&
+      !hostAccessDenied &&
+      !revoked &&
+      !uplinkAuthFailureNotifiedRef.current
+    ) {
+      uplinkAuthFailureNotifiedRef.current = true;
+      operation.current.version++;
+      operation.current.abort?.abort();
+      markRevoked();
+      setPassword('');
+      onUnauthorized();
+    }
+  }, [browserUplinkAccessDenied, hostAccessDenied, markRevoked, onUnauthorized, revoked]);
+
+  const hasAvailableHost = availableHosts.length > 0;
+  const hasUsableHost = Boolean(!hosts.isPending && !hosts.isError && hasAvailableHost);
+  const showSourcePicker = hasUsableHost || browserUplinkSupported;
+  const effectiveKind: CameraSourceKind | 'BROWSER' =
+    !userSelectedKind && !hasUsableHost && !hosts.isPending && browserUplinkSupported
+      ? 'BROWSER'
+      : kind;
+
+  const supported =
+    effectiveKind !== 'BROWSER' && host?.available && caps?.sourceKinds.includes(effectiveKind);
   const reset = () => {
     operation.current.version++;
     operation.current.abort?.abort();
@@ -239,15 +292,15 @@ function SourceWorkspace({
   };
   const trimmedEndpoint = endpoint.trim();
   const rtspInvalid =
-    kind === 'RTSP' && trimmedEndpoint.length > 0 && !isValidRtspEndpoint(trimmedEndpoint);
+    effectiveKind === 'RTSP' && trimmedEndpoint.length > 0 && !isValidRtspEndpoint(trimmedEndpoint);
   const draft: CameraSourceDraft | null =
-    kind === 'WEBCAM' && device
-      ? { kind, deviceId: device }
-      : kind === 'VIDEO' && asset
-        ? { kind, assetId: asset }
-        : kind === 'RTSP' && trimmedEndpoint && !rtspInvalid
+    effectiveKind === 'WEBCAM' && device
+      ? { kind: effectiveKind, deviceId: device }
+      : effectiveKind === 'VIDEO' && asset
+        ? { kind: effectiveKind, assetId: asset }
+        : effectiveKind === 'RTSP' && trimmedEndpoint && !rtspInvalid
           ? {
-              kind,
+              kind: effectiveKind,
               endpoint: trimmedEndpoint,
               ...(username || password ? { username, password } : {}),
             }
@@ -297,7 +350,7 @@ function SourceWorkspace({
     }
   }
   const blocked = revoked || !canWrite || applying.isPending || resuming.isPending;
-  if (hostAccessDenied || revoked) {
+  if (hostAccessDenied || browserUplinkAccessDenied || revoked) {
     return (
       <section
         role="alert"
@@ -314,7 +367,7 @@ function SourceWorkspace({
       ? Math.max(1, Math.ceil((Date.parse(activeResult.expiresAt) - now) / 1000))
       : 0;
   const stage2Tone =
-    kind === 'BROWSER' && browserUplinkSupported && browserUplink.phase === 'uploading'
+    effectiveKind === 'BROWSER' && browserUplinkSupported && browserUplink.phase === 'uploading'
       ? {
           dot: 'bg-teal-600',
           text: 'text-teal-900',
@@ -430,8 +483,6 @@ function SourceWorkspace({
   );
 
   const hasConfiguredHosts = Boolean(hosts.data && hosts.data.length > 0);
-  const hasAvailableHost = availableHosts.length > 0;
-  const hasUsableHost = Boolean(!hosts.isPending && !hosts.isError && hasAvailableHost);
   const allHostsOffline = Boolean(hasConfiguredHosts && !hasAvailableHost);
   const isEmptyHostList = Boolean(!hosts.isPending && !hosts.isError && hosts.data?.length === 0);
   const hasMultipleHosts = (hosts.data?.length ?? 0) > 1;
@@ -533,7 +584,7 @@ function SourceWorkspace({
     <label
       key={option}
       className={`min-w-0 cursor-pointer rounded-lg border px-2.5 py-1.5 transition-colors focus-within:ring-2 focus-within:ring-[#0F172A] ${
-        kind === option
+        effectiveKind === option
           ? 'border-[#0F172A] bg-slate-50 ring-1 ring-[#0F172A]/10'
           : secondary
             ? 'border-slate-200/90 bg-slate-50/45 hover:border-slate-300 hover:bg-white'
@@ -545,12 +596,13 @@ function SourceWorkspace({
           className="mt-0.5 shrink-0 accent-[#0F172A]"
           type="radio"
           name={`${id}-kind`}
-          checked={kind === option}
+          checked={effectiveKind === option}
           onChange={() =>
             change(() => {
-              if (kind === 'BROWSER' && option !== 'BROWSER') {
+              if (effectiveKind === 'BROWSER' && option !== 'BROWSER') {
                 void browserUplink.stop('SOURCE_SWITCHED', false);
               }
+              setUserSelectedKind(true);
               setKind(option);
               setPassword('');
             })
@@ -586,6 +638,149 @@ function SourceWorkspace({
       </span>
     </label>
   );
+
+  const physicalHostPrerequisite = hosts.isPending ? (
+    <div
+      role="status"
+      aria-live="polite"
+      data-testid="camera-source-host-loading"
+      className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700"
+    >
+      <span
+        aria-hidden="true"
+        className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-slate-400"
+      />
+      <p className="min-w-0 leading-relaxed">{t('cameraSource.loading')}</p>
+    </div>
+  ) : hosts.isError ? (
+    <div
+      role="alert"
+      data-testid="camera-source-host-prerequisite"
+      data-host-state="error"
+      className="min-w-0 space-y-3 rounded-xl border border-rose-200 border-l-[3px] border-l-rose-600 bg-rose-50/80 p-4 text-rose-950"
+    >
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold tracking-tight text-rose-950">
+          {t('cameraSource.hostFetchErrorHeading')}
+        </h3>
+        <p className="max-w-[65ch] text-sm leading-relaxed text-rose-900 break-words">
+          {t('cameraSource.hostFetchError')}
+        </p>
+      </div>
+      <div>
+        <button
+          type="button"
+          className={CAMERA_BUTTON_STYLES.compactSecondary}
+          disabled={hosts.isFetching || pending || applying.isPending}
+          onClick={() => {
+            reset();
+            void refreshHosts();
+          }}
+        >
+          {t(hosts.isFetching ? 'cameraSource.refreshing' : 'cameraSource.retryHosts')}
+        </button>
+      </div>
+    </div>
+  ) : isEmptyHostList ? (
+    <div
+      role="status"
+      data-testid="camera-source-host-prerequisite"
+      data-host-state="empty"
+      className="min-w-0 space-y-3 rounded-xl border border-amber-200/90 border-l-[3px] border-l-amber-600 bg-amber-50/60 p-4 text-amber-950"
+    >
+      <div className="space-y-1">
+        <p className="text-xs font-medium tracking-wide text-amber-900/80">
+          {t('cameraSource.prerequisiteLabel')}
+        </p>
+        <h3 className="text-sm font-semibold tracking-tight text-slate-950">
+          {t('cameraSource.noHostsHeading')}
+        </h3>
+        <p className="max-w-[65ch] text-sm leading-relaxed text-slate-700 break-words">
+          {t('cameraSource.noHosts')}
+        </p>
+      </div>
+      <div>
+        <button
+          type="button"
+          className={CAMERA_BUTTON_STYLES.secondary}
+          disabled={hosts.isFetching || pending || applying.isPending}
+          onClick={() => {
+            reset();
+            void refreshHosts();
+          }}
+        >
+          {t(hosts.isFetching ? 'cameraSource.refreshing' : 'cameraSource.refresh')}
+        </button>
+      </div>
+    </div>
+  ) : allHostsOffline ? (
+    <div
+      role="status"
+      data-testid="camera-source-host-prerequisite"
+      data-host-state={unavailableGate.state}
+      className="min-w-0 space-y-3 rounded-xl border border-amber-200/90 border-l-[3px] border-l-amber-600 bg-amber-50/60 p-4 text-amber-950"
+    >
+      <div className="space-y-1">
+        <p className="text-xs font-medium tracking-wide text-amber-900/80">
+          {t('cameraSource.prerequisiteLabel')}
+        </p>
+        <h3 className="text-sm font-semibold tracking-tight text-slate-950">
+          {t(unavailableGate.headingKey)}
+        </h3>
+        <p
+          data-testid="camera-source-prerequisite-message"
+          className="max-w-[65ch] text-sm leading-relaxed text-slate-700 break-words"
+        >
+          {t(unavailableGate.bodyKey)}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className={CAMERA_BUTTON_STYLES.secondary}
+          disabled={hosts.isFetching || pending || applying.isPending}
+          onClick={() => {
+            reset();
+            void refreshHosts();
+          }}
+        >
+          {t(hosts.isFetching ? 'cameraSource.refreshing' : 'cameraSource.refresh')}
+        </button>
+      </div>
+      <details
+        data-testid="camera-source-unavailable-details"
+        className="group min-w-0 rounded-lg border border-amber-200/80 bg-white/80 px-3 py-2 text-xs text-slate-700"
+      >
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md py-0.5 font-medium text-slate-700 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
+          <span>{t('cameraSource.technicalDetailsToggle')}</span>
+          <span
+            aria-hidden="true"
+            className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
+          >
+            ▾
+          </span>
+        </summary>
+        <ul className="mt-2 space-y-1.5 border-t border-slate-200 pt-2">
+          {unavailableHosts.map((entry) => (
+            <li key={entry.id} className="min-w-0 break-words leading-relaxed">
+              <span className="font-semibold text-slate-900">{entry.label}</span>{' '}
+              <span className="font-mono text-[11px] text-slate-500">({entry.id})</span>
+              {' — '}
+              <span>
+                {t(
+                  entry.reason === 'CAMERA_UNBOUND'
+                    ? 'cameraSource.reasonDetail.CAMERA_UNBOUND'
+                    : entry.reason === 'AGENT_UNAVAILABLE'
+                      ? 'cameraSource.reasonDetail.AGENT_UNAVAILABLE'
+                      : 'cameraSource.reasonDetail.UNKNOWN',
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </div>
+  ) : null;
 
   return (
     <section
@@ -685,147 +880,8 @@ function SourceWorkspace({
         )}
         {!embedded && stageSummaryList}
 
-        {hosts.isPending ? (
-          <div
-            role="status"
-            aria-live="polite"
-            data-testid="camera-source-host-loading"
-            className="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-700"
-          >
-            <span
-              aria-hidden="true"
-              className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-slate-400"
-            />
-            <p className="min-w-0 leading-relaxed">{t('cameraSource.loading')}</p>
-          </div>
-        ) : hosts.isError ? (
-          <div
-            role="alert"
-            data-testid="camera-source-host-prerequisite"
-            data-host-state="error"
-            className="min-w-0 space-y-3 rounded-xl border border-rose-200 border-l-[3px] border-l-rose-600 bg-rose-50/80 p-4 text-rose-950"
-          >
-            <div className="space-y-1">
-              <h3 className="text-sm font-semibold tracking-tight text-rose-950">
-                {t('cameraSource.hostFetchErrorHeading')}
-              </h3>
-              <p className="max-w-[65ch] text-sm leading-relaxed text-rose-900 break-words">
-                {t('cameraSource.hostFetchError')}
-              </p>
-            </div>
-            <div>
-              <button
-                type="button"
-                className={CAMERA_BUTTON_STYLES.compactSecondary}
-                disabled={hosts.isFetching || pending || applying.isPending}
-                onClick={() => {
-                  reset();
-                  void refreshHosts();
-                }}
-              >
-                {t(hosts.isFetching ? 'cameraSource.refreshing' : 'cameraSource.retryHosts')}
-              </button>
-            </div>
-          </div>
-        ) : isEmptyHostList ? (
-          <div
-            role="status"
-            data-testid="camera-source-host-prerequisite"
-            data-host-state="empty"
-            className="min-w-0 space-y-3 rounded-xl border border-amber-200/90 border-l-[3px] border-l-amber-600 bg-amber-50/60 p-4 text-amber-950"
-          >
-            <div className="space-y-1">
-              <p className="text-xs font-medium tracking-wide text-amber-900/80">
-                {t('cameraSource.prerequisiteLabel')}
-              </p>
-              <h3 className="text-sm font-semibold tracking-tight text-slate-950">
-                {t('cameraSource.noHostsHeading')}
-              </h3>
-              <p className="max-w-[65ch] text-sm leading-relaxed text-slate-700 break-words">
-                {t('cameraSource.noHosts')}
-              </p>
-            </div>
-            <div>
-              <button
-                type="button"
-                className={CAMERA_BUTTON_STYLES.secondary}
-                disabled={hosts.isFetching || pending || applying.isPending}
-                onClick={() => {
-                  reset();
-                  void refreshHosts();
-                }}
-              >
-                {t(hosts.isFetching ? 'cameraSource.refreshing' : 'cameraSource.refresh')}
-              </button>
-            </div>
-          </div>
-        ) : allHostsOffline ? (
-          <div
-            role="status"
-            data-testid="camera-source-host-prerequisite"
-            data-host-state={unavailableGate.state}
-            className="min-w-0 space-y-3 rounded-xl border border-amber-200/90 border-l-[3px] border-l-amber-600 bg-amber-50/60 p-4 text-amber-950"
-          >
-            <div className="space-y-1">
-              <p className="text-xs font-medium tracking-wide text-amber-900/80">
-                {t('cameraSource.prerequisiteLabel')}
-              </p>
-              <h3 className="text-sm font-semibold tracking-tight text-slate-950">
-                {t(unavailableGate.headingKey)}
-              </h3>
-              <p
-                data-testid="camera-source-prerequisite-message"
-                className="max-w-[65ch] text-sm leading-relaxed text-slate-700 break-words"
-              >
-                {t(unavailableGate.bodyKey)}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className={CAMERA_BUTTON_STYLES.secondary}
-                disabled={hosts.isFetching || pending || applying.isPending}
-                onClick={() => {
-                  reset();
-                  void refreshHosts();
-                }}
-              >
-                {t(hosts.isFetching ? 'cameraSource.refreshing' : 'cameraSource.refresh')}
-              </button>
-            </div>
-            <details
-              data-testid="camera-source-unavailable-details"
-              className="group min-w-0 rounded-lg border border-amber-200/80 bg-white/80 px-3 py-2 text-xs text-slate-700"
-            >
-              <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md py-0.5 font-medium text-slate-700 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]">
-                <span>{t('cameraSource.technicalDetailsToggle')}</span>
-                <span
-                  aria-hidden="true"
-                  className="text-xs text-slate-400 transition-transform duration-150 group-open:rotate-180"
-                >
-                  ▾
-                </span>
-              </summary>
-              <ul className="mt-2 space-y-1.5 border-t border-slate-200 pt-2">
-                {unavailableHosts.map((entry) => (
-                  <li key={entry.id} className="min-w-0 break-words leading-relaxed">
-                    <span className="font-semibold text-slate-900">{entry.label}</span>{' '}
-                    <span className="font-mono text-[11px] text-slate-500">({entry.id})</span>
-                    {' — '}
-                    <span>
-                      {t(
-                        entry.reason === 'CAMERA_UNBOUND'
-                          ? 'cameraSource.reasonDetail.CAMERA_UNBOUND'
-                          : entry.reason === 'AGENT_UNAVAILABLE'
-                            ? 'cameraSource.reasonDetail.AGENT_UNAVAILABLE'
-                            : 'cameraSource.reasonDetail.UNKNOWN',
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          </div>
+        {!showSourcePicker ? (
+          physicalHostPrerequisite
         ) : (
           <>
             <fieldset className="min-w-0 space-y-2" disabled={blocked}>
@@ -855,7 +911,7 @@ function SourceWorkspace({
                 </div>
               </div>
             </fieldset>
-            {kind === 'BROWSER' ? (
+            {effectiveKind === 'BROWSER' ? (
               browserUplinkSupported ? (
                 <BrowserCameraUplinkPanel
                   cameraName={camera.name}
@@ -879,6 +935,8 @@ function SourceWorkspace({
                   </p>
                 </div>
               )
+            ) : !hasUsableHost ? (
+              physicalHostPrerequisite
             ) : (
               <>
                 {needsHostSelection && (
@@ -921,7 +979,7 @@ function SourceWorkspace({
                 )}
                 {supported && (
                   <div className="max-w-3xl space-y-2.5 border-t border-slate-200/80 pt-3">
-                    {kind === 'WEBCAM' && (
+                    {effectiveKind === 'WEBCAM' && (
                       <div className="space-y-1.5">
                         <p
                           data-testid="camera-source-webcam-scope"
@@ -957,7 +1015,7 @@ function SourceWorkspace({
                         )}
                       </div>
                     )}
-                    {kind === 'VIDEO' && (
+                    {effectiveKind === 'VIDEO' && (
                       <div className="space-y-1.5">
                         <p
                           data-testid="camera-source-video-scope"
@@ -993,7 +1051,7 @@ function SourceWorkspace({
                         )}
                       </div>
                     )}
-                    {kind === 'RTSP' && (
+                    {effectiveKind === 'RTSP' && (
                       <fieldset className="space-y-2.5" disabled={blocked}>
                         <div className="space-y-1">
                           <label htmlFor={`${id}-endpoint`} className={CAMERA_FIELD_STYLES.label}>

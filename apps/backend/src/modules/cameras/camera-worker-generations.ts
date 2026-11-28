@@ -6,6 +6,7 @@ import { CameraEntity } from '../../database/entities/camera.entity.js';
 import { CameraStatus } from '../../database/entities/enums.js';
 import { CameraWorkerGenerationEntity } from '../../database/entities/camera-worker-generation.entity.js';
 import { sealRetiredTrackedEpisodes } from '../safety/alerts/tracked-ppe-episode-projection.js';
+import { hasActiveBrowserUplinkLease } from './camera-source-ownership.js';
 
 export interface AcceptedWorkerConfiguration {
   readonly configurationVersion: number;
@@ -307,6 +308,9 @@ async function issueGeneration(
     const camera = await lockCamera(manager, cameraId);
     if (camera.type === 'GATE') conflict('Gate Cameras cannot run monitoring workers');
     if (camera.status !== CameraStatus.ACTIVE) conflict('Camera is inactive');
+    if (await hasActiveBrowserUplinkLease(manager, camera.siteId, camera.id)) {
+      conflict('Camera has an active browser uplink session');
+    }
     if (expectedConfiguration) {
       if (camera.configurationVersion !== expectedConfiguration.configurationVersion)
         conflict('Accepted camera configuration changed');
