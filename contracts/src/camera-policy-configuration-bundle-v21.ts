@@ -8,6 +8,7 @@ import {
 import { parseRegionPpePolicy } from './camera-ppe-policy.js';
 import { computeCanonicalPayloadHash } from './hashing/canonical-hash.js';
 import { MAX_CAMERA_REGION_PAYLOAD_BYTES } from './validation/camera-region-configuration-validator.js';
+import { hasDuplicateJsonKeys } from './duplicate-json-keys.js';
 import type { ValidationIssue, ValidationResult } from './validation/schema-validator.js';
 
 /** Explicit new-version policy vocabulary; never widens the existing five-item defaults. */
@@ -77,26 +78,6 @@ function invalid(
 }
 
 /** Called only after JSON.parse succeeds; track decoded keys independently per object. */
-function hasDuplicateJsonKeys(text: string): boolean {
-  const stack: ({ keys: Set<string>; expectingKey: boolean } | null)[] = [];
-  const tokens = /"(?:\\[\s\S]|[^"\\])*"|[{}[\],:]/g;
-  for (const match of text.matchAll(tokens)) {
-    const token = match[0];
-    const current = stack.at(-1);
-    if (token === '{') stack.push({ keys: new Set(), expectingKey: true });
-    else if (token === '[') stack.push(null);
-    else if (token === '}' || token === ']') stack.pop();
-    else if (token === ':' && current) current.expectingKey = false;
-    else if (token === ',' && current) current.expectingKey = true;
-    else if (token.startsWith('"') && current?.expectingKey) {
-      const key = JSON.parse(token) as string;
-      if (current.keys.has(key)) return true;
-      current.keys.add(key);
-    }
-  }
-  return false;
-}
-
 /** Hash/shape preparation only; callers still own Site authority, issuance and worker capability. */
 export function parseCameraPolicyConfigurationBundleV21Payload(
   payload: string | Uint8Array,

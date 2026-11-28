@@ -1,0 +1,154 @@
+{
+  "status": "SYNTHETIC_CONTRACT_EXAMPLES_NOT_OPERATIONAL",
+  "rawMediaFrame": {
+    "type": "media-frame",
+    "mediaVersion": 1,
+    "cameraExternalId": "CAM-NORTH-01",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "sequenceNumber": "42",
+    "capturedAt": "2026-11-27T01:30:00.000Z",
+    "width": 640,
+    "height": 360,
+    "imageDataUrl": "data:image/jpeg;base64,/9j/2Q=="
+  },
+  "alignedOverlayMetadataRich": {
+    "type": "overlay-metadata",
+    "overlayVersion": 1,
+    "sourceKind": "LIVE",
+    "cameraExternalId": "CAM-NORTH-01",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "sequenceNumber": "42",
+    "capturedAt": "2026-11-27T01:30:00.000Z",
+    "width": 1280,
+    "height": 720,
+    "zoneAnchor": "BOTTOM_CENTER",
+    "zonePolygons": [
+      {
+        "regionId": "44444444-4444-4444-8444-444444444444",
+        "geometryVersion": 3,
+        "coordinates": [
+          [0.1, 0.15],
+          [0.9, 0.15],
+          [0.9, 0.92],
+          [0.1, 0.92]
+        ]
+      }
+    ],
+    "detections": [
+      {
+        "trackId": 7,
+        "confidence": 0.94,
+        "active": true,
+        "label": "MISSING HARD HAT",
+        "boundingBox": {
+          "x1": 0.22,
+          "y1": 0.18,
+          "x2": 0.44,
+          "y2": 0.84,
+          "coordinateSpace": "NORMALIZED_0_1"
+        },
+        "ppeStatus": {
+          "HARD_HAT": "MISSING",
+          "SAFETY_VEST": "PRESENT",
+          "GLOVES": "MISSING",
+          "BOOTS": "UNKNOWN"
+        },
+        "alertState": "CONFIRMED",
+        "confirmedMissingItems": ["HARD_HAT"],
+        "regionId": "44444444-4444-4444-8444-444444444444"
+      }
+    ],
+    "zoneDetections": [
+      {
+        "trackId": 7,
+        "confidence": 0.94,
+        "active": true,
+        "label": "ZONE ENTRY",
+        "boundingBox": {
+          "x1": 0.22,
+          "y1": 0.18,
+          "x2": 0.44,
+          "y2": 0.84,
+          "coordinateSpace": "NORMALIZED_0_1"
+        },
+        "ppeStatus": {
+          "HARD_HAT": "MISSING",
+          "SAFETY_VEST": "PRESENT"
+        },
+        "alertState": "CONFIRMED",
+        "regionId": "44444444-4444-4444-8444-444444444444"
+      }
+    ],
+    "modelObjects": {
+      "modelFamily": "yolo11s",
+      "experimental": true,
+      "scope": "OBJECT_DETECTION_ONLY",
+      "artifactId": "yolo11s-ppe-8fam-candidate-v1",
+      "artifactSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "detections": [
+        {
+          "classId": 2,
+          "className": "NO-Hardhat",
+          "confidence": 0.91,
+          "boundingBox": {
+            "x1": 0.27,
+            "y1": 0.18,
+            "x2": 0.37,
+            "y2": 0.29,
+            "coordinateSpace": "NORMALIZED_0_1"
+          }
+        },
+        {
+          "classId": 12,
+          "className": "NO-Mask",
+          "confidence": 0.83,
+          "boundingBox": {
+            "x1": 0.29,
+            "y1": 0.24,
+            "x2": 0.35,
+            "y2": 0.3,
+            "coordinateSpace": "NORMALIZED_0_1"
+          }
+        },
+        {
+          "classId": 13,
+          "className": "fullbody-Harness",
+          "confidence": 0.88,
+          "boundingBox": {
+            "x1": 0.25,
+            "y1": 0.3,
+            "x2": 0.4,
+            "y2": 0.66,
+            "coordinateSpace": "NORMALIZED_0_1"
+          }
+        },
+        {
+          "classId": 14,
+          "className": "Lanyard-Hook",
+          "confidence": 0.82,
+          "boundingBox": {
+            "x1": 0.38,
+            "y1": 0.34,
+            "x2": 0.45,
+            "y2": 0.44,
+            "coordinateSpace": "NORMALIZED_0_1"
+          }
+        }
+      ]
+    }
+  },
+  "alignedOverlayMetadataMinimal": {
+    "type": "overlay-metadata",
+    "overlayVersion": 1,
+    "sourceKind": "LIVE",
+    "cameraExternalId": "CAM-NORTH-01",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "sequenceNumber": "43",
+    "capturedAt": "2026-11-27T01:30:00.200Z",
+    "width": 640,
+    "height": 360,
+    "zonePolygons": [],
+    "detections": [],
+    "zoneDetections": []
+  }
+}
