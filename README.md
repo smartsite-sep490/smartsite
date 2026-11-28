@@ -41,9 +41,11 @@ read permission does not grant Safety Officer case, evidence-archive, identity
 review or inbox actions. Admin alone does not grant operational camera access.
 
 USB webcams belong to the selected AI host; approved recorded videos are REPLAY;
-IP/RTSP cameras use a separate URL and credentials. This browser's camera is
-explicitly unsupported until media ingestion is implemented. Successful tests
-show a real image but do not persist source changes or start AI:
+IP/RTSP cameras use a separate URL and credentials. With browser webcam upload
+enabled, a Site Manager can send bounded JPEG frames from the webcam of the
+computer running the browser. This path uses the selected camera and signed-in
+session. The browser does not need a physical AI host to send or preview frames.
+Successful host connection tests show a real image but do not persist source changes or start AI:
 `applySupported=false` on a test-only host. An operator-configured source driver
 and `SMARTSITE_AI_SOURCE_APPLY_ENABLED=true` enable receipt-bound LIVE source
 activation for the Backend's explicit camera allowlist. The old owner stops
@@ -52,7 +54,10 @@ are retired. Settings are encrypted on the host. Failure leaves an explicit
 reconciliation state; browser disconnect cannot undo a committed transition.
 No generation secret is returned to the browser. Apply does not claim inference
 or business alert readiness; a fresh view and PPE configuration are still required.
-Browser media transport, replay activation and general remote-host rollout remain
+Browser webcam upload defaults to off. Apply `CameraBrowserUplinkFrame1795824000000`
+before enabling `BROWSER_CAMERA_UPLINK_ENABLED=true` on the Backend. The latest
+authorized frame is temporary and clears on stop. Preview through this endpoint
+does not start analysis. Replay activation and general remote-host rollout remain
 unfinished. Native RTSP redirect/SDP egress still needs deployment-level enforcement.
 
 Tracked runtime recovery can opt into Backend-owned source-gap resume through
