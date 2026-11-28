@@ -15,8 +15,10 @@ const en = {
   'cameraSource.groupLive': 'Live video sources',
   'cameraSource.groupSecondary': 'This device & demo testing',
   'cameraSource.badgeUnavailable': 'Not supported',
+  'cameraSource.badgeBrowserReady': 'Browser uplink',
   'cameraSource.badgeReplay': 'Demo · Replay',
   'cameraSource.statusConnected': 'Activation acknowledged',
+  'cameraSource.statusBrowserUploading': 'Uploading browser feed',
   'cameraSource.statusTested': 'Test preview ready',
   'cameraSource.statusNotConnected': 'Source not checked',
   'cameraSource.statusChecking': 'Checking…',
@@ -56,6 +58,44 @@ const en = {
   'cameraSource.VIDEOHelp': 'Secondary demo playback only, never live.',
   'cameraSource.BROWSER': 'This browser camera',
   'cameraSource.BROWSERHelp': 'Local browser webcam — not supported yet.',
+  'cameraSource.BROWSERReadyHelp': 'Stream directly from this browser webcam to server.',
+  'cameraSource.browserUplinkScope':
+    'Uses the webcam attached to this browser tab and uploads frames directly to SmartSite Backend — no site processing PC selection required.',
+  'cameraSource.browserLocalCameraLabel': 'Local browser webcam',
+  'cameraSource.browserDefaultCameraOption': 'Default webcam on this browser',
+  'cameraSource.browserStartAction': 'Start streaming from this browser',
+  'cameraSource.browserStarting': 'Starting browser camera…',
+  'cameraSource.browserStopAction': 'Stop streaming',
+  'cameraSource.browserInactiveNotice':
+    'Camera is disabled — enable it in camera settings before streaming from this browser.',
+  'cameraSource.browserLeaseHeldHeading': 'Another session is currently streaming this camera',
+  'cameraSource.browserLeaseHeldBody':
+    'Stop the active browser stream on the other session or wait for its lease to expire before starting here.',
+  'cameraSource.browserPreviewCaption': 'Local browser feed for {{camera}}',
+  'cameraSource.browserTelemetry': 'Uploaded #{{sent}} · Skipped {{dropped}}',
+  'cameraSource.browserHonestNote':
+    'Keep this tab open to maintain the stream. Uploading frames to server alone does not prove AI detections or applied monitoring rules.',
+  'cameraSource.browserStoppedNotice':
+    'Browser camera stopped and local camera tracks were released.',
+  'cameraSource.browserErrUnsupported':
+    'This browser does not support webcam capture here. Open SmartSite over HTTPS or localhost.',
+  'cameraSource.browserErrPermissionDenied':
+    'Camera permission was denied in this browser. Allow webcam access and try again.',
+  'cameraSource.browserErrNotFound':
+    'Selected browser webcam was not found. Connect a camera or choose another webcam.',
+  'cameraSource.browserErrDeviceBusy':
+    'Could not open this browser webcam. Close other apps using the camera and retry.',
+  'cameraSource.browserErrTrackEnded':
+    'Browser webcam disconnected. Reconnect the camera and start streaming again.',
+  'cameraSource.browserErrLeaseExpired':
+    'The browser stream lease expired. Start streaming again to resume.',
+  'cameraSource.browserErrFrameTooLarge':
+    'Captured frame exceeded the server size limit. Lower lighting noise or retry.',
+  'cameraSource.browserErrRateLimited':
+    'Upload rate was throttled temporarily; the next frame will retry automatically.',
+  'cameraSource.browserErrUploadFailed':
+    'Could not upload frames from this browser. Check your network connection and retry.',
+  'cameraSource.stage2BrowserUploading': 'Browser feed uploading (frame #{{count}})',
   'cameraSource.webcamScope':
     'Devices listed below are plugged directly into the site processing computer — not this browser webcam.',
   'cameraSource.videoScope':
@@ -180,8 +220,10 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.groupLive': 'Nguồn hình trực tiếp',
   'cameraSource.groupSecondary': 'Thiết bị này & chạy thử',
   'cameraSource.badgeUnavailable': 'Chưa hỗ trợ',
+  'cameraSource.badgeBrowserReady': 'Từ trình duyệt',
   'cameraSource.badgeReplay': 'Chạy thử · Phát lại',
   'cameraSource.statusConnected': 'Đã ghi nhận kích hoạt',
+  'cameraSource.statusBrowserUploading': 'Đang gửi hình từ trình duyệt',
   'cameraSource.statusTested': 'Đã có ảnh kiểm tra',
   'cameraSource.statusNotConnected': 'Chưa kiểm tra nguồn',
   'cameraSource.statusChecking': 'Đang kiểm tra',
@@ -221,6 +263,43 @@ const vi: Record<keyof typeof en, string> = {
   'cameraSource.VIDEOHelp': 'Chạy thử phát lại video mẫu, không phát trực tiếp.',
   'cameraSource.BROWSER': 'Camera trên máy này',
   'cameraSource.BROWSERHelp': 'Webcam từ trình duyệt hiện chưa hỗ trợ.',
+  'cameraSource.BROWSERReadyHelp': 'Gửi trực tiếp từ webcam trình duyệt lên máy chủ.',
+  'cameraSource.browserUplinkScope':
+    'Dùng webcam trên chính máy bạn đang mở trình duyệt để gửi khung hình trực tiếp lên máy chủ SmartSite — không cần chọn máy xử lý tại chỗ.',
+  'cameraSource.browserLocalCameraLabel': 'Webcam trên trình duyệt này',
+  'cameraSource.browserDefaultCameraOption': 'Webcam mặc định của trình duyệt',
+  'cameraSource.browserStartAction': 'Bắt đầu phát từ trình duyệt',
+  'cameraSource.browserStarting': 'Đang mở webcam trình duyệt…',
+  'cameraSource.browserStopAction': 'Dừng phát',
+  'cameraSource.browserInactiveNotice':
+    'Camera đang tắt — hãy bật camera trong cài đặt trước khi phát từ trình duyệt này.',
+  'cameraSource.browserLeaseHeldHeading': 'Camera này đang được phát từ phiên khác',
+  'cameraSource.browserLeaseHeldBody':
+    'Hãy dừng luồng đang phát ở phiên kia hoặc chờ phiên đó hết hạn trước khi bắt đầu tại đây.',
+  'cameraSource.browserPreviewCaption': 'Hình từ trình duyệt cho {{camera}}',
+  'cameraSource.browserTelemetry': 'Đã gửi #{{sent}} · Bỏ qua {{dropped}}',
+  'cameraSource.browserHonestNote':
+    'Giữ tab này mở để duy trì nguồn hình. Đang gửi khung hình lên máy chủ chưa tự chứng minh AI đang nhận diện hay cấu hình đã áp dụng.',
+  'cameraSource.browserStoppedNotice': 'Đã dừng phát từ trình duyệt và giải phóng webcam trên máy.',
+  'cameraSource.browserErrUnsupported':
+    'Trình duyệt hiện chưa hỗ trợ mở webcam tại đây. Hãy mở SmartSite bằng HTTPS hoặc localhost.',
+  'cameraSource.browserErrPermissionDenied':
+    'Trình duyệt chưa được cấp quyền camera. Hãy cho phép truy cập webcam rồi thử lại.',
+  'cameraSource.browserErrNotFound':
+    'Không tìm thấy webcam đã chọn trên máy này. Hãy kết nối camera hoặc chọn webcam khác.',
+  'cameraSource.browserErrDeviceBusy':
+    'Không mở được webcam trình duyệt. Hãy đóng ứng dụng khác đang dùng camera rồi thử lại.',
+  'cameraSource.browserErrTrackEnded':
+    'Webcam trình duyệt đã ngắt kết nối. Hãy kiểm tra lại camera rồi bắt đầu lại.',
+  'cameraSource.browserErrLeaseExpired':
+    'Phiên gửi hình từ trình duyệt đã hết hạn. Hãy bắt đầu phát lại.',
+  'cameraSource.browserErrFrameTooLarge':
+    'Khung hình vượt giới hạn dung lượng cho phép của máy chủ. Hãy thử lại.',
+  'cameraSource.browserErrRateLimited':
+    'Tốc độ gửi khung hình tạm bị giới hạn; hệ thống sẽ tự thử ở nhịp tiếp theo.',
+  'cameraSource.browserErrUploadFailed':
+    'Không gửi được khung hình từ trình duyệt. Kiểm tra kết nối mạng rồi thử lại.',
+  'cameraSource.stage2BrowserUploading': 'Đang gửi hình từ trình duyệt (khung #{{count}})',
   'cameraSource.webcamScope':
     'Các thiết bị bên dưới được cắm trực tiếp vào máy xử lý tại công trường — không phải webcam trên trình duyệt bạn đang mở.',
   'cameraSource.videoScope':
