@@ -554,3 +554,38 @@ input::-webkit-credentials-auto-fill-button {
     z-index: 10;
   }
 }
+/* Field errors also outline the visible shell of the native-backed select. */
+.workflow-field[data-invalid] input,
+.workflow-field[data-invalid] textarea,
+.workflow-field[data-invalid] [data-select-for] {
+  border-color: var(--semantic-red-text);
+  outline-color: var(--semantic-red-text);
+}
+.app-toast {
+  background-color: var(--surface-white);
+  border-color: var(--border);
+  color: var(--text-body);
+  transition:
+    opacity 150ms,
+    transform 150ms;
+}
+.app-toast[data-type='success'] {
+  background-color: var(--semantic-green-bg);
+  border-color: var(--semantic-green-text);
+  color: var(--semantic-green-text);
+}
+.app-toast[data-type='error'] {
+  background-color: var(--semantic-red-bg);
+  border-color: var(--semantic-red-text);
+  color: var(--semantic-red-text);
+}
+.app-toast[data-starting-style],
+.app-toast[data-ending-style] {
+  opacity: 0;
+  transform: translateY(8px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-toast {
+    transition: none;
+  }
+}

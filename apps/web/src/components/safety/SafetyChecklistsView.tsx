@@ -1,3 +1,4 @@
+import { FormField } from './FormField';
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { useTranslation } from 'react-i18next';
 import { translate as tr } from '../../i18n';
@@ -269,11 +270,6 @@ export function SafetyChecklistsView(
         </div>
       )}
       {!editor && <RequestError error={mutation.error} retry={reload} />}
-      {mutation.isSuccess && (
-        <p role="status" className="rounded-lg bg-[var(--semantic-green-bg)] p-3 text-sm">
-          {tr('common.change_recorded')}
-        </p>
-      )}
       <div
         className={
           (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
@@ -874,8 +870,7 @@ function IncidentFindingForm({
         required
         defaultValue={current.description + '\n' + (item?.text ?? '') + '\n' + result.note}
       />
-      <label className="text-sm font-semibold">
-        {tr('common.severity')}
+      <FormField name="severity" label={tr('common.severity')} required>
         <SmartNativeSelect className={fieldClass} name="severity" defaultValue="MEDIUM">
           {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((s) => (
             <option key={s} value={s}>
@@ -883,7 +878,7 @@ function IncidentFindingForm({
             </option>
           ))}
         </SmartNativeSelect>
-      </label>
+      </FormField>
       <Field
         name="occurredAt"
         label={tr('safety_workspace.occurred_at')}

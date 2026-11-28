@@ -25,14 +25,7 @@ import {
   IconChevronRight,
   IconUsers,
 } from '../../icons';
-import {
-  SmartDatePicker,
-  SmartInput,
-  SmartSelect,
-  Toast,
-  ToastContainer,
-  useToast,
-} from '../../ui';
+import { SmartDatePicker, SmartInput, SmartSelect, toast } from '../../ui';
 import { Button } from '../../ui/Button';
 import { Dialog } from '../../ui/Dialog';
 import { participationDates } from './participation-dates';
@@ -81,7 +74,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
   >('contractors');
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
   const [contractorSearchQuery, setContractorSearchQuery] = useState('');
-  const { toast, showToast, hideToast } = useToast();
 
   // Modal open states
   const [showCreateSiteModal, setShowCreateSiteModal] = useState(false);
@@ -359,7 +351,11 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
           }),
     onSuccess: () => {
       setEditProfile(null);
-      showToast(tr('contractor_profile.updated_successfully'));
+      toast.add({
+        title: tr('contractor_profile.updated_successfully'),
+        type: 'success',
+        timeout: 5000,
+      });
       void queryClient.invalidateQueries({
         predicate: (query) => query.queryKey.includes(activeSiteId!),
       });
@@ -448,11 +444,9 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
     onSuccess: async () => {
       setRevokeManagerId(null);
       setShowAssignManagerModal(false);
-      setManagerSuccessMsg(tr('site_setup_view.manager_revoked'));
-      showToast(tr('site_setup_view.manager_revoked'));
+      toast.add({ title: tr('site_setup_view.manager_revoked'), type: 'success', timeout: 5000 });
       await queryClient.invalidateQueries({ queryKey: [...setupKey, 'users'] });
       void queryClient.invalidateQueries({ queryKey: ['account-management', apiUrl] });
-      setTimeout(() => setManagerSuccessMsg(null), 5000);
     },
     onError: (error) => setManagerError(userErrorMessage(error)),
   });
@@ -2316,12 +2310,6 @@ export function SiteSetupView({ apiUrl }: SiteSetupViewProps) {
             </form>
           </div>
         </div>
-      )}
-
-      {toast && (
-        <ToastContainer>
-          <Toast message={toast.message} type={toast.type} onClose={hideToast} />
-        </ToastContainer>
       )}
     </div>
   );

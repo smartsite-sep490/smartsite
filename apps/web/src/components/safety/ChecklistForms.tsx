@@ -11,6 +11,8 @@ import type {
 } from '@smartsite/api-client';
 import { type WorkflowProps, fieldClass, buttonClass, cardClass } from './safety-workflow';
 import { Assignee, BlobImage, CommandForm, Field, RequestError } from './SafetyWorkflowUi';
+import { FormField } from './FormField';
+import type { FieldErrors } from './workflow-validation';
 import {
   browserTimezone,
   localDay,
@@ -128,6 +130,28 @@ export function CreateChecklistForm(
     <CommandForm
       pending={p.pending}
       label={tr('safety_workspace.assign_checklist')}
+      validate={(form) => {
+        const errors: FieldErrors = {};
+        if (!team || detail.isPending || detail.isError)
+          errors.teamId = tr('safety_workspace.choose_a_team_and_zone');
+        if (!selectedZone) errors.zoneId = tr('safetyForm.required');
+        const startsAt = Date.parse(String(form.get('startsAt') ?? ''));
+        const endsAt = Date.parse(String(form.get('endsAt') ?? ''));
+        if (Number.isFinite(startsAt) && Number.isFinite(endsAt)) {
+          if (endsAt <= startsAt) errors.endsAt = tr('safetyForm.endAfterStart');
+          else if (
+            selectedZone &&
+            !zones.some(
+              (zone) =>
+                zone.id === selectedZone &&
+                Date.parse(zone.validFrom) <= startsAt &&
+                Date.parse(zone.validUntil) >= endsAt,
+            )
+          )
+            errors.zoneId = tr('safetyForm.zoneGrant');
+        }
+        return errors;
+      }}
       onSubmit={(form) => {
         if (!team || !selectedZone || detail.isPending || detail.isError)
           throw Error(tr('safety_workspace.choose_a_team_and_zone'));
@@ -145,10 +169,10 @@ export function CreateChecklistForm(
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2 font-semibold">{tr('safety_ux.work_window')}</div>
-        <label className="text-sm font-semibold">
-          {tr('common.work_date')}
+        <div className="sm:col-span-2 font-semibold">{tr('safetyForm.workWindow')}</div>
+        <FormField name="workDate" label={tr('common.work_date')} required>
           <input
+            name="workDate"
             className={fieldClass}
             required
             type="date"
@@ -159,10 +183,10 @@ export function CreateChecklistForm(
               setZone('');
             }}
           />
-        </label>
+        </FormField>
         <details className="text-sm">
           <summary className="cursor-pointer font-semibold">
-            {tr('safety_ux.optional_contractor_filter')}
+            {tr('safetyForm.contractorFilter')}
           </summary>
           <label className="text-sm font-semibold">
             {tr('common.contractor')}
@@ -184,11 +208,11 @@ export function CreateChecklistForm(
             </SmartNativeSelect>
           </label>
         </details>
-        <label className="text-sm font-semibold">
-          {tr('labels.TEAM')}
+        <FormField name="teamId" label={tr('labels.TEAM')} required>
           <SmartNativeSelect
             className={fieldClass}
             required
+            name="teamId"
             value={teamId}
             onChange={(e) => {
               setTeam(e.target.value);
@@ -205,12 +229,12 @@ export function CreateChecklistForm(
                 </option>
               ))}
           </SmartNativeSelect>
-        </label>
-        <label className="text-sm font-semibold">
-          {tr('common.zone')}
+        </FormField>
+        <FormField name="zoneId" label={tr('common.zone')} required>
           <SmartNativeSelect
             className={fieldClass}
             required
+            name="zoneId"
             value={selectedZone}
             onChange={(e) => setZone(e.target.value)}
           >
@@ -221,7 +245,21 @@ export function CreateChecklistForm(
               </option>
             ))}
           </SmartNativeSelect>
-        </label>
+        </FormField>
+        {selectedZone && (
+          <div className="sm:col-span-2 text-xs text-[var(--text-secondary)]">
+            {zones
+              .filter((zone) => zone.id === selectedZone)
+              .map((zone, index) => (
+                <p key={index}>
+                  {tr('safetyForm.grantWindow', {
+                    from: localInput(zone.validFrom),
+                    until: localInput(zone.validUntil),
+                  })}
+                </p>
+              ))}
+          </div>
+        )}
         {windows.length > 1 && (
           <label className="text-sm font-semibold">
             {tr('safety_workspace.planned_work_window')}
@@ -375,9 +413,13 @@ export function CreateChecklistForm(
         <div className="space-y-3">
           {items.map((item, index) => (
             <div key={index} className={cardClass}>
-              <label className="block text-sm font-semibold">
-                {tr('safety_workspace.criterion_value1', { value1: index + 1 })}
+              <FormField
+                name={`items.${index}.text`}
+                label={tr('safety_workspace.criterion_value1', { value1: index + 1 })}
+                required
+              >
                 <textarea
+                  name={`items.${index}.text`}
                   className={fieldClass}
                   required
                   maxLength={1000}
@@ -389,7 +431,7 @@ export function CreateChecklistForm(
                     );
                   }}
                 />
-              </label>
+              </FormField>
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -461,7 +503,7 @@ export function ReportChecklistForm({
   const [draft, setDraft] = useState<Record<string, DraftResult>>(() =>
       Object.fromEntries(items.map((i) => [i.id, { answer: '', note: '', files: [] }])),
     ),
-    [error, setError] = useState<unknown>();
+    [fileErrors, setFileErrors] = useState<Record<string, string>>({});
   const change = (id: string, patch: Partial<DraftResult>) =>
     setDraft((d) => ({ ...d, [id]: { ...d[id]!, ...patch } }));
   return (
@@ -469,6 +511,22 @@ export function ReportChecklistForm({
       pending={pending}
       disabled={disabled}
       label={tr('safety_workspace.submit_checklist')}
+      validate={(form) => {
+        const errors: FieldErrors = {};
+        items.forEach((item, index) => {
+          const result = {
+            ...draft[item.id]!,
+            answer: String(form.get(`results.${index}.answer`) ?? ''),
+            note: String(form.get(`results.${index}.note`) ?? ''),
+          };
+          if (!result.answer) errors[`results.${index}.answer`] = tr('safetyForm.required');
+          if (result.answer && result.answer !== 'PASS' && !result.note.trim())
+            errors[`results.${index}.note`] = tr('safetyForm.noteRequired');
+          if (result.answer === 'PASS' && item.evidenceRequired && !result.files.length)
+            errors[`results.${index}.fileIndexes`] = tr('safetyForm.evidenceRequired');
+        });
+        return errors;
+      }}
       onSubmit={() => {
         const files: File[] = [];
         const results = items.map((item) => {
@@ -500,16 +558,20 @@ export function ReportChecklistForm({
           'safety_workspace.report_each_criterion_jpeg_png_or_pdf_up_to_3_files_per_criterion_5_mib_per_file_and_20_mib_in_total',
         )}
       </p>
-      {items.map((item) => {
+      {items.map((item, index) => {
         const r = draft[item.id]!;
         return (
           <section key={item.id} className={cardClass}>
             <h3 className="font-semibold">
               {item.position + 1}. {item.text}
             </h3>
-            <label className="block text-sm font-semibold">
-              {tr('safety_workspace.result_value1', { value1: item.text })}
+            <FormField
+              name={`results.${index}.answer`}
+              label={tr('safety_workspace.result_value1', { value1: item.text })}
+              required
+            >
               <SmartNativeSelect
+                name={`results.${index}.answer`}
                 className={fieldClass}
                 required
                 value={r.answer}
@@ -522,18 +584,22 @@ export function ReportChecklistForm({
                 <option value="FAIL">{tr('safety_workspace.fail')}</option>
                 <option value="NOT_APPLICABLE">{tr('safety_workspace.not_applicable')}</option>
               </SmartNativeSelect>
-            </label>
+            </FormField>
             {r.answer === 'FAIL' || r.answer === 'NOT_APPLICABLE' || r.showNote || !!r.note ? (
-              <label className="block text-sm font-semibold">
-                {tr('safety_workspace.notes_value1', { value1: item.text })}
+              <FormField
+                name={`results.${index}.note`}
+                label={tr('safety_workspace.notes_value1', { value1: item.text })}
+                required={r.answer === 'FAIL' || r.answer === 'NOT_APPLICABLE'}
+              >
                 <textarea
+                  name={`results.${index}.note`}
                   className={fieldClass}
                   required={r.answer === 'FAIL' || r.answer === 'NOT_APPLICABLE'}
                   maxLength={2000}
                   value={r.note}
                   onChange={(e) => change(item.id, { note: e.target.value })}
                 />
-              </label>
+              </FormField>
             ) : (
               <button
                 type="button"
@@ -545,22 +611,23 @@ export function ReportChecklistForm({
             )}
             <details open={(item.evidenceRequired && r.answer === 'PASS') || r.files.length > 0}>
               <summary className="cursor-pointer text-sm font-semibold">
-                {tr(
-                  item.evidenceRequired
-                    ? 'safety_ux.evidence_for_pass'
-                    : 'safety_ux.optional_evidence',
-                )}
+                {tr(item.evidenceRequired ? 'safety_ux.evidence_for_pass' : 'safetyForm.evidence')}
               </summary>
-              <label className="block text-sm font-semibold">
-                {tr('safety_workspace.evidence_value1', { value1: item.text })}
-                {item.evidenceRequired && (
-                  <span className="block text-xs font-normal">
-                    {tr('safety_workspace.required_to_report_this_criterion_as_pass')}
-                  </span>
-                )}
+              <FormField
+                name={`results.${index}.fileIndexes`}
+                label={tr('safety_workspace.evidence_value1', { value1: item.text })}
+                required={item.evidenceRequired && r.answer === 'PASS'}
+                error={fileErrors[item.id]}
+                hint={
+                  item.evidenceRequired
+                    ? tr('safety_workspace.required_to_report_this_criterion_as_pass')
+                    : undefined
+                }
+              >
                 <input
                   className={fieldClass}
                   type="file"
+                  required={false}
                   multiple
                   accept="image/jpeg,image/png,application/pdf"
                   onChange={(e) => {
@@ -587,13 +654,17 @@ export function ReportChecklistForm({
                       if (total > 20971520)
                         throw Error(tr('safety_workspace.files_must_total_at_most_20_mib'));
                       change(item.id, { files: next });
-                      setError(undefined);
+                      setFileErrors((previous) => ({ ...previous, [item.id]: '' }));
                     } catch (error) {
-                      setError(error);
+                      setFileErrors((previous) => ({
+                        ...previous,
+                        [item.id]:
+                          error instanceof Error ? error.message : tr('safetyForm.invalid'),
+                      }));
                     }
                   }}
                 />
-              </label>
+              </FormField>
               {r.files.map((file, index) => (
                 <div key={index} className="space-y-2 rounded-lg bg-[var(--surface-bone)] p-3">
                   <p className="break-words text-sm">
@@ -615,7 +686,7 @@ export function ReportChecklistForm({
                     className={buttonClass}
                     onClick={() => {
                       change(item.id, { files: r.files.filter((_, n) => n !== index) });
-                      setError(undefined);
+                      setFileErrors((previous) => ({ ...previous, [item.id]: '' }));
                     }}
                   >
                     {tr('safety_workspace.remove_value1', { value1: file.name })}
@@ -626,7 +697,6 @@ export function ReportChecklistForm({
           </section>
         );
       })}
-      <RequestError error={error} />
     </CommandForm>
   );
 }

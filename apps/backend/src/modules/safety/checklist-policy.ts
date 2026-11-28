@@ -33,15 +33,27 @@ export function validateChecklistResults(
   )
     invalid('Report every checklist item exactly once');
   const used = new Set<number>();
-  for (const result of results) {
+  for (const [position, result] of results.entries()) {
     const item = items.find((i) => i.id === result.itemId);
     if (!item || !['PASS', 'FAIL', 'NOT_APPLICABLE'].includes(result.answer))
       invalid('Invalid checklist result');
     if (result.answer !== 'PASS' && !result.note.trim())
-      invalid('Explain failed or not applicable items');
+      invalid('Explain failed or not applicable items', [
+        {
+          code: 'NOTE_REQUIRED',
+          path: `/results/${position}/note`,
+          message: 'Explanation required',
+        },
+      ]);
     if (result.fileIndexes.length > 3) invalid('At most three files per item');
     if (item.evidenceRequired && result.answer === 'PASS' && !result.fileIndexes.length)
-      invalid('Evidence is required to report this item as Pass');
+      invalid('Evidence is required to report this item as Pass', [
+        {
+          code: 'EVIDENCE_REQUIRED',
+          path: `/results/${position}/fileIndexes`,
+          message: 'Evidence required',
+        },
+      ]);
     for (const index of result.fileIndexes) {
       if (!Number.isInteger(index) || index < 0 || index >= fileCount || used.has(index))
         invalid('Invalid or duplicate file reference');

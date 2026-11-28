@@ -3,6 +3,7 @@ import { within, cleanup, render, screen, waitFor } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
+import { Toaster } from '../ui/Toaster';
 import { SmartSiteManagementClient } from '@smartsite/api-client';
 import { ContractorZoneSetup } from './components/ContractorZoneSetup';
 
@@ -37,6 +38,7 @@ function mount() {
   });
   render(
     <QueryClientProvider client={cache}>
+      <Toaster />
       <ContractorZoneSetup
         apiUrl="https://api.example.test"
         token="manager-token"

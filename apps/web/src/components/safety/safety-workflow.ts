@@ -4,6 +4,7 @@ import { translate as tr } from '../../i18n';
 import { useEffect, useLayoutEffect, useRef, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AccountResponse, SmartSiteManagementClient } from '@smartsite/api-client';
+import { notifyWorkflowFailure, notifyWorkflowSuccess } from './workflow-feedback';
 export type WithoutCommandId<T> = T extends { commandId: string } ? Omit<T, 'commandId'> : never;
 export interface WorkflowProps {
   client: SmartSiteManagementClient;
@@ -51,6 +52,7 @@ type CommandRun<Resource extends { id: string }> = {
   files?: File[];
   run: (commandId: string, signal: AbortSignal) => Promise<{ resource: Resource }>;
   onCommitted?: (resource: Resource) => void;
+  feedback?: boolean;
 };
 export function useWorkflowCommand<Resource extends { id: string } = { id: string }>(
   p: WorkflowProps,
@@ -75,7 +77,18 @@ export function useWorkflowCommand<Resource extends { id: string } = { id: strin
   return useMutation({
     meta: { safetySession: p.scope },
     retry: false,
-    mutationFn: async ({ fingerprint, file, files, run, onCommitted }: CommandRun<Resource>) => {
+    onError: (error) => {
+      if (lifecycle.current.active && !lifecycle.current.controller?.signal.aborted)
+        notifyWorkflowFailure(error);
+    },
+    mutationFn: async ({
+      fingerprint,
+      file,
+      files,
+      run,
+      onCommitted,
+      feedback = true,
+    }: CommandRun<Resource>) => {
       if (
         !receipt.current ||
         receipt.current.fingerprint !== fingerprint ||
@@ -96,6 +109,7 @@ export function useWorkflowCommand<Resource extends { id: string } = { id: strin
       receipt.current = undefined;
       if (onCommitted) onCommitted(result.resource);
       else onSuccess?.(result.resource.id);
+      if (feedback) notifyWorkflowSuccess();
       await Promise.all([
         cache.invalidateQueries({ queryKey: ['safety-workflow', p.apiUrl, p.scope, p.siteId] }),
         cache.invalidateQueries({ queryKey: ['notifications', p.apiUrl] }),

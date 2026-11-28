@@ -1,3 +1,4 @@
+import { FormField } from './FormField';
 import { SmartNativeSelect } from '../ui/SmartNativeSelect';
 import { translate as tr } from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -152,14 +153,6 @@ export function SafetyTasksView(p: WorkflowProps) {
         )}
       </div>
       {!editor && <RequestError error={mutation.error} retry={reload} />}
-      {mutation.isSuccess && (
-        <p
-          role="status"
-          className="rounded-lg bg-[var(--semantic-green-bg)] p-3 text-sm text-[var(--semantic-green-text)]"
-        >
-          {tr('common.change_recorded')}
-        </p>
-      )}
       <div
         className={
           (mobileDetail ? 'hidden lg:flex ' : 'flex ') +
@@ -434,8 +427,7 @@ export function SafetyTasksView(p: WorkflowProps) {
           >
             {editor === 'create' && (
               <>
-                <label className="block text-sm font-semibold">
-                  {tr('common.task_kind')}
+                <FormField name="kind" label={tr('common.task_kind')} required>
                   <SmartNativeSelect name="kind" className={fieldClass}>
                     {[
                       'ZONE_INSPECTION',
@@ -448,7 +440,7 @@ export function SafetyTasksView(p: WorkflowProps) {
                       </option>
                     ))}
                   </SmartNativeSelect>
-                </label>
+                </FormField>
                 <Assignee p={p} role="SAFETY_OFFICER" />
                 <Field
                   name="description"
@@ -456,25 +448,15 @@ export function SafetyTasksView(p: WorkflowProps) {
                   type="textarea"
                   required
                 />
-                <Field
-                  name="dueAt"
-                  label={tr('incident_view.deadline_optional_local_time')}
-                  type="datetime-local"
-                />
+                <Field name="dueAt" label={tr('safetyForm.deadline')} type="datetime-local" />
                 <details className="text-sm">
                   <summary className="cursor-pointer font-semibold">
-                    {tr('common.optional_references')}
+                    {tr('safetyForm.references')}
                   </summary>
                   <div className="mt-3 space-y-3">
-                    <Field name="zoneId" label={tr('common.zone_id_optional')} />
-                    <Field
-                      name="sourceAlertId"
-                      label={tr('safety_tasks_view.source_alert_id_optional')}
-                    />
-                    <Field
-                      name="sourceIncidentId"
-                      label={tr('safety_tasks_view.source_incident_id_optional')}
-                    />
+                    <Field name="zoneId" label={tr('safetyForm.zone')} />
+                    <Field name="sourceAlertId" label={tr('safetyForm.sourceAlert')} />
+                    <Field name="sourceIncidentId" label={tr('safetyForm.sourceIncident')} />
                   </div>
                 </details>
               </>
@@ -482,13 +464,12 @@ export function SafetyTasksView(p: WorkflowProps) {
             {editor === 'submit' && <ResultFields onFileChange={setResultFile} />}
             {editor === 'review' && (
               <>
-                <label className="block text-sm font-semibold">
-                  {tr('common.decision')}
+                <FormField name="decision" label={tr('common.decision')} required>
                   <SmartNativeSelect name="decision" className={fieldClass}>
                     <option value="verify">{tr('common.verify_eea274')}</option>
                     <option value="return">{tr('common.return_for_correction')}</option>
                   </SmartNativeSelect>
-                </label>
+                </FormField>
                 <Field
                   name="reason"
                   label={tr('common.task_review_reason')}

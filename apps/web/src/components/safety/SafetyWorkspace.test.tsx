@@ -128,8 +128,11 @@ it('checklist report keeps missing evidence editable and previews/removes a sele
   fireEvent.change(screen.getByLabelText('Result: Fall protection'), { target: { value: 'PASS' } });
   fireEvent.submit(container.querySelector('form')!);
   expect(
-    await screen.findByText('Add required evidence or report the missing evidence as Fail'),
+    await screen.findByText('Attach the required evidence to report this criterion as Pass.'),
   ).not.toBeNull();
+  expect(screen.getByLabelText('Evidence: Fall protection').getAttribute('aria-invalid')).toBe(
+    'true',
+  );
   expect(submit).not.toHaveBeenCalled();
   const file = new File(['synthetic'], 'proof.png', { type: 'image/png' });
   fireEvent.change(screen.getByLabelText(/Evidence: Fall protection/), {

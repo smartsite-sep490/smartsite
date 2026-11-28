@@ -412,11 +412,19 @@ export class SafetyChecklistService {
   }
   async create(siteId: string, actorId: string, input: unknown) {
     const value = command(CreateChecklistDto, input);
-    if (!value.description.trim()) invalid('Checklist description must not be blank');
+    if (!value.description.trim())
+      invalid('Checklist description must not be blank', [
+        { code: 'BLANK_VALUE', path: '/description', message: 'Required value' },
+      ]);
     if (new Date(value.endsAt) <= new Date(value.startsAt))
-      invalid('End time must follow start time');
-    for (const item of value.items)
-      if (!item.text.trim()) invalid('Checklist criteria must not be blank');
+      invalid('End time must follow start time', [
+        { code: 'END_BEFORE_START', path: '/endsAt', message: 'End time must follow start time' },
+      ]);
+    for (const [index, item] of value.items.entries())
+      if (!item.text.trim())
+        invalid('Checklist criteria must not be blank', [
+          { code: 'BLANK_VALUE', path: `/items/${index}/text`, message: 'Required value' },
+        ]);
     return this.execute(siteId, actorId, null, 'create', value, [], async (m, actor) => {
       const team = await m.getRepository(ContractorTeamEntity).findOne({
         where: { id: value.teamId, siteId, isActive: true },
@@ -443,7 +451,13 @@ export class SafetyChecklistService {
         [team.id, value.zoneId, siteId, team.contractorId, value.startsAt, value.endsAt],
       )) as unknown[];
       if (!permissions.length)
-        conflict('The team must have a Zone grant covering this work window');
+        conflict('The team must have a Zone grant covering this work window', [
+          {
+            code: 'ZONE_GRANT_REQUIRED',
+            path: '/zoneId',
+            message: 'Zone grant must cover the work window',
+          },
+        ]);
       const a = await m.getRepository(SafetyChecklistAssignmentEntity).save({
         id: randomUUID(),
         siteId,
